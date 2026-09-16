@@ -1,69 +1,74 @@
 import React from 'react';
 import { 
   LayoutDashboard, Users, BookOpen, UserCheck, Calendar, 
-  CreditCard, FileText, HelpCircle, Trophy, BarChart3, Settings, 
-  MessageSquare, User, Video, Clock, CheckSquare, Bell, LogOut 
+  CreditCard, FileText, HelpCircle, BarChart3, Settings, 
+  User, Video, Clock, LogOut, Bell, CheckSquare, X 
 } from 'lucide-react';
 
-export default function DashboardSidebar({ role, activeScreen, setActiveScreen }) {
+export default function DashboardSidebar({ role, activeScreen, setActiveScreen, isMobileOpen, onMobileClose }) {
   let menuItems = [];
 
-  if (role === 'Admin') {
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'Admin') {
     menuItems = [
       { id: 'admin-dash', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'students', label: 'Students', icon: Users, badge: '128' },
-      { id: 'courses', label: 'Courses', icon: BookOpen },
-      { id: 'trainers', label: 'Trainers', icon: UserCheck },
+      { id: 'admin-manage-courses', label: 'Manage Courses', icon: BookOpen },
+      { id: 'admin-manage-students', label: 'Manage Students', icon: Users },
+      { id: 'admin-manage-trainers', label: 'Manage Trainers', icon: UserCheck },
+      { id: 'admin-attendance', label: 'Attendance Reports', icon: Clock },
       { id: 'schedule', label: 'Schedule', icon: Calendar },
-      { id: 'fees', label: 'Fees', icon: CreditCard },
-      { id: 'assignments', label: 'Assignments', icon: FileText, badge: '7' },
-      { id: 'doubts', label: 'Doubts', icon: HelpCircle, badge: '3' },
-      { id: 'competitions', label: 'Competitions', icon: Trophy },
+      { id: 'fees', label: 'Fees & Finance', icon: CreditCard },
+      { id: 'assignments', label: 'Assignments', icon: FileText },
+      { id: 'doubts', label: 'Doubts', icon: HelpCircle },
       { id: 'reports', label: 'Reports', icon: BarChart3 },
       { id: 'settings', label: 'Settings', icon: Settings },
     ];
-  } else if (role === 'Trainer') {
+  } else if (role === 'TRAINER' || role === 'Trainer') {
     menuItems = [
       { id: 'trainer-dash', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'my-students', label: 'My Students', icon: Users },
-      { id: 'my-schedule', label: 'My Schedule', icon: Calendar },
-      { id: 'my-sessions', label: 'My Sessions', icon: Video, badge: '3 Today' },
-      { id: 'assignments', label: 'Assignments', icon: FileText },
-      { id: 'submissions', label: 'Submissions', icon: CheckSquare, badge: '5' },
-      { id: 'doubts', label: 'Doubts', icon: HelpCircle, badge: '2' },
-      { id: 'messages', label: 'Messages', icon: MessageSquare },
-      { id: 'profile', label: 'Profile', icon: User },
+      { id: 'trainer-students', label: 'Students', icon: Users },
+      { id: 'trainer-schedule', label: 'Schedule', icon: Calendar },
+      { id: 'trainer-sessions', label: 'Sessions', icon: Video },
+      { id: 'trainer-assignments', label: 'Assignments', icon: FileText },
+      { id: 'trainer-submissions', label: 'Submissions', icon: CheckSquare },
+      { id: 'trainer-doubts', label: 'Doubts', icon: HelpCircle },
+      { id: 'trainer-attendance', label: 'Attendance', icon: Clock },
+      { id: 'trainer-notifications', label: 'Notifications', icon: Bell },
+      { id: 'trainer-profile', label: 'My Profile', icon: User },
     ];
   } else {
     // Student
     menuItems = [
       { id: 'student-dash', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'my-courses', label: 'My Courses', icon: BookOpen },
-      { id: 'student-join', label: 'My Schedule / Session', icon: Calendar, badge: 'Next: 6 PM' },
-      { id: 'student-assignment', label: 'Assignments', icon: FileText, badge: '2 Pending' },
-      { id: 'my-submissions', label: 'My Submissions', icon: CheckSquare },
-      { id: 'student-doubt', label: 'My Doubts', icon: HelpCircle, badge: '1 Open' },
-      { id: 'attendance', label: 'My Attendance', icon: Clock, badge: '92%' },
-      { id: 'notifications', label: 'Notifications', icon: Bell },
+      { id: 'student-course-learn', label: 'My Courses (LMS)', icon: BookOpen },
+      { id: 'student-attendance', label: 'My Attendance', icon: Clock, badge: '92%' },
+      { id: 'student-join', label: 'Join Session', icon: Calendar, badge: 'Live' },
+      { id: 'student-assignment', label: 'Assignments', icon: FileText },
+      { id: 'student-doubt', label: 'My Doubts', icon: HelpCircle },
       { id: 'profile', label: 'My Profile', icon: User },
     ];
   }
 
-  return (
+  const content = (
     <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col h-full min-h-screen border-r border-slate-800 shrink-0">
       {/* Brand Header */}
       <div className="p-5 border-b border-slate-800 flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <img 
             src="/assets/logo.png" 
-            alt="ZORO Logo" 
+            alt="Zoro English Academy Logo" 
             className="h-9 w-auto object-contain" 
           />
           <div>
-            <h1 className="font-extrabold text-lg text-white tracking-tight leading-none">ZORO</h1>
+            <h1 className="font-extrabold text-xs text-white tracking-tight leading-none">Zoro English Academy</h1>
             <p className="text-[10px] text-blue-400 font-semibold tracking-wide uppercase mt-0.5">{role} Portal</p>
           </div>
         </div>
+
+        {onMobileClose && (
+          <button onClick={onMobileClose} className="md:hidden text-slate-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* Navigation Links */}
@@ -74,8 +79,11 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen }
           return (
             <button
               key={item.id}
-              onClick={() => setActiveScreen(item.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-medium text-sm transition-all ${
+              onClick={() => {
+                setActiveScreen(item.id);
+                if (onMobileClose) onMobileClose();
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-medium text-xs transition-all ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-md font-semibold'
                   : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -97,10 +105,14 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen }
         })}
       </div>
 
-      {/* Footer / Switch back */}
+      {/* Footer / Exit */}
       <div className="p-4 border-t border-slate-800 bg-slate-950/50">
+        <div className="text-[10px] text-slate-400 font-bold mb-3 text-center">Small Steps Big Communication</div>
         <button
-          onClick={() => setActiveScreen('public-home')}
+          onClick={() => {
+            setActiveScreen('public-home');
+            if (onMobileClose) onMobileClose();
+          }}
           className="w-full flex items-center justify-center space-x-2 text-xs font-semibold text-slate-400 hover:text-white py-2 px-3 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900 transition-colors"
         >
           <LogOut className="w-3.5 h-3.5" />
@@ -108,5 +120,24 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen }
         </button>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop Persistent Sidebar */}
+      <div className="hidden md:block h-full">
+        {content}
+      </div>
+
+      {/* Mobile Drawer Overlay */}
+      {isMobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div className="fixed inset-0 bg-slate-950/60" onClick={onMobileClose}></div>
+          <div className="relative z-10">
+            {content}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

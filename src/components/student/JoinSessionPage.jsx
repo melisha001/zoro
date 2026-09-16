@@ -1,21 +1,34 @@
 import React, { useState } from 'react';
 import { 
   ArrowLeft, Calendar, Clock, User, Video, 
-  Mic, MicOff, Camera, CameraOff, CheckCircle, ExternalLink 
+  Mic, MicOff, Camera, CameraOff, ExternalLink, CheckCircle2 
 } from 'lucide-react';
 import { STUDENT_DATA } from '../../data/mockData';
+import { recordAttendance } from '../../api/attendanceApi';
+import { useAuth } from '../../context/AuthContext';
 
 export default function JoinSessionPage({ setActiveScreen }) {
+  const { user } = useAuth();
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [isJoined, setIsJoined] = useState(false);
 
   const session = STUDENT_DATA.nextSession;
 
+  const handleJoinClick = async () => {
+    setIsJoined(true);
+    // Record attendance automatically in API
+    await recordAttendance(session, user?.name || 'Arjun');
+    // Open Google Meet URL in new window if available
+    if (session.meetUrl) {
+      window.open(session.meetUrl, '_blank');
+    }
+  };
+
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
       
-      {/* Breadcrumb Navigation - Screen 7 Top */}
+      {/* Breadcrumb Navigation */}
       <button 
         onClick={() => setActiveScreen('student-dash')}
         className="inline-flex items-center space-x-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
@@ -24,12 +37,11 @@ export default function JoinSessionPage({ setActiveScreen }) {
         <span>Back to Schedule</span>
       </button>
 
-      <h1 className="text-3xl font-black text-slate-900 tracking-tight">Join Your Session</h1>
+      <h1 className="text-3xl font-black text-slate-900 tracking-tight">Join Your Training Session</h1>
 
-      {/* Main Grid: Left Session Info + Right Google Meet Card */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* Left Session Details Card (Wireframe 7 Left Panel) */}
+        {/* Left Session Details Card */}
         <div className="lg:col-span-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-md space-y-6">
           <div className="border-b border-slate-100 pb-4">
             <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full uppercase tracking-wider">Live Class</span>
@@ -39,7 +51,7 @@ export default function JoinSessionPage({ setActiveScreen }) {
 
           <div className="space-y-4 text-xs">
             <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600 shrink-0">
+              <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
                 <Calendar className="w-4 h-4 text-blue-600" />
               </div>
               <div>
@@ -49,7 +61,7 @@ export default function JoinSessionPage({ setActiveScreen }) {
             </div>
 
             <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600 shrink-0">
+              <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
                 <Clock className="w-4 h-4 text-blue-600" />
               </div>
               <div>
@@ -59,7 +71,7 @@ export default function JoinSessionPage({ setActiveScreen }) {
             </div>
 
             <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600 shrink-0">
+              <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
                 <User className="w-4 h-4 text-blue-600" />
               </div>
               <div>
@@ -69,7 +81,7 @@ export default function JoinSessionPage({ setActiveScreen }) {
             </div>
 
             <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600 shrink-0">
+              <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
                 <Video className="w-4 h-4 text-emerald-600" />
               </div>
               <div>
@@ -80,29 +92,32 @@ export default function JoinSessionPage({ setActiveScreen }) {
           </div>
         </div>
 
-        {/* Right Live Google Meet Integration Card (Wireframe 7 Right Panel) */}
+        {/* Right Live Google Meet Integration Card */}
         <div className="lg:col-span-8 bg-white p-8 sm:p-12 rounded-3xl border border-slate-200/80 shadow-md text-center space-y-6">
           
           {isJoined ? (
             <div className="bg-slate-900 rounded-2xl p-8 text-white space-y-6">
               <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center text-slate-950 mx-auto shadow-lg animate-bounce">
-                <Video className="w-8 h-8" />
+                <CheckCircle2 className="w-8 h-8" />
               </div>
               <div>
-                <h3 className="text-2xl font-black">Connected to Google Meet</h3>
-                <p className="text-xs text-slate-300 mt-1">Live class in progress with Trainer Priya.</p>
+                <span className="text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full uppercase border border-emerald-500/30">
+                  Attendance Recorded: PRESENT
+                </span>
+                <h3 className="text-2xl font-black mt-3">Connected to Google Meet</h3>
+                <p className="text-xs text-slate-300 mt-1">Live training session in progress with Trainer Priya.</p>
               </div>
               <button
                 onClick={() => setIsJoined(false)}
                 className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs"
               >
-                Leave Class
+                Leave Session
               </button>
             </div>
           ) : (
             <>
               {/* Google Meet Visual Badge */}
-              <div className="w-24 h-24 bg-slate-50 rounded-3xl border border-slate-200 flex items-center justify-center mx-auto shadow-sm">
+              <div className="w-24 h-24 bg-slate-50 rounded-3xl border border-slate-200 flex items-center justify-center mx-auto shadow-xs">
                 <div className="w-14 h-14 bg-gradient-to-tr from-green-500 via-blue-500 to-amber-400 rounded-2xl flex items-center justify-center text-white shadow-md">
                   <Video className="w-8 h-8" />
                 </div>
@@ -138,14 +153,14 @@ export default function JoinSessionPage({ setActiveScreen }) {
               {/* Big Join Session Button */}
               <div>
                 <button
-                  onClick={() => setIsJoined(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-black text-base px-10 py-4 rounded-xl shadow-xl transition-transform transform hover:scale-105 inline-flex items-center space-x-2"
+                  onClick={handleJoinClick}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-black text-base px-10 py-4 rounded-xl shadow-xl transition-transform transform hover:scale-105 inline-flex items-center space-x-2 cursor-pointer"
                 >
                   <span>Join Session</span>
                   <ExternalLink className="w-4 h-4" />
                 </button>
                 <p className="text-[11px] text-slate-400 font-semibold mt-3">
-                  Make sure your camera and microphone are working.
+                  Clicking Join Session automatically marks your attendance as PRESENT.
                 </p>
               </div>
             </>

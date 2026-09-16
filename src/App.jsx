@@ -1,49 +1,76 @@
 import React, { useState } from 'react';
-import TopRoleBar from './components/layout/TopRoleBar';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import PublicNavbar from './components/layout/PublicNavbar';
 import DashboardSidebar from './components/layout/DashboardSidebar';
 import DashboardHeader from './components/layout/DashboardHeader';
+
 import HomePage from './components/public/HomePage';
 import CoursePage from './components/public/CoursePage';
 import CompetitionPage from './components/public/CompetitionPage';
 import EnquireModal from './components/public/EnquireModal';
+import LoginModal from './components/public/LoginModal';
+
 import AdminDashboard from './components/admin/AdminDashboard';
+import ManageCoursesPage from './components/admin/ManageCoursesPage';
+import AddCoursePage from './components/admin/AddCoursePage';
+import EditCoursePage from './components/admin/EditCoursePage';
+import CourseContentPage from './components/admin/CourseContentPage';
+import ManageStudentsPage from './components/admin/ManageStudentsPage';
+import ManageTrainersPage from './components/admin/ManageTrainersPage';
+import AdminAttendancePage from './components/admin/AttendancePage';
+
 import TrainerDashboard from './components/trainer/TrainerDashboard';
+import TrainerStudentsPage from './components/trainer/TrainerStudentsPage';
+import TrainerSchedulePage from './components/trainer/TrainerSchedulePage';
+import TrainerSessionsPage from './components/trainer/TrainerSessionsPage';
+import TrainerAssignmentsPage from './components/trainer/TrainerAssignmentsPage';
+import TrainerSubmissionsPage from './components/trainer/TrainerSubmissionsPage';
+import TrainerDoubtsPage from './components/trainer/TrainerDoubtsPage';
+import TrainerAttendancePage from './components/trainer/TrainerAttendancePage';
+import TrainerNotificationsPage from './components/trainer/TrainerNotificationsPage';
+import TrainerProfilePage from './components/trainer/TrainerProfilePage';
+
 import StudentDashboard from './components/student/StudentDashboard';
+import CourseLearningPage from './components/student/CourseLearningPage';
+import StudentAttendancePage from './components/student/AttendancePage';
 import JoinSessionPage from './components/student/JoinSessionPage';
 import AssignmentPage from './components/student/AssignmentPage';
 import DoubtPage from './components/student/DoubtPage';
+
 import { TRAINER_DATA, STUDENT_DATA } from './data/mockData';
 
-export default function App() {
+function MainApp() {
+  const { user, role } = useAuth();
   const [activeScreen, setActiveScreen] = useState('public-home');
   const [isEnquireOpen, setIsEnquireOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [selectedCourseIdForEdit, setSelectedCourseIdForEdit] = useState('english-comm');
 
   const isPublicPage = activeScreen.startsWith('public-');
   const isAdminPage = activeScreen.startsWith('admin-');
   const isTrainerPage = activeScreen.startsWith('trainer-');
 
-  // Active user details for headers
-  const currentUser = isAdminPage
-    ? { name: 'Admin', role: 'System Administrator', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120' }
-    : isTrainerPage
-    ? { name: TRAINER_DATA.name, role: TRAINER_DATA.role, avatar: TRAINER_DATA.avatar }
-    : { name: STUDENT_DATA.name, role: 'Student • Abacus L3', avatar: STUDENT_DATA.avatar };
+  const currentUser = user || (
+    isAdminPage
+      ? { name: 'Admin', role: 'System Administrator', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120' }
+      : isTrainerPage
+      ? { name: TRAINER_DATA.name, role: TRAINER_DATA.role, avatar: TRAINER_DATA.avatar }
+      : { name: STUDENT_DATA.name, role: 'Student • English Communication', avatar: STUDENT_DATA.avatar }
+  );
 
-  const currentRole = isAdminPage ? 'Admin' : isTrainerPage ? 'Trainer' : 'Student';
+  const currentRole = role || (isAdminPage ? 'ADMIN' : isTrainerPage ? 'TRAINER' : 'STUDENT');
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans antialiased text-slate-900">
       
-      {/* Top Demo Bar Switcher */}
-      <TopRoleBar activeScreen={activeScreen} setActiveScreen={setActiveScreen} />
-
-      {/* PUBLIC WEBSITE LAYOUT */}
+      {/* PUBLIC WEBSITE */}
       {isPublicPage ? (
         <div className="flex-1 flex flex-col">
           <PublicNavbar 
             activeScreen={activeScreen} 
             setActiveScreen={setActiveScreen}
+            onOpenLogin={() => setIsLoginOpen(true)}
             onOpenEnquire={() => setIsEnquireOpen(true)}
           />
           <main className="flex-1">
@@ -51,20 +78,25 @@ export default function App() {
               <HomePage setActiveScreen={setActiveScreen} onOpenEnquire={() => setIsEnquireOpen(true)} />
             )}
             {activeScreen === 'public-course' && (
-              <CoursePage onOpenEnquire={() => setIsEnquireOpen(true)} />
+              <CoursePage 
+                onOpenEnquire={() => setIsEnquireOpen(true)} 
+                setActiveScreen={(screen) => {
+                  if (screen === 'public-login') setIsLoginOpen(true);
+                  else setActiveScreen(screen);
+                }} 
+              />
             )}
             {activeScreen === 'public-competition' && (
               <CompetitionPage onOpenEnquire={() => setIsEnquireOpen(true)} />
             )}
           </main>
           
-          {/* Public Footer */}
           <footer className="bg-slate-900 text-slate-400 py-12 border-t border-slate-800 text-xs">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center space-x-3">
-                <img src="/assets/logo.png" alt="ZORO Logo" className="h-7 w-auto object-contain" />
-                <span className="font-extrabold text-white text-sm">ZORO Academy</span>
-                <span>© 2026 Zoro Inc. All rights reserved.</span>
+                <img src="/assets/logo.png" alt="Zoro English Academy Logo" className="h-7 w-auto object-contain" />
+                <span className="font-extrabold text-white text-sm">Zoro English Academy</span>
+                <span>© 2026 Zoro English Academy. All rights reserved.</span>
               </div>
               <div className="flex space-x-6 text-slate-400 font-semibold">
                 <a href="#" className="hover:text-white">Privacy Policy</a>
@@ -75,19 +107,59 @@ export default function App() {
           </footer>
         </div>
       ) : (
-        /* DASHBOARD LAYOUT (Admin, Trainer, Student) */
-        <div className="flex-1 flex h-[calc(100vh-41px)] overflow-hidden">
+        /* DASHBOARD LAYOUT */
+        <div className="flex-1 flex h-screen overflow-hidden">
           <DashboardSidebar 
             role={currentRole} 
             activeScreen={activeScreen} 
             setActiveScreen={setActiveScreen} 
+            isMobileOpen={isMobileMenuOpen}
+            onMobileClose={() => setIsMobileMenuOpen(false)}
           />
           <div className="flex-1 flex flex-col overflow-y-auto">
-            <DashboardHeader user={currentUser} />
-            <main className="flex-1">
+            <DashboardHeader 
+              user={currentUser} 
+              onMobileMenuToggle={() => setIsMobileMenuOpen(true)}
+            />
+            <main className="flex-1 p-4 sm:p-6 lg:p-8">
+              {/* Admin Views */}
               {activeScreen === 'admin-dash' && <AdminDashboard />}
+              {activeScreen === 'admin-manage-courses' && (
+                <ManageCoursesPage 
+                  setActiveScreen={setActiveScreen} 
+                  setSelectedCourseIdForEdit={setSelectedCourseIdForEdit} 
+                />
+              )}
+              {activeScreen === 'admin-add-course' && <AddCoursePage setActiveScreen={setActiveScreen} />}
+              {activeScreen === 'admin-edit-course' && (
+                <EditCoursePage courseId={selectedCourseIdForEdit} setActiveScreen={setActiveScreen} />
+              )}
+              {activeScreen === 'admin-course-content' && (
+                <CourseContentPage courseId={selectedCourseIdForEdit} setActiveScreen={setActiveScreen} />
+              )}
+              {activeScreen === 'admin-manage-students' && <ManageStudentsPage />}
+              {activeScreen === 'admin-manage-trainers' && <ManageTrainersPage />}
+              {activeScreen === 'admin-attendance' && <AdminAttendancePage setActiveScreen={setActiveScreen} />}
+
+              {/* Trainer Views (PDF Pages 1-10) */}
               {activeScreen === 'trainer-dash' && <TrainerDashboard setActiveScreen={setActiveScreen} />}
+              {activeScreen === 'trainer-students' && <TrainerStudentsPage />}
+              {activeScreen === 'trainer-schedule' && <TrainerSchedulePage />}
+              {activeScreen === 'trainer-sessions' && <TrainerSessionsPage />}
+              {activeScreen === 'trainer-assignments' && <TrainerAssignmentsPage />}
+              {activeScreen === 'trainer-submissions' && <TrainerSubmissionsPage />}
+              {activeScreen === 'trainer-doubts' && <TrainerDoubtsPage />}
+              {activeScreen === 'trainer-[#0F52BA]' && <TrainerAttendancePage />}
+              {activeScreen === 'trainer-attendance' && <TrainerAttendancePage />}
+              {activeScreen === 'trainer-notifications' && <TrainerNotificationsPage />}
+              {activeScreen === 'trainer-profile' && <TrainerProfilePage />}
+
+              {/* Student Views */}
               {activeScreen === 'student-dash' && <StudentDashboard setActiveScreen={setActiveScreen} />}
+              {activeScreen === 'student-course-learn' && (
+                <CourseLearningPage courseId="english-comm" setActiveScreen={setActiveScreen} />
+              )}
+              {activeScreen === 'student-attendance' && <StudentAttendancePage setActiveScreen={setActiveScreen} />}
               {activeScreen === 'student-join' && <JoinSessionPage setActiveScreen={setActiveScreen} />}
               {activeScreen === 'student-assignment' && <AssignmentPage setActiveScreen={setActiveScreen} />}
               {activeScreen === 'student-doubt' && <DoubtPage setActiveScreen={setActiveScreen} />}
@@ -96,9 +168,32 @@ export default function App() {
         </div>
       )}
 
-      {/* Global Enquiry Popup */}
+      {/* Global Modals */}
       <EnquireModal isOpen={isEnquireOpen} onClose={() => setIsEnquireOpen(false)} />
 
+      {/* Login Dialogue Box Modal */}
+      <LoginModal 
+        isOpen={isLoginOpen} 
+        onClose={() => setIsLoginOpen(false)} 
+        onLoginSuccess={(loggedUser) => {
+          if (loggedUser.role === 'ADMIN' || loggedUser.role === 'SUPER_ADMIN') {
+            setActiveScreen('admin-dash');
+          } else if (loggedUser.role === 'TRAINER') {
+            setActiveScreen('trainer-dash');
+          } else {
+            setActiveScreen('student-dash');
+          }
+        }}
+      />
+
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }

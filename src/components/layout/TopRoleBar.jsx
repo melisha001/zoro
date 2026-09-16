@@ -1,25 +1,27 @@
 import React from 'react';
-import { Eye, Shield, UserCheck, GraduationCap, Video, FileText, HelpCircle, Globe } from 'lucide-react';
+import { Eye, Shield, UserCheck, GraduationCap, Video, FileText, HelpCircle, Globe, LogIn, UserPlus, BookOpen, Clock } from 'lucide-react';
 
 export default function TopRoleBar({ activeScreen, setActiveScreen }) {
   const screens = [
-    { id: 'public-home', label: 'Public Home', category: 'Public', icon: Globe },
-    { id: 'public-course', label: 'Course Page', category: 'Public', icon: Eye },
-    { id: 'public-competition', label: 'Competition Page', category: 'Public', icon: Eye },
-    { id: 'admin-dash', label: 'Admin Dashboard', category: 'Admin', icon: Shield },
-    { id: 'trainer-dash', label: 'Trainer Dashboard', category: 'Trainer', icon: UserCheck },
-    { id: 'student-dash', label: 'Student Dashboard', category: 'Student', icon: GraduationCap },
-    { id: 'student-join', label: 'Student - Join Session', category: 'Student', icon: Video },
-    { id: 'student-assignment', label: 'Student - Assignment', category: 'Student', icon: FileText },
-    { id: 'student-doubt', label: 'Student - Ask Doubt', category: 'Student', icon: HelpCircle },
+    { id: 'public-home', label: 'Public Home', icon: Globe },
+    { id: 'public-course', label: 'Course Page', icon: Eye },
+    { id: 'public-login', label: 'Login Page', icon: LogIn },
+    { id: 'public-register', label: 'Register', icon: UserPlus },
+    { id: 'admin-dash', label: 'Admin Dashboard', icon: Shield },
+    { id: 'admin-manage-courses', label: 'Admin Courses', icon: BookOpen },
+    { id: 'admin-attendance', label: 'Admin Attendance', icon: Clock },
+    { id: 'trainer-dash', label: 'Trainer Dashboard', icon: UserCheck },
+    { id: 'student-dash', label: 'Student Dashboard', icon: GraduationCap },
+    { id: 'student-course-learn', label: 'Student LMS', icon: BookOpen },
+    { id: 'student-attendance', label: 'Student Attendance', icon: Clock },
+    { id: 'student-join', label: 'Join Session', icon: Video },
   ];
 
   return (
     <div className="bg-slate-900 text-white px-4 py-2 text-xs flex flex-wrap items-center justify-between border-b border-slate-800 sticky top-0 z-50 shadow-md">
       <div className="flex items-center space-x-2 font-semibold tracking-wide text-blue-400">
         <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></span>
-        <span>ZORO ACADEMY DEMO SWITCHER</span>
-        <span className="text-slate-400 font-normal hidden md:inline">| Click to preview any of the 9 wireframes:</span>
+        <span>ZORO ENGLISH ACADEMY DEMO SWITCHER</span>
       </div>
 
       <div className="flex items-center flex-wrap gap-1.5 mt-1 sm:mt-0">
