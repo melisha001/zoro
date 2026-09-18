@@ -1,4 +1,5 @@
 import { getItem, setItem, apiResponse } from './client';
+import { createNotification } from './notificationApi';
 
 const SALARY_KEY = 'trainer_salaries_db';
 
@@ -38,6 +39,9 @@ export const getSalaryPayments = async () => {
   return apiResponse(salaries);
 };
 
+export const getSalaries = getSalaryPayments;
+
+
 export const createSalaryPayment = async (data) => {
   const { data: salaries } = await getSalaryPayments();
   const newRecord = {
@@ -47,6 +51,17 @@ export const createSalaryPayment = async (data) => {
   };
   const updated = [newRecord, ...salaries];
   setItem(SALARY_KEY, updated);
+
+  // Trigger persistent notification for trainer (Requirement 9)
+  if (newRecord.trainerName) {
+    await createNotification({
+      trainerName: newRecord.trainerName,
+      title: 'Salary Payment Recorded',
+      desc: `Salary payment of ₹${Number(newRecord.amount).toLocaleString()} for ${newRecord.month || 'September 2026'} has been recorded.`,
+      type: 'system'
+    });
+  }
+
   return apiResponse(newRecord);
 };
 

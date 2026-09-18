@@ -10,44 +10,39 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (user) {
       setItem('user', user);
-      setItem('role', role);
+      setItem('role', user.role || role);
     } else {
       localStorage.removeItem('zoro_english_academy_user');
       localStorage.removeItem('zoro_english_academy_role');
     }
   }, [user, role]);
 
-  const login = (email, password, userRole = 'STUDENT') => {
-    const formattedRole = userRole.toUpperCase();
+  const login = (userData) => {
+    const formattedRole = (userData.role || 'STUDENT').toUpperCase();
     const newUser = {
-      id: `usr_${Date.now()}`,
-      name: email.split('@')[0] || 'User',
-      email,
-      role: formattedRole,
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120'
+      ...userData,
+      role: formattedRole
     };
     setUser(newUser);
     setRole(formattedRole);
+    setItem('user', newUser);
+    setItem('role', formattedRole);
     return newUser;
   };
 
-  const registerStudent = (studentData) => {
-    const newUser = {
-      id: `std_${Date.now()}`,
-      name: studentData.name,
-      email: studentData.email,
-      phone: studentData.phone,
-      role: 'STUDENT',
-      avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=200'
-    };
-    setUser(newUser);
-    setRole('STUDENT');
-    return newUser;
+  const updateUserInContext = (updatedFields) => {
+    setUser(prev => {
+      const updated = { ...prev, ...updatedFields };
+      setItem('user', updated);
+      return updated;
+    });
   };
 
   const logout = () => {
     setUser(null);
     setRole(null);
+    localStorage.removeItem('zoro_english_academy_user');
+    localStorage.removeItem('zoro_english_academy_role');
   };
 
   return (
@@ -56,7 +51,7 @@ export function AuthProvider({ children }) {
       role, 
       isAuthenticated: !!user, 
       login, 
-      registerStudent, 
+      updateUserInContext,
       logout 
     }}>
       {children}

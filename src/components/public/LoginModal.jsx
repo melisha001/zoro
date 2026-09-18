@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, LogIn, Lock, Mail } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { findUserByEmail } from '../../api/userApi';
+import { authenticateUser } from '../../api/userApi';
 
 export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   const { login } = useAuth();
@@ -22,10 +22,16 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
     setLoading(true);
     setError('');
 
-    // Detect user role automatically from email / DB
-    const detectedUser = await findUserByEmail(email);
-    const loggedUser = login(email, password, detectedUser.role, detectedUser.name);
+    // Validate credentials against database
+    const authResult = await authenticateUser(email, password);
     setLoading(false);
+
+    if (!authResult.success) {
+      setError(authResult.message || 'Authentication failed. Invalid email or password.');
+      return;
+    }
+
+    const loggedUser = login(authResult.user);
     onClose();
 
     if (onLoginSuccess) {
@@ -40,7 +46,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
         {/* Close Button */}
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors"
+          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
@@ -56,7 +62,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
             Sign In
           </h3>
           <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">
-            Zoro English Academy
+            Zoro English Academy Portal
           </p>
         </div>
 
@@ -68,19 +74,19 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Email / Username</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
             <div className="relative">
               <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="email"
                 required
-                placeholder="Enter your registered email"
+                placeholder="e.g. arjun@student.com or priya@trainer.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
               />
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">Role is automatically detected from your account email.</p>
+            <p className="text-[10px] text-slate-400 mt-1">Role & portal access are authenticated from your user record.</p>
           </div>
 
           <div>
@@ -109,7 +115,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
         </form>
 
         <div className="mt-4 pt-4 border-t border-slate-100 text-center text-xs text-slate-500">
-          Account credentials are created and issued by Academy Admin.
+          Account credentials are issued by Academy Admin.
         </div>
 
       </div>

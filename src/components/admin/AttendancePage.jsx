@@ -1,27 +1,74 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Filter, Download, Users, CheckCircle2, XCircle, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Filter, Download, Users, CheckCircle2, XCircle, TrendingUp, RefreshCw, X } from 'lucide-react';
 import { getAttendanceRecords } from '../../api/attendanceApi';
 import { getStudents } from '../../api/userApi';
 
 export default function AdminAttendancePage({ setActiveScreen }) {
-  const [records, setRecords] = useState([]);
-  const [studentsCount, setStudentsCount] = useState(30);
+  const [allRecords, setAllRecords] = useState([]);
+  const [filteredRecords, setFilteredRecords] = useState([]);
+  const [studentsCount, setStudentsCount] = useState(0);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Filter state
+  const [filters, setFilters] = useState({
+    date: '',
+    course: '',
+    studentName: '',
+    status: ''
+  });
 
   useEffect(() => {
-    getAttendanceRecords().then(res => setRecords(res.data));
-    getStudents().then(res => {
-      if (res.data && res.data.length > 0) {
-        setStudentsCount(Math.max(res.data.length, 30));
-      }
-    });
+    loadData();
   }, []);
 
-  const totalStudents = studentsCount;
-  const presentCount = records.length > 0 
-    ? records.filter(r => r.status === 'PRESENT' || r.status === 'Present').length 
-    : 24;
-  const absentCount = Math.max(0, totalStudents - presentCount);
-  const attendanceRate = Math.round((presentCount / totalStudents) * 100);
+  const loadData = async () => {
+    try {
+      const attRes = await getAttendanceRecords();
+      const recordsData = attRes.data || [];
+      setAllRecords(recordsData);
+      setFilteredRecords(recordsData);
+
+      const stdRes = await getStudents();
+      if (stdRes.data && stdRes.data.length > 0) {
+        setStudentsCount(stdRes.data.length);
+      } else {
+        setStudentsCount(recordsData.length);
+      }
+    } catch (err) {
+      console.error('Failed to load attendance data:', err);
+    }
+  };
+
+  const handleApplyFilters = () => {
+    let result = [...allRecords];
+
+    if (filters.date) {
+      result = result.filter(r => r.date === filters.date);
+    }
+    if (filters.course) {
+      result = result.filter(r => r.course?.toLowerCase().includes(filters.course.toLowerCase()));
+    }
+    if (filters.studentName) {
+      result = result.filter(r => r.studentName?.toLowerCase().includes(filters.studentName.toLowerCase()));
+    }
+    if (filters.status) {
+      result = result.filter(r => r.status?.toUpperCase() === filters.status.toUpperCase());
+    }
+
+    setFilteredRecords(result);
+  };
+
+  const handleResetFilters = () => {
+    setFilters({ date: '', course: '', studentName: '', status: '' });
+    setFilteredRecords(allRecords);
+  };
+
+  const totalStudents = studentsCount || filteredRecords.length || 1;
+  const presentCount = filteredRecords.filter(r => r.status?.toUpperCase() === 'PRESENT').length;
+  const absentCount = filteredRecords.filter(r => r.status?.toUpperCase() === 'ABSENT').length;
+  const attendanceRate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+
+  const uniqueCourses = Array.from(new Set(allRecords.map(r => r.course).filter(Boolean)));
 
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
@@ -40,12 +87,98 @@ export default function AdminAttendancePage({ setActiveScreen }) {
         </div>
 
         <div className="flex items-center space-x-3">
-          <button className="flex items-center space-x-2 bg-white px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 border border-slate-200 shadow-xs hover:bg-slate-100 cursor-pointer">
-            <Filter className="w-3.5 h-3.5 text-slate-500" />
-            <span>Filter</span>
+          <button 
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+              isFilterOpen ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filter Data</span>
           </button>
         </div>
       </div>
+
+      {/* FILTER DRAWER / PANEL */}
+      {isFilterOpen && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Filter className="w-4 h-4 text-blue-600" />
+              Filter Attendance Records
+            </h3>
+            <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 hover:text-slate-700">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">Date</label>
+              <input
+                type="date"
+                value={filters.date}
+                onChange={(e) => setFilters({ ...filters, date: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">Course</label>
+              <select
+                value={filters.course}
+                onChange={(e) => setFilters({ ...filters, course: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600"
+              >
+                <option value="">All Courses</option>
+                {uniqueCourses.map((c, i) => (
+                  <option key={i} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">Student Name</label>
+              <input
+                type="text"
+                placeholder="Search student..."
+                value={filters.studentName}
+                onChange={(e) => setFilters({ ...filters, studentName: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">Attendance Status</label>
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600"
+              >
+                <option value="">All Statuses</option>
+                <option value="PRESENT">PRESENT</option>
+                <option value="ABSENT">ABSENT</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              onClick={handleResetFilters}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Reset Filter</span>
+            </button>
+            <button
+              onClick={handleApplyFilters}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
+            >
+              Apply Filter
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Attendance Summary Cards (Present / Total Students requirement) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -118,21 +251,33 @@ export default function AdminAttendancePage({ setActiveScreen }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {records.map((rec) => (
-                <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-4 px-4 font-black text-slate-900">{rec.studentName}</td>
-                  <td className="py-4 px-4 font-bold text-blue-900">{rec.course}</td>
-                  <td className="py-4 px-4 text-slate-600">{rec.topic}</td>
-                  <td className="py-4 px-4 text-slate-500">{rec.date}</td>
-                  <td className="py-4 px-4 font-bold text-slate-800">{rec.joinedAt}</td>
-                  <td className="py-4 px-4">
-                    <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border border-emerald-200">
-                      {rec.status}
-                    </span>
+              {filteredRecords.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="py-8 text-center text-slate-400 font-medium">
+                    No attendance records match the selected filters.
                   </td>
-                  <td className="py-4 px-4 text-slate-400 font-mono text-[10px]">{rec.source}</td>
                 </tr>
-              ))}
+              ) : (
+                filteredRecords.map((rec) => (
+                  <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-4 px-4 font-black text-slate-900">{rec.studentName}</td>
+                    <td className="py-4 px-4 font-bold text-blue-900">{rec.course}</td>
+                    <td className="py-4 px-4 text-slate-600">{rec.topic}</td>
+                    <td className="py-4 px-4 text-slate-500">{rec.date}</td>
+                    <td className="py-4 px-4 font-bold text-slate-800">{rec.joinedAt}</td>
+                    <td className="py-4 px-4">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${
+                        rec.status?.toUpperCase() === 'ABSENT' 
+                          ? 'bg-rose-100 text-rose-800 border-rose-200'
+                          : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                      }`}>
+                        {rec.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-slate-400 font-mono text-[10px]">{rec.source || 'LMS System'}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -140,3 +285,4 @@ export default function AdminAttendancePage({ setActiveScreen }) {
     </div>
   );
 }
+

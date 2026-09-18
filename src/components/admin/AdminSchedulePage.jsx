@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Calendar, Clock, Video, Users, User, Search, Filter, CheckCircle2, Edit2, Trash2, X } from 'lucide-react';
+import { getSchedules, createSchedule, deleteSchedule } from '../../api/scheduleApi';
+import { getTrainers } from '../../api/userApi';
+import { getCourses } from '../../api/courseApi';
 
 export default function AdminSchedulePage() {
   const [selectedDate, setSelectedDate] = useState('2026-09-17');
@@ -7,47 +10,94 @@ export default function AdminSchedulePage() {
   const [selectedTrainer, setSelectedTrainer] = useState('All');
   const [showAddModal, setShowAddModal] = useState(false);
 
-  const [schedules, setSchedules] = useState([
-    { id: 1, title: 'Level 2 - Present Tense', course: 'English Communication', batch: 'EN-L2', trainer: 'Ms. Priya', time: '05:00 PM - 06:00 PM', mode: 'Online (Google Meet)', status: 'Upcoming', students: 28 },
-    { id: 2, title: 'Level 1 - Daily Conversation', course: 'English Communication', batch: 'EN-L1', trainer: 'Mr. Rajesh', time: '06:00 PM - 07:00 PM', mode: 'Online (Google Meet)', status: 'Upcoming', students: 25 },
-    { id: 3, title: 'Vocabulary Building & Phonics', course: 'English Communication', batch: 'EN-L2', trainer: 'Ms. Priya', time: '07:00 PM - 08:00 PM', mode: 'Online (Google Meet)', status: 'Completed', students: 28 },
-    { id: 4, title: 'Abacus Speed Calculation', course: 'Abacus Mastery', batch: 'AB-L3', trainer: 'Ms. Anitha', time: '04:00 PM - 05:00 PM', mode: 'Offline (Branch A)', status: 'Completed', students: 20 },
-  ]);
+  const [schedules, setSchedules] = useState([]);
+  const [trainers, setTrainers] = useState([]);
+  const [courses, setCourses] = useState([]);
 
   const [formData, setFormData] = useState({
     title: '',
     course: 'English Communication',
     batch: 'EN-L2',
-    trainer: 'Ms. Priya',
+    trainer: 'Priya',
     time: '05:00 PM - 06:00 PM',
     mode: 'Online (Google Meet)',
     date: '2026-09-17'
   });
 
-  const handleAddSchedule = (e) => {
-    e.preventDefault();
-    const newSchedule = {
-      id: Date.now(),
-      ...formData,
-      status: 'Upcoming',
-      students: 25
-    };
-    setSchedules([newSchedule, ...schedules]);
-    setShowAddModal(false);
-    setFormData({ title: '', course: 'English Communication', batch: 'EN-L2', trainer: 'Ms. Priya', time: '05:00 PM - 06:00 PM', mode: 'Online (Google Meet)', date: '2026-09-17' });
+  useEffect(() => {
+    loadSchedules();
+    loadTrainersAndCourses();
+  }, []);
+
+  const loadSchedules = async () => {
+    try {
+      const res = await getSchedules();
+      setSchedules(res.data || []);
+    } catch (err) {
+      console.error('Failed to load schedules:', err);
+    }
   };
 
-  const handleDelete = (id) => {
+  const loadTrainersAndCourses = async () => {
+    try {
+      const trRes = await getTrainers();
+      setTrainers(trRes.data || []);
+      if (trRes.data?.length > 0) {
+        setFormData(prev => ({ ...prev, trainer: trRes.data[0].name }));
+      }
+
+      const crsRes = await getCourses();
+      setCourses(crsRes.data || []);
+      if (crsRes.data?.length > 0) {
+        setFormData(prev => ({ ...prev, course: crsRes.data[0].title }));
+      }
+    } catch (err) {
+      console.error('Error loading metadata for schedules:', err);
+    }
+  };
+
+  const handleAddSchedule = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await createSchedule(formData);
+      if (res.success) {
+        await loadSchedules();
+        setShowAddModal(false);
+        setFormData({
+          title: '',
+          course: courses[0]?.title || 'English Communication',
+          batch: 'EN-L2',
+          trainer: trainers[0]?.name || 'Priya',
+          time: '05:00 PM - 06:00 PM',
+          mode: 'Online (Google Meet)',
+          date: selectedDate
+        });
+      }
+    } catch (err) {
+      console.error('Failed to create schedule:', err);
+    }
+  };
+
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to cancel this scheduled session?')) {
-      setSchedules(schedules.filter(s => s.id !== id));
+      try {
+        await deleteSchedule(id);
+        await loadSchedules();
+      } catch (err) {
+        console.error('Failed to delete schedule:', err);
+      }
     }
   };
 
   const filteredSchedules = schedules.filter(item => {
     const matchesBatch = selectedBatch === 'All' || item.batch === selectedBatch;
-    const matchesTrainer = selectedTrainer === 'All' || item.trainer === selectedTrainer;
+    const matchesTrainer = selectedTrainer === 'All' || item.trainer?.toLowerCase().includes(selectedTrainer.toLowerCase());
     return matchesBatch && matchesTrainer;
   });
+
+  const upcomingCount = schedules.filter(s => s.status === 'Upcoming').length;
+  const completedCount = schedules.filter(s => s.status === 'Completed').length;
+  const uniqueTrainersCount = new Set(schedules.map(s => s.trainer)).size;
 
   return (
     <div className="space-y-6">
@@ -70,20 +120,20 @@ export default function AdminSchedulePage() {
       {/* Stats Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="text-xs text-slate-500 font-semibold">Total Today</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">4 Sessions</div>
+          <div className="text-xs text-slate-500 font-semibold">Total Sessions</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{schedules.length} Sessions</div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="text-xs text-slate-500 font-semibold">Upcoming</div>
-          <div className="text-2xl font-black text-[#0F52BA] mt-1">2 Sessions</div>
+          <div className="text-2xl font-black text-[#0F52BA] mt-1">{upcomingCount} Sessions</div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="text-xs text-slate-500 font-semibold">Completed</div>
-          <div className="text-2xl font-black text-emerald-600 mt-1">2 Sessions</div>
+          <div className="text-2xl font-black text-emerald-600 mt-1">{completedCount} Sessions</div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="text-xs text-slate-500 font-semibold">Active Trainers</div>
-          <div className="text-2xl font-black text-purple-600 mt-1">3 Trainers</div>
+          <div className="text-2xl font-black text-purple-600 mt-1">{uniqueTrainersCount} Trainers</div>
         </div>
       </div>
 
@@ -122,9 +172,9 @@ export default function AdminSchedulePage() {
               className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
             >
               <option value="All">All Trainers</option>
-              <option value="Ms. Priya">Ms. Priya</option>
-              <option value="Mr. Rajesh">Mr. Rajesh</option>
-              <option value="Ms. Anitha">Ms. Anitha</option>
+              {trainers.map((t) => (
+                <option key={t.id} value={t.name}>{t.name}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -146,36 +196,42 @@ export default function AdminSchedulePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {filteredSchedules.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-4 px-4">
-                    <div className="font-bold text-slate-900 text-sm">{item.title}</div>
-                    <div className="text-slate-500 text-xs">{item.course}</div>
-                  </td>
-                  <td className="py-4 px-4 font-bold text-[#0F52BA]">{item.batch}</td>
-                  <td className="py-4 px-4 font-semibold text-slate-800">{item.trainer}</td>
-                  <td className="py-4 px-4 text-slate-700 font-mono">{item.time}</td>
-                  <td className="py-4 px-4 text-slate-600">{item.mode}</td>
-                  <td className="py-4 px-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                      item.status === 'Completed'
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                        : 'bg-blue-100 text-blue-800 border border-blue-200'
-                    }`}>
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4 text-right space-x-2">
-                    <button
-                      onClick={() => handleDelete(item.id)}
-                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                      title="Cancel Session"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
+              {filteredSchedules.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="py-8 text-center text-slate-400">No schedules found matching criteria.</td>
                 </tr>
-              ))}
+              ) : (
+                filteredSchedules.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-4 px-4">
+                      <div className="font-bold text-slate-900 text-sm">{item.title}</div>
+                      <div className="text-slate-500 text-xs">{item.course}</div>
+                    </td>
+                    <td className="py-4 px-4 font-bold text-[#0F52BA]">{item.batch}</td>
+                    <td className="py-4 px-4 font-semibold text-slate-800">{item.trainer}</td>
+                    <td className="py-4 px-4 text-slate-700 font-mono">{item.time}</td>
+                    <td className="py-4 px-4 text-slate-600">{item.mode}</td>
+                    <td className="py-4 px-4">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                        item.status === 'Completed'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : 'bg-blue-100 text-blue-800 border border-blue-200'
+                      }`}>
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-right space-x-2">
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        title="Cancel Session"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -207,6 +263,19 @@ export default function AdminSchedulePage() {
                 />
               </div>
 
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Course</label>
+                <select
+                  value={formData.course}
+                  onChange={(e) => setFormData({ ...formData, course: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
+                >
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.title}>{c.title}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Batch</label>
@@ -228,9 +297,9 @@ export default function AdminSchedulePage() {
                     onChange={(e) => setFormData({ ...formData, trainer: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
                   >
-                    <option value="Ms. Priya">Ms. Priya</option>
-                    <option value="Mr. Rajesh">Mr. Rajesh</option>
-                    <option value="Ms. Anitha">Ms. Anitha</option>
+                    {trainers.map((t) => (
+                      <option key={t.id} value={t.name}>{t.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -262,7 +331,7 @@ export default function AdminSchedulePage() {
                 type="submit"
                 className="w-full bg-[#0F52BA] hover:bg-blue-700 text-white font-black py-3 rounded-xl shadow-md transition-colors text-xs mt-3 cursor-pointer"
               >
-                Schedule & Notify Students
+                Schedule & Assign Trainer
               </button>
             </form>
           </div>
@@ -271,3 +340,4 @@ export default function AdminSchedulePage() {
     </div>
   );
 }
+

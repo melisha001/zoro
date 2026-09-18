@@ -44,6 +44,7 @@ import StudentAttendancePage from './components/student/AttendancePage';
 import JoinSessionPage from './components/student/JoinSessionPage';
 import AssignmentPage from './components/student/AssignmentPage';
 import DoubtPage from './components/student/DoubtPage';
+import StudentProfilePage from './components/student/StudentProfilePage';
 
 import { TRAINER_DATA, STUDENT_DATA } from './data/mockData';
 
@@ -58,6 +59,20 @@ function MainApp() {
   const isPublicPage = activeScreen.startsWith('public-');
   const isAdminPage = activeScreen.startsWith('admin-');
   const isTrainerPage = activeScreen.startsWith('trainer-');
+  const isStudentPage = activeScreen.startsWith('student-');
+
+  const currentRole = role || (isAdminPage ? 'ADMIN' : isTrainerPage ? 'TRAINER' : 'STUDENT');
+
+  // Enforce Role Route Protection
+  React.useEffect(() => {
+    if (role === 'STUDENT' && (isAdminPage || isTrainerPage)) {
+      setActiveScreen('student-dash');
+    } else if (role === 'TRAINER' && (isAdminPage || isStudentPage)) {
+      setActiveScreen('trainer-dash');
+    } else if ((role === 'ADMIN' || role === 'SUPER_ADMIN') && (isTrainerPage || isStudentPage)) {
+      setActiveScreen('admin-dash');
+    }
+  }, [role, activeScreen]);
 
   const currentUser = user || (
     isAdminPage
@@ -66,8 +81,6 @@ function MainApp() {
       ? { name: TRAINER_DATA.name, role: TRAINER_DATA.role, avatar: TRAINER_DATA.avatar }
       : { name: STUDENT_DATA.name, role: 'Student • English Communication', avatar: STUDENT_DATA.avatar }
   );
-
-  const currentRole = role || (isAdminPage ? 'ADMIN' : isTrainerPage ? 'TRAINER' : 'STUDENT');
 
   return (
     <div className="bg-slate-50 font-sans antialiased text-slate-900">
@@ -160,7 +173,7 @@ function MainApp() {
               {/* Trainer Views (PDF Pages 1-10) */}
               {activeScreen === 'trainer-dash' && <TrainerDashboard setActiveScreen={setActiveScreen} />}
               {activeScreen === 'trainer-students' && <TrainerStudentsPage />}
-              {activeScreen === 'trainer-schedule' && <TrainerSchedulePage />}
+              {activeScreen === 'trainer-schedule' && <TrainerSchedulePage setActiveScreen={setActiveScreen} />}
               {activeScreen === 'trainer-sessions' && <TrainerSessionsPage />}
               {activeScreen === 'trainer-assignments' && <TrainerAssignmentsPage />}
               {activeScreen === 'trainer-submissions' && <TrainerSubmissionsPage />}
@@ -179,6 +192,7 @@ function MainApp() {
               {activeScreen === 'student-join' && <JoinSessionPage setActiveScreen={setActiveScreen} />}
               {activeScreen === 'student-assignment' && <AssignmentPage setActiveScreen={setActiveScreen} />}
               {activeScreen === 'student-doubt' && <DoubtPage setActiveScreen={setActiveScreen} />}
+              {activeScreen === 'student-profile' && <StudentProfilePage />}
             </main>
           </div>
         </div>

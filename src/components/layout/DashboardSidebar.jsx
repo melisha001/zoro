@@ -46,7 +46,7 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
       { id: 'student-join', label: 'Join Session', icon: Calendar, badge: 'Live' },
       { id: 'student-assignment', label: 'Assignments', icon: FileText },
       { id: 'student-doubt', label: 'My Doubts', icon: HelpCircle },
-      { id: 'profile', label: 'My Profile', icon: User },
+      { id: 'student-profile', label: 'My Profile', icon: User },
     ];
   }
 

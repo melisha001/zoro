@@ -1,8 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Award, Users, Globe, CheckCircle, ArrowRight, Play, Sparkles } from 'lucide-react';
-import { COURSES, COMPETITION } from '../../data/mockData';
+import { COMPETITION } from '../../data/mockData';
+import { getCourses } from '../../api/courseApi';
 
 export default function HomePage({ setActiveScreen, onOpenEnquire }) {
+  const [courses, setCourses] = useState([]);
+
+  useEffect(() => {
+    async function loadCourses() {
+      try {
+        const res = await getCourses();
+        if (res.success && res.data) {
+          setCourses(res.data);
+        }
+      } catch (err) {
+        console.error('Failed to load courses on homepage', err);
+      }
+    }
+    loadCourses();
+  }, []);
+
   const highlights = [
     { title: 'Expert Trainers', desc: 'Certified & passionate educators', icon: Users, color: 'bg-blue-50 text-blue-600' },
     { title: 'Interactive Learning', desc: 'Live small-group online classes', icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
@@ -97,23 +114,23 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {COURSES.slice(0, 3).map((course) => (
+          {courses.slice(0, 6).map((course) => (
             <div key={course.id} className="bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-md hover:shadow-xl transition-all group flex flex-col justify-between">
               <div>
                 <div className="relative h-48 overflow-hidden bg-slate-100">
-                  <img src={course.videoUrl} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  <img src={course.videoUrl || '/assets/hero-bg.jpg'} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                   <span className="absolute top-3 right-3 bg-blue-600 text-white text-xs font-extrabold px-3 py-1 rounded-full shadow">
-                    {course.ageGroup}
+                    {course.ageGroup || 'Kids'}
                   </span>
                 </div>
                 <div className="p-6">
-                  <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">{course.duration} • {course.mode}</div>
+                  <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">{course.duration || '3 Months'} • {course.mode || 'Online'}</div>
                   <h3 className="text-xl font-bold text-slate-900 mt-1">{course.title}</h3>
                   <p className="text-slate-500 text-xs mt-2 line-clamp-2">{course.description}</p>
                 </div>
               </div>
               <div className="p-6 pt-0 flex items-center justify-between border-t border-slate-100 mt-4">
-                <span className="text-xs font-extrabold text-slate-700">★ {course.rating} ({course.enrolled}+ Students)</span>
+                <span className="text-xs font-extrabold text-slate-700">★ {course.rating || '4.9'} ({course.enrolled || 50}+ Students)</span>
                 <button 
                   onClick={() => setActiveScreen('public-course')}
                   className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center space-x-1"
@@ -153,3 +170,4 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
     </div>
   );
 }
+

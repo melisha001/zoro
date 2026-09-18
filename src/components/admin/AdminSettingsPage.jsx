@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, Shield, CreditCard, Building, Check, Save } from 'lucide-react';
+import { getSettings, saveSettings } from '../../api/settingsApi';
 
 export default function AdminSettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
@@ -21,10 +22,42 @@ export default function AdminSettingsPage() {
     notifyOnNewEnrollment: true
   });
 
-  const handleSave = (e) => {
+  const [notificationTriggers, setNotificationTriggers] = useState({
+    emailOnEnrollment: true,
+    smsOnReminder: true,
+    notifyOnDoubt: true
+  });
+
+  useEffect(() => {
+    loadSettingsData();
+  }, []);
+
+  const loadSettingsData = async () => {
+    try {
+      const res = await getSettings();
+      if (res.data) {
+        if (res.data.generalInfo) setGeneralInfo(res.data.generalInfo);
+        if (res.data.securitySettings) setSecuritySettings(res.data.securitySettings);
+        if (res.data.notificationTriggers) setNotificationTriggers(res.data.notificationTriggers);
+      }
+    } catch (err) {
+      console.error('Failed to load settings:', err);
+    }
+  };
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+    try {
+      await saveSettings({
+        generalInfo,
+        securitySettings,
+        notificationTriggers
+      });
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+    }
   };
 
   return (
@@ -173,6 +206,16 @@ export default function AdminSettingsPage() {
               />
               Require students to change password upon first login
             </label>
+
+            <div className="pt-2">
+              <label className="block font-bold text-slate-700 mb-1">Session Timeout (Minutes)</label>
+              <input
+                type="number"
+                value={securitySettings.sessionTimeoutMins || 60}
+                onChange={(e) => setSecuritySettings({ ...securitySettings, sessionTimeoutMins: Number(e.target.value) })}
+                className="w-32 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+              />
+            </div>
           </div>
 
           <div className="pt-2">
@@ -194,11 +237,31 @@ export default function AdminSettingsPage() {
             <label className="flex items-center gap-3 text-slate-700 font-bold cursor-pointer">
               <input
                 type="checkbox"
-                checked={securitySettings.notifyOnNewEnrollment}
-                onChange={(e) => setSecuritySettings({ ...securitySettings, notifyOnNewEnrollment: e.target.checked })}
+                checked={notificationTriggers.emailOnEnrollment}
+                onChange={(e) => setNotificationTriggers({ ...notificationTriggers, emailOnEnrollment: e.target.checked })}
                 className="rounded text-[#0F52BA] border-slate-300 w-4 h-4"
               />
-              Send instant email notification to Admin when a new student registers/enquires
+              Send instant email notification to Admin when a new student registers
+            </label>
+
+            <label className="flex items-center gap-3 text-slate-700 font-bold cursor-pointer">
+              <input
+                type="checkbox"
+                checked={notificationTriggers.smsOnReminder}
+                onChange={(e) => setNotificationTriggers({ ...notificationTriggers, smsOnReminder: e.target.checked })}
+                className="rounded text-[#0F52BA] border-slate-300 w-4 h-4"
+              />
+              SMS Alerts for Class Reminders to Trainers
+            </label>
+
+            <label className="flex items-center gap-3 text-slate-700 font-bold cursor-pointer">
+              <input
+                type="checkbox"
+                checked={notificationTriggers.notifyOnDoubt}
+                onChange={(e) => setNotificationTriggers({ ...notificationTriggers, notifyOnDoubt: e.target.checked })}
+                className="rounded text-[#0F52BA] border-slate-300 w-4 h-4"
+              />
+              Notify Trainers on new Student Doubts
             </label>
           </div>
 
@@ -216,3 +279,4 @@ export default function AdminSettingsPage() {
     </div>
   );
 }
+

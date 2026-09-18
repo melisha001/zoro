@@ -1,77 +1,57 @@
-import React, { useState } from 'react';
-import { Bell, Calendar, BookOpen, HelpCircle, AlertTriangle, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bell, Calendar, BookOpen, HelpCircle, AlertTriangle, Info, Wallet } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { getTrainerNotifications } from '../../api/notificationApi';
 
 export default function TrainerNotificationsPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('all');
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const notifications = [
-    {
-      id: 1,
-      title: 'Schedule Update',
-      desc: 'Level 2 session rescheduled to 16 Sep, 5:00 PM',
-      time: 'Today, 10:30 AM',
-      type: 'schedule',
-      icon: Calendar,
-      color: 'bg-blue-50 text-blue-600 border-blue-200'
-    },
-    {
-      id: 2,
-      title: 'New Assignment',
-      desc: 'Grammar Practice has been assigned to EN-L2',
-      time: 'Today, 9:15 AM',
-      type: 'assignments',
-      icon: BookOpen,
-      color: 'bg-[#0F52BA]/10 text-[#0F52BA] border-blue-200'
-    },
-    {
-      id: 3,
-      title: 'Student Doubt',
-      desc: 'Abhishek sent a new doubt',
-      time: 'Today, 8:20 AM',
-      type: 'all',
-      icon: HelpCircle,
-      color: 'bg-amber-50 text-amber-600 border-amber-200'
-    },
-    {
-      id: 4,
-      title: 'Announcement',
-      desc: 'Centre will be closed on 2 Oct (Gandhi Jayanti)',
-      time: 'Yesterday, 6:00 PM',
-      type: 'announcements',
-      icon: Info,
-      color: 'bg-indigo-50 text-indigo-600 border-indigo-200'
-    },
-    {
-      id: 5,
-      title: 'Assignment Overdue',
-      desc: '2 submissions are overdue',
-      time: 'Yesterday, 4:10 PM',
-      type: 'assignments',
-      icon: AlertTriangle,
-      color: 'bg-rose-50 text-rose-600 border-rose-200'
+  const trainerIdentifier = user?.name || user?.email || 'Priya';
+
+  useEffect(() => {
+    async function loadNotifications() {
+      setLoading(true);
+      try {
+        const res = await getTrainerNotifications(trainerIdentifier);
+        setNotifications(res.data || []);
+      } catch (err) {
+        console.error('Failed to load notifications:', err);
+      } finally {
+        setLoading(false);
+      }
     }
-  ];
+    loadNotifications();
+  }, [trainerIdentifier]);
 
   const filteredNotifications = notifications.filter(n => {
     if (activeTab === 'all') return true;
     return n.type === activeTab;
   });
 
+  const getIcon = (type) => {
+    if (type === 'salary' || type === 'system') return Wallet;
+    if (type === 'schedule') return Calendar;
+    if (type === 'assignments') return BookOpen;
+    return Bell;
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Notifications</h1>
-        <p className="text-slate-500 text-sm mt-1">Stay updated with important information.</p>
+        <p className="text-slate-500 text-sm mt-1">Stay updated with salary payments, schedule changes, and alerts for {user?.name || 'Trainer'}.</p>
       </div>
 
       {/* Tabs */}
       <div className="flex overflow-x-auto border-b border-slate-200 gap-6 no-scrollbar">
         {[
           { id: 'all', label: 'All' },
-          { id: 'announcements', label: 'Announcements' },
+          { id: 'salary', label: 'Salary Payments' },
           { id: 'schedule', label: 'Schedule' },
           { id: 'assignments', label: 'Assignments' },
-          { id: 'system', label: 'System' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -89,24 +69,31 @@ export default function TrainerNotificationsPage() {
 
       {/* Notifications List */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
-        {filteredNotifications.map(item => {
-          const IconComponent = item.icon;
-          return (
-            <div key={item.id} className="p-4 hover:bg-slate-50/80 transition-colors flex items-start gap-4">
-              <div className={`p-2.5 rounded-full border ${item.color} shrink-0`}>
-                <IconComponent className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-bold text-slate-900 text-base">{item.title}</h3>
-                  <span className="text-xs text-slate-400 shrink-0 font-medium">{item.time}</span>
+        {loading ? (
+          <div className="p-8 text-center text-xs font-bold text-slate-400">Loading notifications...</div>
+        ) : filteredNotifications.length === 0 ? (
+          <div className="p-8 text-center text-xs font-bold text-slate-400">No notifications found.</div>
+        ) : (
+          filteredNotifications.map(item => {
+            const IconComponent = getIcon(item.type);
+            return (
+              <div key={item.id} className="p-4 hover:bg-slate-50/80 transition-colors flex items-start gap-4">
+                <div className="p-2.5 rounded-full border bg-blue-50 text-[#0F52BA] border-blue-200 shrink-0">
+                  <IconComponent className="w-5 h-5" />
                 </div>
-                <p className="text-sm text-slate-600 mt-0.5">{item.desc}</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-bold text-slate-900 text-base">{item.title}</h3>
+                    <span className="text-xs text-slate-400 shrink-0 font-medium">{item.date || 'Recent'}</span>
+                  </div>
+                  <p className="text-sm text-slate-600 mt-0.5">{item.message}</p>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
 }
+
