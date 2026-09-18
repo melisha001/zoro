@@ -4,6 +4,7 @@ import { getStudents, createStudent, updateStudent, deleteStudent } from '../../
 
 export default function ManageStudentsPage() {
   const [students, setStudents] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [formData, setFormData] = useState({
@@ -48,6 +49,18 @@ export default function ManageStudentsPage() {
     }
   };
 
+  const filteredStudents = students.filter(student => {
+    const query = searchTerm.toLowerCase().trim();
+    if (!query) return true;
+    return (
+      (student.name && student.name.toLowerCase().includes(query)) ||
+      (student.email && student.email.toLowerCase().includes(query)) ||
+      (student.phone && student.phone.toLowerCase().includes(query)) ||
+      (student.id && String(student.id).toLowerCase().includes(query)) ||
+      (student.course && student.course.toLowerCase().includes(query))
+    );
+  });
+
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
       
@@ -70,6 +83,20 @@ export default function ManageStudentsPage() {
         </button>
       </div>
 
+      {/* Search Input Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="🔍 Search students by name, email, phone, course or ID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+          />
+        </div>
+      </div>
+
       {/* Table */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-md">
         <div className="overflow-x-auto">
@@ -85,32 +112,40 @@ export default function ManageStudentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {students.map((student) => (
-                <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-4 px-4 font-black text-slate-900">{student.name}</td>
-                  <td className="py-4 px-4 text-blue-900 font-bold">{student.email}</td>
-                  <td className="py-4 px-4 font-mono text-slate-500">{student.password}</td>
-                  <td className="py-4 px-4 text-slate-600">{student.course}</td>
-                  <td className="py-4 px-4 text-slate-500">{student.phone}</td>
-                  <td className="py-4 px-4 text-right space-x-2">
-                    <button
-                      onClick={() => {
-                        setEditingStudent(student);
-                        setFormData(student);
-                      }}
-                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(student.id)}
-                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+              {filteredStudents.length > 0 ? (
+                filteredStudents.map((student) => (
+                  <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-4 px-4 font-black text-slate-900">{student.name}</td>
+                    <td className="py-4 px-4 text-blue-900 font-bold">{student.email}</td>
+                    <td className="py-4 px-4 font-mono text-slate-500">{student.password}</td>
+                    <td className="py-4 px-4 text-slate-600">{student.course}</td>
+                    <td className="py-4 px-4 text-slate-500">{student.phone}</td>
+                    <td className="py-4 px-4 text-right space-x-2">
+                      <button
+                        onClick={() => {
+                          setEditingStudent(student);
+                          setFormData(student);
+                        }}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(student.id)}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center text-slate-500 font-bold text-xs">
+                    No students found
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

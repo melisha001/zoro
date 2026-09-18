@@ -18,6 +18,14 @@ import CourseContentPage from './components/admin/CourseContentPage';
 import ManageStudentsPage from './components/admin/ManageStudentsPage';
 import ManageTrainersPage from './components/admin/ManageTrainersPage';
 import AdminAttendancePage from './components/admin/AttendancePage';
+import AdminSchedulePage from './components/admin/AdminSchedulePage';
+import AdminFeesPage from './components/admin/AdminFeesPage';
+import AdminSalaryPage from './components/admin/AdminSalaryPage';
+import AdminDailyReportPage from './components/admin/AdminDailyReportPage';
+import AdminAssignmentsPage from './components/admin/AdminAssignmentsPage';
+import AdminDoubtsPage from './components/admin/AdminDoubtsPage';
+import AdminReportsPage from './components/admin/AdminReportsPage';
+import AdminSettingsPage from './components/admin/AdminSettingsPage';
 
 import TrainerDashboard from './components/trainer/TrainerDashboard';
 import TrainerStudentsPage from './components/trainer/TrainerStudentsPage';
@@ -62,11 +70,11 @@ function MainApp() {
   const currentRole = role || (isAdminPage ? 'ADMIN' : isTrainerPage ? 'TRAINER' : 'STUDENT');
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans antialiased text-slate-900">
+    <div className="bg-slate-50 font-sans antialiased text-slate-900">
       
       {/* PUBLIC WEBSITE */}
       {isPublicPage ? (
-        <div className="flex-1 flex flex-col">
+        <div className="min-h-screen flex flex-col">
           <PublicNavbar 
             activeScreen={activeScreen} 
             setActiveScreen={setActiveScreen}
@@ -107,8 +115,8 @@ function MainApp() {
           </footer>
         </div>
       ) : (
-        /* DASHBOARD LAYOUT */
-        <div className="flex-1 flex h-screen overflow-hidden">
+        /* DASHBOARD LAYOUT (FULL 100vh VIEWPORT SHELL) */
+        <div className="h-screen w-full flex overflow-hidden">
           <DashboardSidebar 
             role={currentRole} 
             activeScreen={activeScreen} 
@@ -116,12 +124,12 @@ function MainApp() {
             isMobileOpen={isMobileMenuOpen}
             onMobileClose={() => setIsMobileMenuOpen(false)}
           />
-          <div className="flex-1 flex flex-col overflow-y-auto">
+          <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
             <DashboardHeader 
               user={currentUser} 
               onMobileMenuToggle={() => setIsMobileMenuOpen(true)}
             />
-            <main className="flex-1 p-4 sm:p-6 lg:p-8">
+            <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
               {/* Admin Views */}
               {activeScreen === 'admin-dash' && <AdminDashboard />}
               {activeScreen === 'admin-manage-courses' && (
@@ -140,6 +148,14 @@ function MainApp() {
               {activeScreen === 'admin-manage-students' && <ManageStudentsPage />}
               {activeScreen === 'admin-manage-trainers' && <ManageTrainersPage />}
               {activeScreen === 'admin-attendance' && <AdminAttendancePage setActiveScreen={setActiveScreen} />}
+              {activeScreen === 'admin-schedule' && <AdminSchedulePage />}
+              {activeScreen === 'admin-fees' && <AdminFeesPage />}
+              {activeScreen === 'admin-salary' && <AdminSalaryPage />}
+              {activeScreen === 'admin-daily-reports' && <AdminDailyReportPage />}
+              {activeScreen === 'admin-assignments' && <AdminAssignmentsPage />}
+              {activeScreen === 'admin-doubts' && <AdminDoubtsPage />}
+              {activeScreen === 'admin-reports' && <AdminReportsPage />}
+              {activeScreen === 'admin-settings' && <AdminSettingsPage />}
 
               {/* Trainer Views (PDF Pages 1-10) */}
               {activeScreen === 'trainer-dash' && <TrainerDashboard setActiveScreen={setActiveScreen} />}

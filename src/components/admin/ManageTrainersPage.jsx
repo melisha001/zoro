@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, Edit, Trash2, X, Plus } from 'lucide-react';
+import { UserCheck, Edit, Trash2, X, Plus, Search } from 'lucide-react';
 import { getTrainers, createTrainer, updateTrainer, deleteTrainer } from '../../api/userApi';
 
 export default function ManageTrainersPage() {
   const [trainers, setTrainers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTrainer, setEditingTrainer] = useState(null);
   const [formData, setFormData] = useState({
@@ -47,6 +48,18 @@ export default function ManageTrainersPage() {
     }
   };
 
+  const filteredTrainers = trainers.filter(trainer => {
+    const query = searchTerm.toLowerCase().trim();
+    if (!query) return true;
+    return (
+      (trainer.name && trainer.name.toLowerCase().includes(query)) ||
+      (trainer.email && trainer.email.toLowerCase().includes(query)) ||
+      (trainer.phone && trainer.phone.toLowerCase().includes(query)) ||
+      (trainer.id && String(trainer.id).toLowerCase().includes(query)) ||
+      (trainer.specialty && trainer.specialty.toLowerCase().includes(query))
+    );
+  });
+
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
       
@@ -69,6 +82,20 @@ export default function ManageTrainersPage() {
         </button>
       </div>
 
+      {/* Search Input Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="🔍 Search trainers by name, email, phone, specialty or ID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+          />
+        </div>
+      </div>
+
       {/* Table */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-md">
         <div className="overflow-x-auto">
@@ -84,32 +111,40 @@ export default function ManageTrainersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {trainers.map((trainer) => (
-                <tr key={trainer.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-4 px-4 font-black text-slate-900">{trainer.name}</td>
-                  <td className="py-4 px-4 text-blue-900 font-bold">{trainer.email}</td>
-                  <td className="py-4 px-4 font-mono text-slate-500">{trainer.password}</td>
-                  <td className="py-4 px-4 text-slate-600">{trainer.specialty}</td>
-                  <td className="py-4 px-4 text-slate-500">{trainer.phone}</td>
-                  <td className="py-4 px-4 text-right space-x-2">
-                    <button
-                      onClick={() => {
-                        setEditingTrainer(trainer);
-                        setFormData(trainer);
-                      }}
-                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(trainer.id)}
-                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+              {filteredTrainers.length > 0 ? (
+                filteredTrainers.map((trainer) => (
+                  <tr key={trainer.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-4 px-4 font-black text-slate-900">{trainer.name}</td>
+                    <td className="py-4 px-4 text-blue-900 font-bold">{trainer.email}</td>
+                    <td className="py-4 px-4 font-mono text-slate-500">{trainer.password}</td>
+                    <td className="py-4 px-4 text-slate-600">{trainer.specialty}</td>
+                    <td className="py-4 px-4 text-slate-500">{trainer.phone}</td>
+                    <td className="py-4 px-4 text-right space-x-2">
+                      <button
+                        onClick={() => {
+                          setEditingTrainer(trainer);
+                          setFormData(trainer);
+                        }}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(trainer.id)}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center text-slate-500 font-bold text-xs">
+                    No trainers found
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

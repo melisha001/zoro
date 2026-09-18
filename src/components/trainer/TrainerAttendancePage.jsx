@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, CheckCircle2, XCircle, FileText, Check, Save } from 'lucide-react';
+import { Calendar, CheckCircle2, XCircle, FileText, Check, Save, Users } from 'lucide-react';
 
 export default function TrainerAttendancePage() {
   const [selectedDate, setSelectedDate] = useState('2026-09-15');
@@ -21,11 +21,51 @@ export default function TrainerAttendancePage() {
     }));
   };
 
+  const totalStudents = attendance.length;
+  const presentCount = attendance.filter(a => a.status === 'Present').length;
+  const absentCount = totalStudents - presentCount;
+  const attendanceRate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Attendance</h1>
-        <p className="text-slate-500 text-sm mt-1">Mark and manage student attendance.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Attendance</h1>
+          <p className="text-slate-500 text-sm mt-1">Mark and manage student attendance.</p>
+        </div>
+
+        {/* Attendance Rate Pill */}
+        <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-2 rounded-2xl text-xs font-black inline-flex items-center space-x-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          <span>Batch Attendance: {presentCount} / {totalStudents} Present ({attendanceRate}%)</span>
+        </div>
+      </div>
+
+      {/* Attendance Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-blue-600">
+          <p className="text-xs font-bold text-slate-500">Present / Total Students</p>
+          <p className="text-xl font-black text-slate-900 mt-1">{presentCount} / {totalStudents} <span className="text-xs font-bold text-slate-500">Present</span></p>
+          <p className="text-[10px] text-blue-600 font-bold mt-0.5">Session Ratio</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-emerald-600">
+          <p className="text-xs font-bold text-slate-500">Attendance Rate</p>
+          <p className="text-xl font-black text-emerald-700 mt-1">{attendanceRate}%</p>
+          <p className="text-[10px] text-emerald-600 font-bold mt-0.5">({presentCount} of {totalStudents})</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-teal-500">
+          <p className="text-xs font-bold text-slate-500">Present Count</p>
+          <p className="text-xl font-black text-teal-700 mt-1">{presentCount} Students</p>
+          <p className="text-[10px] text-teal-600 font-bold mt-0.5">In Attendance</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-rose-500">
+          <p className="text-xs font-bold text-slate-500">Absent Count</p>
+          <p className="text-xl font-black text-rose-700 mt-1">{absentCount} Students</p>
+          <p className="text-[10px] text-rose-600 font-bold mt-0.5">Needs Follow-up</p>
+        </div>
       </div>
 
       {/* Selectors and Action buttons */}
@@ -51,20 +91,16 @@ export default function TrainerAttendancePage() {
               aria-label="Select batch"
               className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0F52BA]/20 focus:border-[#0F52BA]"
             >
-              <option value="EN-L1">EN-L1</option>
-              <option value="EN-L2">EN-L2</option>
+              <option value="EN-L1">EN-L1 (English Communication Level 1)</option>
+              <option value="EN-L2">EN-L2 (English Communication Level 2)</option>
             </select>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-3 pt-2">
-          <button className="bg-[#0F52BA] hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-xl shadow-sm text-sm inline-flex items-center gap-2 transition-colors">
+          <button className="bg-[#0F52BA] hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-xl shadow-sm text-sm inline-flex items-center gap-2 transition-colors cursor-pointer">
             <Save className="w-4 h-4" />
-            <span>Mark Attendance</span>
-          </button>
-          <button className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium px-5 py-2.5 rounded-xl text-sm inline-flex items-center gap-2 transition-colors">
-            <FileText className="w-4 h-4 text-slate-500" />
-            <span>View Reports</span>
+            <span>Save Attendance</span>
           </button>
         </div>
       </div>
@@ -98,7 +134,7 @@ export default function TrainerAttendancePage() {
                   <td className="py-4 px-4 text-right">
                     <button
                       onClick={() => toggleAttendance(item.id)}
-                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors cursor-pointer ${
                         item.status === 'Present'
                           ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
                           : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'

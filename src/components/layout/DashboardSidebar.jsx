@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   LayoutDashboard, Users, BookOpen, UserCheck, Calendar, 
   CreditCard, FileText, HelpCircle, BarChart3, Settings, 
-  User, Video, Clock, LogOut, Bell, CheckSquare, X 
+  User, Video, Clock, LogOut, Bell, CheckSquare, X, Wallet, FileSpreadsheet 
 } from 'lucide-react';
 
 export default function DashboardSidebar({ role, activeScreen, setActiveScreen, isMobileOpen, onMobileClose }) {
@@ -15,12 +15,14 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
       { id: 'admin-manage-students', label: 'Manage Students', icon: Users },
       { id: 'admin-manage-trainers', label: 'Manage Trainers', icon: UserCheck },
       { id: 'admin-attendance', label: 'Attendance Reports', icon: Clock },
-      { id: 'schedule', label: 'Schedule', icon: Calendar },
-      { id: 'fees', label: 'Fees & Finance', icon: CreditCard },
-      { id: 'assignments', label: 'Assignments', icon: FileText },
-      { id: 'doubts', label: 'Doubts', icon: HelpCircle },
-      { id: 'reports', label: 'Reports', icon: BarChart3 },
-      { id: 'settings', label: 'Settings', icon: Settings },
+      { id: 'admin-schedule', label: 'Schedule', icon: Calendar },
+      { id: 'admin-fees', label: 'Fees & Finance', icon: CreditCard },
+      { id: 'admin-salary', label: 'Trainer Salary', icon: Wallet },
+      { id: 'admin-daily-reports', label: 'Daily Reports', icon: FileSpreadsheet },
+      { id: 'admin-assignments', label: 'Assignments', icon: FileText },
+      { id: 'admin-doubts', label: 'Doubts', icon: HelpCircle },
+      { id: 'admin-reports', label: 'Reports', icon: BarChart3 },
+      { id: 'admin-settings', label: 'Settings', icon: Settings },
     ];
   } else if (role === 'TRAINER' || role === 'Trainer') {
     menuItems = [
@@ -49,9 +51,9 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
   }
 
   const content = (
-    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col h-full min-h-screen border-r border-slate-800 shrink-0">
-      {/* Brand Header */}
-      <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col h-full border-r border-slate-800 shrink-0 overflow-hidden">
+      {/* Brand Header (Fixed at Top) */}
+      <div className="p-5 border-b border-slate-800 flex items-center justify-between shrink-0">
         <div className="flex items-center space-x-3">
           <img 
             src="/assets/logo.png" 
@@ -71,8 +73,8 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
         )}
       </div>
 
-      {/* Navigation Links */}
-      <div className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+      {/* Navigation Links (Scrolls independently inside fixed sidebar) */}
+      <div className="flex-1 min-h-0 py-4 px-3 space-y-1 overflow-y-auto no-scrollbar">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeScreen === item.id;
@@ -105,8 +107,8 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
         })}
       </div>
 
-      {/* Footer / Exit */}
-      <div className="p-4 border-t border-slate-800 bg-slate-950/50">
+      {/* Footer / Exit (Pushed permanently to Bottom) */}
+      <div className="p-4 border-t border-slate-800 bg-slate-950/50 shrink-0">
         <div className="text-[10px] text-slate-400 font-bold mb-3 text-center">Small Steps Big Communication</div>
         <button
           onClick={() => {
@@ -124,8 +126,8 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
 
   return (
     <>
-      {/* Desktop Persistent Sidebar */}
-      <div className="hidden md:block h-full">
+      {/* Desktop Persistent Full-Height Sidebar */}
+      <div className="hidden md:flex h-full shrink-0">
         {content}
       </div>
 
@@ -133,7 +135,7 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
       {isMobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
           <div className="fixed inset-0 bg-slate-950/60" onClick={onMobileClose}></div>
-          <div className="relative z-10">
+          <div className="relative z-10 h-full">
             {content}
           </div>
         </div>
