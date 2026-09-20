@@ -9,6 +9,8 @@ export default function AddCoursePage({ setActiveScreen }) {
     subtitle: '',
     description: '',
     duration: '3 Months',
+    fee: '15000',
+    fees: '15000',
     mode: 'Online',
     ageGroup: '7-12 Years',
     certificate: 'Yes',
@@ -22,10 +24,15 @@ export default function AddCoursePage({ setActiveScreen }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    await createCourse(formData);
+    await createCourse({
+      ...formData,
+      fee: Number(formData.fee || 15000),
+      fees: Number(formData.fees || formData.fee || 15000)
+    });
     setSaving(false);
     setActiveScreen('admin-manage-courses');
   };
+
 
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
@@ -80,13 +87,24 @@ export default function AddCoursePage({ setActiveScreen }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Duration</label>
               <input
                 type="text"
                 value={formData.duration}
                 onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Course Fee (₹)</label>
+              <input
+                type="number"
+                placeholder="15000"
+                value={formData.fee}
+                onChange={(e) => setFormData({ ...formData, fee: e.target.value, fees: e.target.value })}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
               />
             </div>
@@ -128,6 +146,7 @@ export default function AddCoursePage({ setActiveScreen }) {
               </select>
             </div>
           </div>
+
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">YouTube Video URL</label>

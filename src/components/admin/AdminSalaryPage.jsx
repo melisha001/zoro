@@ -2,22 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, CreditCard, Plus, Search, Eye, Edit2, Trash2, CheckCircle2, X, Calendar, User, FileText } from 'lucide-react';
 import { getSalaryPayments, createSalaryPayment, updateSalaryPayment, deleteSalaryPayment, getSalaryStats } from '../../api/salaryApi';
 import { getTrainers } from '../../api/userApi';
+import ConfirmModal from '../common/ConfirmModal';
 
 export default function AdminSalaryPage() {
   const [salaries, setSalaries] = useState([]);
   const [trainers, setTrainers] = useState([]);
   const [stats, setStats] = useState({ totalPaid: 0, currentMonthPaid: 0, uniqueTrainersPaid: 0, totalRecords: 0 });
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedMethod, setSelectedMethod] = useState('All');
+  const [selectedStatus, setSelectedStatus] = useState('All');
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [viewingRecord, setViewingRecord] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
+
+  const currentDate = new Date();
+  const currentDay = currentDate.getDate();
+  const currentMonthYear = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   const [formData, setFormData] = useState({
     trainerId: '',
     trainerName: '',
-    month: 'September 2026',
+    month: currentMonthYear,
     date: new Date().toISOString().split('T')[0],
     amount: '',
     method: 'Bank Transfer',
@@ -27,16 +33,21 @@ export default function AdminSalaryPage() {
 
   const loadData = async () => {
     const salRes = await getSalaryPayments();
-    setSalaries(salRes.data);
+    setSalaries(salRes.data || []);
 
     const trnRes = await getTrainers();
-    setTrainers(trnRes.data);
-    if (trnRes.data.length > 0 && !formData.trainerName) {
-      setFormData(prev => ({ ...prev, trainerId: trnRes.data[0].id, trainerName: trnRes.data[0].name }));
+    setTrainers(trnRes.data || []);
+    if (trnRes.data?.length > 0 && !formData.trainerName) {
+      setFormData(prev => ({ 
+        ...prev, 
+        trainerId: trnRes.data[0].id, 
+        trainerName: trnRes.data[0].name,
+        amount: trnRes.data[0].salaryAmount || 25000 
+      }));
     }
 
     const statRes = await getSalaryStats();
-    setStats(statRes.data);
+    setStats(statRes.data || {});
   };
 
   useEffect(() => {
@@ -48,7 +59,8 @@ export default function AdminSalaryPage() {
     if (!formData.amount || !formData.trainerName) return;
     await createSalaryPayment({
       ...formData,
-      amount: parseFloat(formData.amount)
+      amount: parseFloat(formData.amount),
+      status: 'Paid'
     });
     setShowAddModal(false);
     resetForm();
@@ -67,38 +79,89 @@ export default function AdminSalaryPage() {
     loadData();
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this salary payment record?')) {
-      await deleteSalaryPayment(id);
-      loadData();
-    }
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    await deleteSalaryPayment(deleteId);
+    setDeleteId(null);
+    loadData();
   };
 
   const resetForm = () => {
     setFormData({
       trainerId: trainers[0]?.id || '',
       trainerName: trainers[0]?.name || '',
-      month: 'September 2026',
+      month: currentMonthYear,
       date: new Date().toISOString().split('T')[0],
-      amount: '',
+      amount: trainers[0]?.salaryAmount || 25000,
       method: 'Bank Transfer',
       reference: '',
       notes: ''
     });
   };
 
-  const filteredSalaries = (salaries || []).filter(item => {
-    if (!item) return false;
-    const nameStr = item.trainerName || '';
-    const refStr = item.reference || '';
-    const monthStr = item.month || '';
-    const query = (searchTerm || '').toLowerCase();
+  // Compute dynamic trainer salary status for current month
+  const computedTrainerSalaries = (trainers || []).map(trn => {
+    const creditDay = parseInt(trn.salaryCreditDate || 25, 10);
+    const amount = parseFloat(trn.salaryAmount || 25000);
+    
+    // Find payment record in salaries list
+    const paymentRecord = (salaries || []).find(s => 
+      (s.trainerId === trn.id || (s.trainerName && s.trainerName.toLowerCase() === trn.name.toLowerCase())) &&
+      (s.month?.toLowerCase() === currentMonthYear.toLowerCase() || s.status === 'Paid')
+    );
 
-    const matchesSearch = nameStr.toLowerCase().includes(query) ||
-                          refStr.toLowerCase().includes(query) ||
-                          monthStr.toLowerCase().includes(query);
-    const matchesMethod = selectedMethod === 'All' || item.method === selectedMethod;
-    return matchesSearch && matchesMethod;
+    let status = 'PENDING';
+    if (paymentRecord && paymentRecord.status === 'Paid') {
+      status = 'PAID';
+    } else if (currentDay === creditDay) {
+      status = 'DUE TODAY';
+    } else if (currentDay > creditDay) {
+      status = 'OVERDUE';
+    } else {
+      status = 'PENDING';
+    }
+
+    return {
+      id: trn.id,
+      trainerName: trn.name,
+      specialty: trn.specialty || 'Trainer',
+      month: currentMonthYear,
+      amount: amount,
+      creditDay: creditDay,
+      dueDateFormatted: `${creditDay}th of month`,
+      status: status,
+      paymentRecord: paymentRecord,
+      date: paymentRecord ? paymentRecord.date : 'Not paid yet'
+    };
+  });
+
+  // Sort priority: 1. DUE TODAY, 2. OVERDUE, 3. PENDING, 4. PAID
+  const statusPriority = {
+    'DUE TODAY': 1,
+    'OVERDUE': 2,
+    'PENDING': 3,
+    'PAID': 4
+  };
+
+  const sortedSalaries = [...computedTrainerSalaries].sort((a, b) => {
+    const prioA = statusPriority[a.status] || 5;
+    const prioB = statusPriority[b.status] || 5;
+    if (prioA !== prioB) return prioA - prioB;
+    return a.trainerName.localeCompare(b.trainerName);
+  });
+
+  const filteredSalaries = sortedSalaries.filter(item => {
+    const query = (searchTerm || '').toLowerCase().trim();
+    const matchesSearch = !query || 
+      item.trainerName.toLowerCase().includes(query) || 
+      item.specialty.toLowerCase().includes(query);
+    
+    const matchesStatus = selectedStatus === 'All' || 
+      (selectedStatus === 'Paid' && item.status === 'PAID') ||
+      (selectedStatus === 'Pending' && (item.status === 'PENDING' || item.status === 'DUE TODAY')) ||
+      (selectedStatus === 'Overdue' && item.status === 'OVERDUE');
+
+    return matchesSearch && matchesStatus;
   });
 
   return (
@@ -118,7 +181,7 @@ export default function AdminSalaryPage() {
           className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-sm flex items-center space-x-2 text-xs sm:text-sm self-start sm:self-auto cursor-pointer transition-colors"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Record Salary Payment</span>
+          <span>Record Salary Payment</span>
         </button>
       </div>
 
@@ -149,19 +212,18 @@ export default function AdminSalaryPage() {
         </div>
       </div>
 
-      {/* Search & Filter Bar */}
+      {/* Search & Status Filter Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row justify-between gap-3 items-center">
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <select
-            value={selectedMethod}
-            onChange={(e) => setSelectedMethod(e.target.value)}
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
             className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none"
           >
-            <option value="All">All Payment Methods</option>
-            <option value="Bank Transfer">Bank Transfer</option>
-            <option value="UPI">UPI</option>
-            <option value="Cash">Cash</option>
-            <option value="Other">Other</option>
+            <option value="All">All Salary Statuses</option>
+            <option value="Paid">PAID</option>
+            <option value="Pending">PENDING</option>
+            <option value="Overdue">OVERDUE</option>
           </select>
         </div>
 
@@ -169,7 +231,7 @@ export default function AdminSalaryPage() {
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search trainer, month, or reference..."
+            placeholder="Search trainer or specialty..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
@@ -177,47 +239,95 @@ export default function AdminSalaryPage() {
         </div>
       </div>
 
-      {/* Salary History Table */}
+      {/* Salary Status & Disbursements Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-bold uppercase tracking-wider">
-                <th className="py-3.5 px-4">Trainer</th>
-                <th className="py-3.5 px-4">Salary Month</th>
-                <th className="py-3.5 px-4">Amount</th>
-                <th className="py-3.5 px-4">Payment Date</th>
-                <th className="py-3.5 px-4">Method</th>
-                <th className="py-3.5 px-4">Reference</th>
-                <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4">Trainer Name</th>
+                <th className="py-3.5 px-4">Specialty</th>
+                <th className="py-3.5 px-4">Monthly Salary</th>
+                <th className="py-3.5 px-4">Salary Due Date</th>
+                <th className="py-3.5 px-4">Payment Status</th>
+                <th className="py-3.5 px-4">Last Payment</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredSalaries.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400 font-semibold">
-                    No salary payment records found matching search criteria.
+                  <td colSpan={7} className="py-8 text-center text-slate-400 font-semibold">
+                    No trainer salary records found matching search or status criteria.
                   </td>
                 </tr>
               ) : (
                 filteredSalaries.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-4 px-4 font-bold text-slate-900">{item.trainerName}</td>
-                    <td className="py-4 px-4 text-slate-700 font-semibold">{item.month}</td>
-                    <td className="py-4 px-4 font-black text-emerald-600">₹{parseFloat(item.amount).toLocaleString()}</td>
-                    <td className="py-4 px-4 text-slate-600 font-mono">{item.date}</td>
-                    <td className="py-4 px-4 text-slate-700 font-medium">{item.method}</td>
-                    <td className="py-4 px-4 text-slate-500 font-mono text-[11px]">{item.reference || 'N/A'}</td>
+                  <tr 
+                    key={item.id} 
+                    className={`transition-colors ${
+                      item.status === 'DUE TODAY' 
+                        ? 'bg-amber-50/60 hover:bg-amber-50' 
+                        : item.status === 'OVERDUE'
+                        ? 'bg-rose-50/40 hover:bg-rose-50/80'
+                        : 'hover:bg-slate-50/80'
+                    }`}
+                  >
+                    <td className="py-4 px-4 font-black text-slate-900">{item.trainerName}</td>
+                    <td className="py-4 px-4 text-slate-600 font-medium">{item.specialty}</td>
+                    <td className="py-4 px-4 font-black text-emerald-600">₹{item.amount.toLocaleString()}</td>
+                    <td className="py-4 px-4 font-bold text-slate-700">{item.dueDateFormatted}</td>
                     <td className="py-4 px-4">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                        item.status === 'PAID'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : item.status === 'DUE TODAY'
+                          ? 'bg-amber-100 text-amber-900 border border-amber-300 animate-pulse'
+                          : item.status === 'OVERDUE'
+                          ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                          : 'bg-slate-100 text-slate-700 border border-slate-200'
+                      }`}>
                         {item.status}
                       </span>
                     </td>
+                    <td className="py-4 px-4 text-slate-500 font-mono text-[11px]">{item.date}</td>
                     <td className="py-4 px-4 text-right space-x-1.5">
+                      {item.status !== 'PAID' && (
+                        <button
+                          onClick={() => {
+                            setFormData({
+                              trainerId: item.id,
+                              trainerName: item.trainerName,
+                              month: currentMonthYear,
+                              date: new Date().toISOString().split('T')[0],
+                              amount: item.amount,
+                              method: 'Bank Transfer',
+                              reference: '',
+                              notes: ''
+                            });
+                            setShowAddModal(true);
+                          }}
+                          className="bg-[#0F52BA] hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
+                        >
+                          Record Payment
+                        </button>
+                      )}
                       <button
-                        onClick={() => setViewingRecord(item)}
-                        className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        onClick={() => {
+                          if (item.paymentRecord) {
+                            setViewingRecord(item.paymentRecord);
+                          } else {
+                            setViewingRecord({
+                              trainerName: item.trainerName,
+                              month: item.month,
+                              amount: item.amount,
+                              date: 'Pending',
+                              method: 'Bank Transfer',
+                              notes: 'Salary due for current month'
+                            });
+                          }
+                        }}
+                        className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                         title="View Details"
                       >
                         <Eye className="w-4 h-4" />
@@ -233,7 +343,7 @@ export default function AdminSalaryPage() {
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={() => setDeleteId(item.id)}
                         className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                         title="Delete Record"
                       >
@@ -430,6 +540,16 @@ export default function AdminSalaryPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(deleteId)}
+        onClose={() => setDeleteId(null)}
+        onConfirm={confirmDelete}
+        title="Confirm Delete"
+        message="Are you sure you want to delete this salary payment record?"
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </div>
   );
 }

@@ -165,10 +165,9 @@ function MainApp() {
               {activeScreen === 'admin-fees' && <AdminFeesPage />}
               {activeScreen === 'admin-salary' && <AdminSalaryPage />}
               {activeScreen === 'admin-daily-reports' && <AdminDailyReportPage />}
-              {activeScreen === 'admin-assignments' && <AdminAssignmentsPage />}
-              {activeScreen === 'admin-doubts' && <AdminDoubtsPage />}
               {activeScreen === 'admin-reports' && <AdminReportsPage />}
               {activeScreen === 'admin-settings' && <AdminSettingsPage />}
+
 
               {/* Trainer Views (PDF Pages 1-10) */}
               {activeScreen === 'trainer-dash' && <TrainerDashboard setActiveScreen={setActiveScreen} />}

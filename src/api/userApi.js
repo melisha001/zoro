@@ -39,7 +39,9 @@ const INITIAL_TRAINERS = [
     phone: '+91 98765 11111', 
     specialty: 'English Communication & Abacus', 
     code: 'ZA-TR-001',
-    joinedOn: '10 Jan 2025',
+    joinedOn: '2025-01-10',
+    salaryAmount: 35000,
+    salaryCreditDate: '25',
     status: 'Active' 
   },
   { 
@@ -50,7 +52,9 @@ const INITIAL_TRAINERS = [
     phone: '+91 98765 22222', 
     specialty: 'Chess Mastery', 
     code: 'ZA-TR-002',
-    joinedOn: '15 Mar 2025',
+    joinedOn: '2025-03-15',
+    salaryAmount: 28000,
+    salaryCreditDate: '20',
     status: 'Active' 
   }
 ];
@@ -72,7 +76,7 @@ export const createStudent = async (data) => {
     status: 'Active',
     password: data.password || 'password123',
     address: data.address || 'Chennai, India',
-    joinedOn: new Date().toLocaleDateString('en-GB'),
+    joinedOn: data.joinedOn || data.dateOfJoining || new Date().toISOString().split('T')[0],
     ...data
   };
   const updated = [newStudent, ...students];
@@ -125,13 +129,14 @@ export const createTrainer = async (data) => {
     status: 'Active',
     password: data.password || 'password123',
     code: `ZA-TR-${String(trainers.length + 1).padStart(3, '0')}`,
-    joinedOn: new Date().toLocaleDateString('en-GB'),
+    joinedOn: data.joinedOn || data.dateOfJoining || new Date().toISOString().split('T')[0],
     ...data
   };
   const updated = [newTrainer, ...trainers];
   setItem(TRAINERS_KEY, updated);
   return apiResponse(newTrainer);
 };
+
 
 export const updateTrainer = async (id, data) => {
   const { data: trainers } = await getTrainers();

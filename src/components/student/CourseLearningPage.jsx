@@ -162,7 +162,10 @@ export default function CourseLearningPage({ courseId: initialCourseId, setActiv
                       <span className="bg-blue-50 text-blue-700 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase">
                         {course.ageGroup || 'All Ages'}
                       </span>
-                      <span className="text-xs font-bold text-slate-600">₹{course.fee || 3500}</span>
+                      <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">
+                        Fee: ₹{Number(course.fee || course.fees || 15000).toLocaleString()}
+                      </span>
+
                     </div>
                     <h3 className="text-lg font-bold text-slate-900">{course.title}</h3>
                     <p className="text-xs text-slate-500 line-clamp-2">{course.description}</p>

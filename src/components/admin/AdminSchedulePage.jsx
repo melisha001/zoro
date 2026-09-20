@@ -3,12 +3,14 @@ import { Plus, Calendar, Clock, Video, Users, User, Search, Filter, CheckCircle2
 import { getSchedules, createSchedule, deleteSchedule } from '../../api/scheduleApi';
 import { getTrainers } from '../../api/userApi';
 import { getCourses } from '../../api/courseApi';
+import ConfirmModal from '../common/ConfirmModal';
 
 export default function AdminSchedulePage() {
   const [selectedDate, setSelectedDate] = useState('2026-09-17');
   const [selectedBatch, setSelectedBatch] = useState('All');
   const [selectedTrainer, setSelectedTrainer] = useState('All');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
 
   const [schedules, setSchedules] = useState([]);
   const [trainers, setTrainers] = useState([]);
@@ -78,14 +80,15 @@ export default function AdminSchedulePage() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to cancel this scheduled session?')) {
-      try {
-        await deleteSchedule(id);
-        await loadSchedules();
-      } catch (err) {
-        console.error('Failed to delete schedule:', err);
-      }
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await deleteSchedule(deleteId);
+      await loadSchedules();
+    } catch (err) {
+      console.error('Failed to delete schedule:', err);
+    } finally {
+      setDeleteId(null);
     }
   };
 
@@ -113,7 +116,7 @@ export default function AdminSchedulePage() {
           className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-sm flex items-center space-x-2 text-xs sm:text-sm self-start sm:self-auto cursor-pointer transition-colors"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Schedule Session</span>
+          <span>Schedule Session</span>
         </button>
       </div>
 
@@ -222,7 +225,7 @@ export default function AdminSchedulePage() {
                     </td>
                     <td className="py-4 px-4 text-right space-x-2">
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={() => setDeleteId(item.id)}
                         className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                         title="Cancel Session"
                       >
@@ -337,6 +340,16 @@ export default function AdminSchedulePage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(deleteId)}
+        onClose={() => setDeleteId(null)}
+        onConfirm={confirmDelete}
+        title="Confirm Delete"
+        message="Are you sure you want to cancel and delete this scheduled session?"
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </div>
   );
 }

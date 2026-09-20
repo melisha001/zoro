@@ -77,15 +77,28 @@ export default function EditCoursePage({ courseId, setActiveScreen }) {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">YouTube Video URL</label>
-            <input
-              type="url"
-              value={formData.youtubeUrl || ''}
-              onChange={(e) => setFormData({ ...formData, youtubeUrl: e.target.value })}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Course Fee (₹)</label>
+              <input
+                type="number"
+                value={formData.fee || formData.fees || ''}
+                onChange={(e) => setFormData({ ...formData, fee: Number(e.target.value), fees: Number(e.target.value) })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">YouTube Video URL</label>
+              <input
+                type="url"
+                value={formData.youtubeUrl || ''}
+                onChange={(e) => setFormData({ ...formData, youtubeUrl: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
+              />
+            </div>
           </div>
+
 
           <button
             type="submit"

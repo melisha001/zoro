@@ -7,7 +7,9 @@ import { getAssignments } from '../../api/assignmentApi';
 import { getSalaries } from '../../api/salaryApi';
 
 export default function AdminReportsPage() {
-  const [selectedPeriod, setSelectedPeriod] = useState('This Month');
+  const [selectedYear, setSelectedYear] = useState('2026');
+  const [selectedMonth, setSelectedMonth] = useState('September');
+  
   const [students, setStudents] = useState([]);
   const [trainers, setTrainers] = useState([]);
   const [courses, setCourses] = useState([]);
@@ -15,6 +17,12 @@ export default function AdminReportsPage() {
   const [assignments, setAssignments] = useState([]);
   const [salaries, setSalaries] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const yearsList = ['2025', '2026', '2027'];
+  const monthsList = [
+    'January', 'February', 'March', 'April', 'May', 'June', 
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
 
   useEffect(() => {
     loadAllReportData();
@@ -53,7 +61,7 @@ export default function AdminReportsPage() {
     
     // Header section
     csvRows.push(['ZORO ENGLISH ACADEMY - COMPREHENSIVE ORGANIZATIONAL REPORT']);
-    csvRows.push([`Generated Period: ${selectedPeriod}`, `Date: ${new Date().toLocaleDateString('en-GB')}`]);
+    csvRows.push([`Report Period: ${selectedMonth} ${selectedYear}`, `Export Date: ${new Date().toLocaleDateString('en-GB')}`]);
     csvRows.push([]);
 
     // Metrics Summary
@@ -71,15 +79,15 @@ export default function AdminReportsPage() {
     csvRows.push(['STUDENT DIRECTORY']);
     csvRows.push(['ID', 'Name', 'Email', 'Phone', 'Joined Date', 'Status']);
     students.forEach(s => {
-      csvRows.push([s.id, s.name, s.email, s.phone || '', s.joinedDate || '', s.status || 'Active']);
+      csvRows.push([s.id, s.name, s.email, s.phone || '', s.joinedOn || s.dateOfJoining || '', s.status || 'Active']);
     });
     csvRows.push([]);
 
     // Trainers Section
     csvRows.push(['TRAINER DIRECTORY']);
-    csvRows.push(['ID', 'Name', 'Email', 'Specialty', 'Joined Date']);
+    csvRows.push(['ID', 'Name', 'Email', 'Specialty', 'Salary Amount', 'Joined Date']);
     trainers.forEach(t => {
-      csvRows.push([t.id, t.name, t.email, t.specialty || '', t.joinedDate || '']);
+      csvRows.push([t.id, t.name, t.email, t.specialty || '', t.salaryAmount || 25000, t.joinedOn || '']);
     });
     csvRows.push([]);
 
@@ -87,7 +95,7 @@ export default function AdminReportsPage() {
     csvRows.push(['COURSE CATALOG']);
     csvRows.push(['ID', 'Title', 'Fee (INR)', 'Mode', 'Enrolled Count']);
     courses.forEach(c => {
-      csvRows.push([c.id, c.title, c.fee || 3500, c.mode || 'Online', c.enrolled || 0]);
+      csvRows.push([c.id, c.title, c.fee || c.fees || 15000, c.mode || 'Online', c.enrolled || 0]);
     });
     csvRows.push([]);
 
@@ -104,7 +112,7 @@ export default function AdminReportsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `Zoro_Academy_Report_${selectedPeriod.replace(/\s+/g, '_')}.csv`);
+    link.setAttribute('download', `Zoro_Academy_Report_${selectedMonth}_${selectedYear}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -119,16 +127,30 @@ export default function AdminReportsPage() {
           <p className="text-slate-500 text-xs sm:text-sm mt-1">Real-time performance reports and organizational metrics.</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <select
-            value={selectedPeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value)}
-            className="px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs"
-          >
-            <option value="This Month">This Month (Sep 2026)</option>
-            <option value="Last Month">Last Month (Aug 2026)</option>
-            <option value="Quarter 3">Quarter 3 (2026)</option>
-          </select>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200">
+            <span className="text-[10px] font-extrabold uppercase text-slate-400 pl-1">Year:</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+            >
+              {yearsList.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+
+            <span className="text-[10px] font-extrabold uppercase text-slate-400 pl-1">Month:</span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+            >
+              {monthsList.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
 
           <button
             onClick={handleExportReport}

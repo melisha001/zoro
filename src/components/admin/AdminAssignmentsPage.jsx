@@ -5,6 +5,7 @@ export default function AdminAssignmentsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBatch, setSelectedBatch] = useState('All');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
 
   const [assignments, setAssignments] = useState([
     { id: 1, title: 'Self Introduction Speech', course: 'English Communication', batch: 'EN-L2', trainer: 'Ms. Priya', assignedOn: '10 Sep 2026', dueDate: '16 Sep 2026', status: 'Active', submissions: 24, total: 28 },
@@ -25,7 +26,7 @@ export default function AdminAssignmentsPage() {
   const handleAddAssignment = (e) => {
     e.preventDefault();
     const newItem = {
-      id: Date.now(),
+      id: assignments.length + 1,
       ...formData,
       assignedOn: '17 Sep 2026',
       submissions: 0,
@@ -37,8 +38,13 @@ export default function AdminAssignmentsPage() {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete this assignment?')) {
-      setAssignments(assignments.filter(a => a.id !== id));
+    setDeleteId(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteId) {
+      setAssignments(assignments.filter(a => a.id !== deleteId));
+      setDeleteId(null);
     }
   };
 

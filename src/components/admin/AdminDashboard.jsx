@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, DollarSign, UserCheck, Activity, AlertCircle, 
-  FileText, HelpCircle, Video, TrendingUp, Filter, Wallet, Clock 
+  BookOpen, Video, TrendingUp, Wallet, Clock 
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { ADMIN_STATS } from '../../data/mockData';
@@ -9,21 +9,24 @@ import { getStudents } from '../../api/userApi';
 import { getFeeStats } from '../../api/feesApi';
 import { getSalaryStats } from '../../api/salaryApi';
 import { getAttendanceRecords } from '../../api/attendanceApi';
+import { getCourses } from '../../api/courseApi';
 
 export default function AdminDashboard() {
   const [feeStats, setFeeStats] = useState({ totalCollected: 185000, pendingFees: 92000 });
   const [salaryStats, setSalaryStats] = useState({ totalSalaryPaid: 47000, currentMonthPaid: 47000, trainersPaidCount: 2 });
   const [studentsCount, setStudentsCount] = useState(24);
+  const [coursesCount, setCoursesCount] = useState(3);
   const [attendanceCount, setAttendanceCount] = useState({ present: 24, total: 30, rate: 80 });
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [fRes, sRes, stdRes, attRes] = await Promise.all([
+        const [fRes, sRes, stdRes, attRes, crsRes] = await Promise.all([
           getFeeStats(),
           getSalaryStats(),
           getStudents(),
-          getAttendanceRecords()
+          getAttendanceRecords(),
+          getCourses()
         ]);
         
         if (fRes?.data) {
@@ -43,6 +46,10 @@ export default function AdminDashboard() {
         
         if (stdRes?.data) {
           setStudentsCount(stdRes.data.length || 24);
+        }
+
+        if (crsRes?.data) {
+          setCoursesCount(crsRes.data.length || 3);
         }
         
         if (attRes?.data) {
@@ -76,8 +83,8 @@ export default function AdminDashboard() {
 
   const secondaryStats = [
     { title: 'Pending Student Fees', value: `₹${pendingFeesVal.toLocaleString()}`, icon: AlertCircle, color: 'border-l-4 border-rose-500 bg-rose-50/50 text-rose-700' },
-    { title: 'Assignments Pending', value: ADMIN_STATS.assignmentsPending, icon: FileText, color: 'border-l-4 border-yellow-500 bg-yellow-50/50 text-yellow-800' },
-    { title: 'Unresolved Doubts', value: ADMIN_STATS.unresolvedDoubts, icon: HelpCircle, color: 'border-l-4 border-teal-500 bg-teal-50/50 text-teal-700' },
+    { title: 'Published Courses', value: `${coursesCount} Active Courses`, icon: BookOpen, color: 'border-l-4 border-sky-500 bg-sky-50/50 text-sky-800' },
+    { title: 'Present Students Today', value: `${attendanceCount?.present || 0} Students`, icon: Activity, color: 'border-l-4 border-teal-500 bg-teal-50/50 text-teal-700' },
     { title: 'Trainers Disbursed', value: `${trainersPaidVal} Trainers`, icon: UserCheck, color: 'border-l-4 border-indigo-600 bg-indigo-50/50 text-indigo-700' },
   ];
 
@@ -90,14 +97,8 @@ export default function AdminDashboard() {
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Admin Portal Dashboard</h1>
           <p className="text-xs text-slate-500 font-medium">Real-time academy performance metrics, dynamic fee revenue & trainer salary stats.</p>
         </div>
-
-        <div className="flex items-center space-x-3">
-          <button className="flex items-center space-x-2 bg-white px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 border border-slate-200 shadow-xs hover:bg-slate-100">
-            <Filter className="w-3.5 h-3.5 text-slate-500" />
-            <span>Month: Sep 2026</span>
-          </button>
-        </div>
       </div>
+
 
       {/* Top Primary Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

@@ -19,11 +19,10 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
       { id: 'admin-fees', label: 'Fees & Finance', icon: CreditCard },
       { id: 'admin-salary', label: 'Trainer Salary', icon: Wallet },
       { id: 'admin-daily-reports', label: 'Daily Reports', icon: FileSpreadsheet },
-      { id: 'admin-assignments', label: 'Assignments', icon: FileText },
-      { id: 'admin-doubts', label: 'Doubts', icon: HelpCircle },
       { id: 'admin-reports', label: 'Reports', icon: BarChart3 },
       { id: 'admin-settings', label: 'Settings', icon: Settings },
     ];
+
   } else if (role === 'TRAINER' || role === 'Trainer') {
     menuItems = [
       { id: 'trainer-dash', label: 'Dashboard', icon: LayoutDashboard },

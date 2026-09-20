@@ -7,7 +7,10 @@ export const INITIAL_COURSES = [
     duration: '4 Months',
     mode: 'Online',
     ageGroup: '7–15 Years',
+    fee: 15000,
+    fees: 15000,
     certificate: 'Yes',
+
     rating: 4.8,
     enrolled: 95,
     youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
@@ -43,7 +46,10 @@ export const INITIAL_COURSES = [
     duration: '3 Months',
     mode: 'Online / Offline',
     ageGroup: '6–14 Years',
+    fee: 12000,
+    fees: 12000,
     certificate: 'Yes',
+
     rating: 4.9,
     enrolled: 128,
     youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
@@ -77,7 +83,10 @@ export const INITIAL_COURSES = [
     duration: '3 Months',
     mode: 'Online / Offline',
     ageGroup: '6–16 Years',
+    fee: 14000,
+    fees: 14000,
     certificate: 'Yes',
+
     rating: 4.95,
     enrolled: 110,
     youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',

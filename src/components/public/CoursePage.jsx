@@ -85,7 +85,11 @@ export default function CoursePage({ onOpenEnquire }) {
                     </p>
 
                     {/* Course Details Box */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200/60 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/60 text-xs">
+                      <div>
+                        <div className="text-slate-400 font-semibold">Course Fee</div>
+                        <div className="font-black text-emerald-600 text-sm mt-0.5">₹{Number(selectedCourse.fee || selectedCourse.fees || 15000).toLocaleString()}</div>
+                      </div>
                       <div>
                         <div className="text-slate-400 font-semibold">Duration</div>
                         <div className="font-extrabold text-slate-800 text-sm mt-0.5">{selectedCourse.duration || '3 Months'}</div>
@@ -100,9 +104,10 @@ export default function CoursePage({ onOpenEnquire }) {
                       </div>
                       <div>
                         <div className="text-slate-400 font-semibold">Certificate</div>
-                        <div className="font-extrabold text-slate-800 text-sm mt-0.5">{selectedCourse.certificate || 'Zoro Certificate'}</div>
+                        <div className="font-extrabold text-slate-800 text-sm mt-0.5">{selectedCourse.certificate || 'Yes'}</div>
                       </div>
                     </div>
+
 
                     <button
                       onClick={onOpenEnquire}
