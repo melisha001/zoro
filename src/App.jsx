@@ -12,6 +12,7 @@ import LoginModal from './components/public/LoginModal';
 
 import AdminDashboard from './components/admin/AdminDashboard';
 import ManageCoursesPage from './components/admin/ManageCoursesPage';
+import AdminBatchManagementPage from './components/admin/AdminBatchManagementPage';
 import AddCoursePage from './components/admin/AddCoursePage';
 import EditCoursePage from './components/admin/EditCoursePage';
 import CourseContentPage from './components/admin/CourseContentPage';
@@ -22,6 +23,7 @@ import AdminSchedulePage from './components/admin/AdminSchedulePage';
 import AdminFeesPage from './components/admin/AdminFeesPage';
 import AdminSalaryPage from './components/admin/AdminSalaryPage';
 import AdminDailyReportPage from './components/admin/AdminDailyReportPage';
+import AdminCompetitionPage from './components/admin/AdminCompetitionPage';
 import AdminAssignmentsPage from './components/admin/AdminAssignmentsPage';
 import AdminDoubtsPage from './components/admin/AdminDoubtsPage';
 import AdminReportsPage from './components/admin/AdminReportsPage';
@@ -151,6 +153,7 @@ function MainApp() {
                   setSelectedCourseIdForEdit={setSelectedCourseIdForEdit} 
                 />
               )}
+              {activeScreen === 'admin-batch-management' && <AdminBatchManagementPage />}
               {activeScreen === 'admin-add-course' && <AddCoursePage setActiveScreen={setActiveScreen} />}
               {activeScreen === 'admin-edit-course' && (
                 <EditCoursePage courseId={selectedCourseIdForEdit} setActiveScreen={setActiveScreen} />
@@ -165,6 +168,7 @@ function MainApp() {
               {activeScreen === 'admin-fees' && <AdminFeesPage />}
               {activeScreen === 'admin-salary' && <AdminSalaryPage />}
               {activeScreen === 'admin-daily-reports' && <AdminDailyReportPage />}
+              {activeScreen === 'admin-competition' && <AdminCompetitionPage />}
               {activeScreen === 'admin-reports' && <AdminReportsPage />}
               {activeScreen === 'admin-settings' && <AdminSettingsPage />}
 

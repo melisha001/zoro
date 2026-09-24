@@ -3,14 +3,16 @@ import { getItem, setItem, apiResponse } from './client';
 const SCHEDULES_KEY = 'schedules_db';
 
 const INITIAL_SCHEDULES = [
-  { id: 1, title: 'Level 2 - Present Tense', course: 'English Communication', batch: 'EN-L2', trainer: 'Priya', time: '05:00 PM - 06:00 PM', mode: 'Online (Google Meet)', status: 'Upcoming', students: 28, date: '2026-09-17' },
-  { id: 2, title: 'Level 1 - Daily Conversation', course: 'English Communication', batch: 'EN-L1', trainer: 'Priya', time: '06:00 PM - 07:00 PM', mode: 'Online (Google Meet)', status: 'Upcoming', students: 25, date: '2026-09-17' },
-  { id: 3, title: 'Vocabulary Building & Phonics', course: 'English Communication', batch: 'EN-L2', trainer: 'Rahul', time: '07:00 PM - 08:00 PM', mode: 'Online (Google Meet)', status: 'Completed', students: 28, date: '2026-09-17' },
-  { id: 4, title: 'Abacus Speed Calculation', course: 'Abacus Level 3', batch: 'AB-L3', trainer: 'Rahul', time: '04:00 PM - 05:00 PM', mode: 'Offline (Branch A)', status: 'Completed', students: 20, date: '2026-09-17' }
+  { id: 1, title: 'Level 2 - Present Tense', course: 'English Communication', batch: 'Batch A', trainer: 'Priya', time: '05:00 PM - 06:00 PM', mode: 'Online (Google Meet)', status: 'Upcoming', students: 28, date: '2026-09-24' },
+  { id: 2, title: 'Level 1 - Daily Conversation', course: 'English Communication', batch: 'Batch A', trainer: 'Priya', time: '06:00 PM - 07:00 PM', mode: 'Online (Google Meet)', status: 'Upcoming', students: 25, date: '2026-09-24' },
+  { id: 3, title: 'Vocabulary Building & Phonics', course: 'English Communication', batch: 'Batch B', trainer: 'Rahul', time: '07:00 PM - 08:00 PM', mode: 'Online (Google Meet)', status: 'Completed', students: 28, date: '2026-09-24' },
+  { id: 4, title: 'Abacus Speed Calculation', course: 'Abacus Level 3', batch: 'Batch C', trainer: 'Rahul', time: '04:00 PM - 05:00 PM', mode: 'Offline (Branch A)', status: 'Completed', students: 20, date: '2026-09-24' }
 ];
 
 export function computeDynamicStatus(schedule, now = new Date()) {
-  if (schedule.status === 'Completed') return 'Completed';
+  if (schedule.status === 'Completed' || schedule.status === 'Rescheduled') {
+    return schedule.status;
+  }
 
   const timeStr = schedule.time || '';
   const parts = timeStr.split('-');
@@ -31,10 +33,10 @@ export function computeDynamicStatus(schedule, now = new Date()) {
 
   if (now < startDate) {
     return 'Upcoming';
-  } else if (now > endDate) {
-    return 'Incomplete';
+  } else if (now > endDate && schedule.date < new Date().toISOString().split('T')[0]) {
+    return 'Completed';
   } else {
-    return 'Upcoming';
+    return schedule.status || 'Upcoming';
   }
 }
 
@@ -63,7 +65,7 @@ export function sortSchedulesByTime(schedulesList) {
 
 export const getSchedules = async () => {
   let schedules = getItem(SCHEDULES_KEY, null);
-  if (!schedules) {
+  if (!schedules || schedules.length === 0 || schedules.some(s => s.batch === 'EN-L2' || s.batch === 'EN-L1' || s.batch === 'AB-L3')) {
     schedules = INITIAL_SCHEDULES;
     setItem(SCHEDULES_KEY, schedules);
   }

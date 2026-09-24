@@ -77,7 +77,7 @@ export default function EditCoursePage({ courseId, setActiveScreen }) {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Course Fee (₹)</label>
               <input
@@ -86,6 +86,19 @@ export default function EditCoursePage({ courseId, setActiveScreen }) {
                 onChange={(e) => setFormData({ ...formData, fee: Number(e.target.value), fees: Number(e.target.value) })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Course Mode</label>
+              <select
+                value={formData.mode || 'Online'}
+                onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600"
+              >
+                <option value="Online">Online</option>
+                <option value="Recorded">Recorded</option>
+                <option value="Hybrid">Hybrid</option>
+              </select>
             </div>
 
             <div>

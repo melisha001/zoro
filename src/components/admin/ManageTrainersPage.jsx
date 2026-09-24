@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserCheck, Edit, Trash2, X, Plus, Search, Calendar } from 'lucide-react';
 import { getTrainers, createTrainer, updateTrainer, deleteTrainer } from '../../api/userApi';
+import { logActivity } from '../../api/activityLogApi';
 import ConfirmModal from '../common/ConfirmModal';
 
 export default function ManageTrainersPage() {
@@ -189,7 +190,7 @@ export default function ManageTrainersPage() {
       {/* Table */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-md">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider font-bold">
                 <th className="py-3 px-4">Trainer Name</th>

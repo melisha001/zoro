@@ -67,6 +67,39 @@ export const addModule = async (courseId, moduleData) => {
   return apiResponse(newModule);
 };
 
+export const updateModule = async (courseId, moduleId, updatedModuleData) => {
+  const { data: courses } = await getCourses();
+  const updatedCourses = courses.map(c => {
+    if (c.id === courseId) {
+      const updatedModules = (c.modules || []).map(m => {
+        if (m.id === moduleId) {
+          return { ...m, ...updatedModuleData };
+        }
+        return m;
+      });
+      return { ...c, modules: updatedModules };
+    }
+    return c;
+  });
+
+  setItem(COURSES_KEY, updatedCourses);
+  return apiResponse(true);
+};
+
+export const deleteModule = async (courseId, moduleId) => {
+  const { data: courses } = await getCourses();
+  const updatedCourses = courses.map(c => {
+    if (c.id === courseId) {
+      const updatedModules = (c.modules || []).filter(m => m.id !== moduleId);
+      return { ...c, modules: updatedModules };
+    }
+    return c;
+  });
+
+  setItem(COURSES_KEY, updatedCourses);
+  return apiResponse(true);
+};
+
 export const addLesson = async (courseId, moduleId, lessonData) => {
   const { data: courses } = await getCourses();
   const newLesson = {

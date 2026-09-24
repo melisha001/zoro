@@ -7,24 +7,24 @@ const INITIAL_STUDENTS = [
   { 
     id: 'std-1', 
     name: 'Arjun M', 
+    username: 'arjun123',
     email: 'arjun@student.com', 
     password: 'password123', 
     phone: '+91 98765 43210', 
     course: 'English Communication', 
-    ageGroup: '7-12 Years', 
-    address: 'No. 45, Gandhi Street, Chennai, TN',
+    courseBatches: [{ course: 'English Communication', batch: 'Batch A' }],
     joinedOn: '12 Jan 2026',
     status: 'Active' 
   },
   { 
     id: 'std-2', 
     name: 'Ananya R', 
+    username: 'ananya123',
     email: 'ananya@student.com', 
     password: 'password123', 
     phone: '+91 98765 43211', 
     course: 'Abacus Level 3', 
-    ageGroup: '6-14 Years', 
-    address: 'No. 18, Lake View Road, Bangalore, KA',
+    courseBatches: [{ course: 'Abacus Level 3', batch: 'Batch C' }],
     joinedOn: '01 Feb 2026',
     status: 'Active' 
   }
@@ -86,14 +86,14 @@ export const createStudent = async (data) => {
 
 export const updateStudent = async (id, data) => {
   const { data: students } = await getStudents();
-  const updated = students.map(s => (s.id === id || s.email === id) ? { ...s, ...data } : s);
+  const updated = students.map(s => (s.id === id || s.email === id || (s.username && s.username === id)) ? { ...s, ...data } : s);
   setItem(STUDENTS_KEY, updated);
-  return apiResponse(updated.find(s => s.id === id || s.email === id));
+  return apiResponse(updated.find(s => s.id === id || s.email === id || s.username === id));
 };
 
 export const updateStudentPassword = async (studentIdOrEmail, currentPassword, newPassword) => {
   const { data: students } = await getStudents();
-  const student = students.find(s => s.id === studentIdOrEmail || s.email === studentIdOrEmail);
+  const student = students.find(s => s.id === studentIdOrEmail || s.email === studentIdOrEmail || s.username === studentIdOrEmail);
   if (!student) {
     return { success: false, message: 'Student account not found.' };
   }
@@ -107,7 +107,7 @@ export const updateStudentPassword = async (studentIdOrEmail, currentPassword, n
 
 export const deleteStudent = async (id) => {
   const { data: students } = await getStudents();
-  const updated = students.filter(s => s.id !== id && s.email !== id);
+  const updated = students.filter(s => s.id !== id && s.email !== id && s.username !== id);
   setItem(STUDENTS_KEY, updated);
   return apiResponse(true);
 };
@@ -190,9 +190,11 @@ export const authenticateUser = async (email, password) => {
     }
   }
 
-  // 3. Student Login
+  // 3. Student Login (Check both email and username)
   const { data: students } = await getStudents();
-  const foundStudent = students.find(s => s.email.toLowerCase() === lowerEmail);
+  const foundStudent = students.find(s => 
+    s.email.toLowerCase() === lowerEmail || (s.username && s.username.toLowerCase() === lowerEmail)
+  );
   if (foundStudent) {
     if (foundStudent.password === password) {
       return { 
@@ -208,10 +210,10 @@ export const authenticateUser = async (email, password) => {
     }
   }
 
-  return { success: false, message: 'Account not found. Please check your registered email or contact Admin.' };
+  return { success: false, message: 'Account not found. Please check your registered email or username.' };
 };
 
-// --- AUTO DETECT USER BY EMAIL (FALLBACK) ---
+// --- AUTO DETECT USER BY EMAIL / USERNAME (FALLBACK) ---
 export const findUserByEmail = async (email) => {
   const lowerEmail = email.toLowerCase().trim();
   
@@ -226,7 +228,9 @@ export const findUserByEmail = async (email) => {
   }
 
   const { data: students } = await getStudents();
-  const foundStudent = students.find(s => s.email.toLowerCase() === lowerEmail);
+  const foundStudent = students.find(s => 
+    s.email.toLowerCase() === lowerEmail || (s.username && s.username.toLowerCase() === lowerEmail)
+  );
   if (foundStudent) {
     return { ...foundStudent, role: 'STUDENT' };
   }

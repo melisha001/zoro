@@ -46,6 +46,27 @@ export const createNotification = async (notifData) => {
   return apiResponse(newNotif);
 };
 
+export const notifyScheduleChange = async (schedule, actionType, originalDate, originalTime, newDate, newTime) => {
+  const isReschedule = actionType === 'Rescheduled';
+  const title = `${schedule.course} (${schedule.batch}) ${isReschedule ? 'Rescheduled' : 'Postponed'}`;
+  const desc = `${schedule.batch} session has been ${isReschedule ? 'rescheduled' : 'postponed'}.\nOriginal: ${originalDate}, ${originalTime}\nNew: ${newDate}, ${newTime}`;
+
+  await createNotification({
+    trainerName: schedule.trainer,
+    title,
+    desc,
+    batch: schedule.batch,
+    course: schedule.course,
+    type: isReschedule ? 'reschedule' : 'postpone',
+    originalDate,
+    originalTime,
+    newDate,
+    newTime
+  });
+
+  return apiResponse(true);
+};
+
 export const getTrainerNotifications = async (trainerNameOrEmail) => {
   const { data: notifications } = await getNotifications();
   const lowerQuery = (trainerNameOrEmail || '').toLowerCase().trim();

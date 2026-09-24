@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DollarSign, CreditCard, Search, Download, Send, CheckCircle2, Clock, AlertTriangle, Plus, X } from 'lucide-react';
+import { logActivity } from '../../api/activityLogApi';
 
 export default function AdminFeesPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -161,7 +162,7 @@ export default function AdminFeesPage() {
 
               {/* Course Student Fees Table */}
               <div className="overflow-x-auto p-2">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider font-bold">
                       <th className="py-3 px-4">Student Name</th>

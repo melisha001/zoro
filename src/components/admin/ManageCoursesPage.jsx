@@ -39,7 +39,6 @@ export default function ManageCoursesPage({ setActiveScreen, setSelectedCourseId
       (course.assignedTrainer && course.assignedTrainer.toLowerCase().includes(query)) ||
       (course.mode && course.mode.toLowerCase().includes(query)) ||
       (course.duration && course.duration.toLowerCase().includes(query)) ||
-      (course.ageGroup && course.ageGroup.toLowerCase().includes(query)) ||
       (course.fee && String(course.fee).includes(query)) ||
       (course.fees && String(course.fees).includes(query))
     );
@@ -109,7 +108,7 @@ export default function ManageCoursesPage({ setActiveScreen, setSelectedCourseId
 
                   <div className="p-6 space-y-3">
                     <div className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider">
-                      {course.duration} • {course.ageGroup}
+                      {course.duration}
                     </div>
                     <h3 className="text-xl font-black text-slate-900">{course.title}</h3>
                     <p className="text-slate-500 text-xs line-clamp-2">{course.description}</p>

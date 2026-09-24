@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   LayoutDashboard, Users, BookOpen, UserCheck, Calendar, 
   CreditCard, FileText, HelpCircle, BarChart3, Settings, 
-  User, Video, Clock, LogOut, Bell, CheckSquare, X, Wallet, FileSpreadsheet 
+  User, Video, Clock, LogOut, Bell, CheckSquare, X, Wallet, FileSpreadsheet, Layers, Trophy
 } from 'lucide-react';
 
 export default function DashboardSidebar({ role, activeScreen, setActiveScreen, isMobileOpen, onMobileClose }) {
@@ -12,6 +12,7 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
     menuItems = [
       { id: 'admin-dash', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'admin-manage-courses', label: 'Manage Courses', icon: BookOpen },
+      { id: 'admin-batch-management', label: 'Batch Management', icon: Layers },
       { id: 'admin-manage-students', label: 'Manage Students', icon: Users },
       { id: 'admin-manage-trainers', label: 'Manage Trainers', icon: UserCheck },
       { id: 'admin-attendance', label: 'Attendance Reports', icon: Clock },
@@ -19,6 +20,7 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
       { id: 'admin-fees', label: 'Fees & Finance', icon: CreditCard },
       { id: 'admin-salary', label: 'Trainer Salary', icon: Wallet },
       { id: 'admin-daily-reports', label: 'Daily Reports', icon: FileSpreadsheet },
+      { id: 'admin-competition', label: 'Competitions', icon: Trophy },
       { id: 'admin-reports', label: 'Reports', icon: BarChart3 },
       { id: 'admin-settings', label: 'Settings', icon: Settings },
     ];

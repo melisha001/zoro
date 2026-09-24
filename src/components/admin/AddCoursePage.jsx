@@ -87,7 +87,7 @@ export default function AddCoursePage({ setActiveScreen }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Duration</label>
               <input
@@ -117,19 +117,9 @@ export default function AddCoursePage({ setActiveScreen }) {
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
               >
                 <option value="Online">Online</option>
-                <option value="Offline">Offline</option>
-                <option value="Online / Offline">Online / Offline</option>
+                <option value="Recorded">Recorded</option>
+                <option value="Hybrid">Hybrid</option>
               </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Age Group</label>
-              <input
-                type="text"
-                value={formData.ageGroup}
-                onChange={(e) => setFormData({ ...formData, ageGroup: e.target.value })}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
-              />
             </div>
 
             <div>
