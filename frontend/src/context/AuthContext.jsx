@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getItem, setItem, setAuthToken, clearAuthSession, getAuthToken, apiGet } from '../api/client';
+import { setAuthToken, clearAuthSession, getAuthToken, apiGet } from '../api/client';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => getItem('user', null));
-  const [role, setRole] = useState(() => getItem('role', null));
+  const [user, setUser] = useState(null);
+  const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Restore session via /api/auth/me on mount
@@ -15,7 +15,12 @@ export function AuthProvider({ children }) {
     const restoreSession = async () => {
       const token = getAuthToken();
       if (!token) {
-        if (isMounted) setLoading(false);
+        clearAuthSession();
+        if (isMounted) {
+          setUser(null);
+          setRole(null);
+          setLoading(false);
+        }
         return;
       }
 
@@ -36,8 +41,6 @@ export function AuthProvider({ children }) {
             };
             setUser(formattedUser);
             setRole(roleUpper);
-            setItem('user', formattedUser);
-            setItem('role', roleUpper);
           } else {
             setUser(null);
             setRole(null);
@@ -65,13 +68,6 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (user) {
-      setItem('user', user);
-      setItem('role', user.role || role);
-    }
-  }, [user, role]);
-
-  useEffect(() => {
     const handleUnauthorized = () => {
       setUser(null);
       setRole(null);
@@ -89,16 +85,13 @@ export function AuthProvider({ children }) {
     };
     setUser(newUser);
     setRole(formattedRole);
-    setItem('user', newUser);
-    setItem('role', formattedRole);
     return newUser;
   };
 
   const updateUserInContext = (updatedFields) => {
     setUser(prev => {
-      const updated = { ...prev, ...updatedFields };
-      setItem('user', updated);
-      return updated;
+      if (!prev) return null;
+      return { ...prev, ...updatedFields };
     });
   };
 

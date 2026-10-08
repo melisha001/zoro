@@ -16,8 +16,13 @@ spring:
     properties:
       hibernate:
         format_sql: false
+    open-in-view: false
   flyway:
     enabled: false
+
+admin:
+  email: "admin@zoro.com"
+  password: "adminPassword123!"
 
 bunny:
   stream:
@@ -29,7 +34,7 @@ bunny:
     webhook-secret: "test-webhook-secret"
 
 jwt:
-  secret: "4a6f726f41636164656d795365637572654a57545365637265744b657932303236"
+  secret: "Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM="
   expiration: 86400000
 
 cors:

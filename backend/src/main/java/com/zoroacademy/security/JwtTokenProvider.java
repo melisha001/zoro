@@ -3,6 +3,7 @@ package com.zoroacademy.security;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
@@ -14,18 +15,35 @@ import java.util.Date;
 public class JwtTokenProvider {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(JwtTokenProvider.class);
 
-
-    @Value("${jwt.secret:4a6f726f41636164656d795365637572654a57545365637265744b657932303236}")
+    @Value("${jwt.secret}")
     private String jwtSecret;
 
     @Value("${jwt.expiration:86400000}")
     private long jwtExpirationMs;
 
+    private SecretKey signingKey;
+
+    @PostConstruct
+    public void init() {
+        if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
+            throw new IllegalStateException("FATAL: 'jwt.secret' configuration property is missing. A valid Base64-encoded secret of at least 32 bytes (256 bits) is required.");
+        }
+        try {
+            byte[] keyBytes = Decoders.BASE64.decode(jwtSecret.trim());
+            if (keyBytes.length < 32) {
+                throw new IllegalStateException("FATAL: 'jwt.secret' decodes to " + keyBytes.length + " bytes. JWT HMAC-SHA256 requires at least 32 bytes (256 bits).");
+            }
+            this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("FATAL: 'jwt.secret' must be a valid Base64-encoded string: " + e.getMessage(), e);
+        }
+    }
+
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret.length() % 4 == 0 && jwtSecret.matches("^[A-Za-z0-9+/=]+$") 
-                ? jwtSecret 
-                : java.util.Base64.getEncoder().encodeToString(jwtSecret.getBytes()));
-        return Keys.hmacShaKeyFor(keyBytes);
+        if (this.signingKey == null) {
+            init();
+        }
+        return this.signingKey;
     }
 
     public String generateToken(Authentication authentication) {

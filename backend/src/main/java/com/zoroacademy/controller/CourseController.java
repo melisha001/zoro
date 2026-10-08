@@ -19,14 +19,35 @@ public class CourseController {
     }
 
 
+    private boolean isStaffUser() {
+        org.springframework.security.core.Authentication auth = 
+            org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || auth instanceof org.springframework.security.authentication.AnonymousAuthenticationToken) {
+            return false;
+        }
+        return auth.getAuthorities().stream().anyMatch(a -> 
+            "ROLE_ADMIN".equals(a.getAuthority()) || 
+            "ROLE_SUPER_ADMIN".equals(a.getAuthority()) || 
+            "ROLE_TRAINER".equals(a.getAuthority())
+        );
+    }
+
     @GetMapping
     public ApiResponse<List<Course>> getCourses(@RequestParam(required = false) String audience) {
-        return ApiResponse.ok(courseService.getAllCourses(audience));
+        List<Course> courses = courseService.getAllCourses(audience);
+        if (!isStaffUser()) {
+            courses = courses.stream().map(courseService::sanitizeCourseForPublic).toList();
+        }
+        return ApiResponse.ok(courses);
     }
 
     @GetMapping("/{id}")
     public ApiResponse<Course> getCourseById(@PathVariable String id) {
-        return ApiResponse.ok(courseService.getCourseById(id));
+        Course course = courseService.getCourseById(id);
+        if (!isStaffUser()) {
+            course = courseService.sanitizeCourseForPublic(course);
+        }
+        return ApiResponse.ok(course);
     }
 
     @PostMapping

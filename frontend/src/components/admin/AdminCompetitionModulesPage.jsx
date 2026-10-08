@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, Video, FileText, Layers, Trash2, Edit, X, 
   ExternalLink, Upload, File, Image as ImageIcon, AlertCircle, CheckCircle2,
@@ -20,7 +21,10 @@ const ALLOWED_EXTENSIONS = [
   'mp3', 'wav', 'm4a'
 ];
 
-export default function AdminCompetitionModulesPage({ competitionId, setActiveScreen }) {
+export default function AdminCompetitionModulesPage({ competitionId: propCompetitionId, setActiveScreen }) {
+  const { competitionId: paramCompetitionId } = useParams();
+  const navigate = useNavigate();
+  const competitionId = propCompetitionId || paramCompetitionId;
   const [competition, setCompetition] = useState(null);
   const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +76,10 @@ export default function AdminCompetitionModulesPage({ competitionId, setActiveSc
       <div className="p-8 text-center space-y-4">
         <div className="text-sm font-bold text-slate-600">Competition not found</div>
         <button
-          onClick={() => setActiveScreen('admin-competition')}
+          onClick={() => {
+            if (setActiveScreen) setActiveScreen('admin-competition');
+            navigate('/admin/competitions');
+          }}
           className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl"
         >
           Return to Competitions
@@ -186,7 +193,10 @@ export default function AdminCompetitionModulesPage({ competitionId, setActiveSc
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <button
-            onClick={() => setActiveScreen('admin-competition')}
+            onClick={() => {
+              if (setActiveScreen) setActiveScreen('admin-competition');
+              navigate('/admin/competitions');
+            }}
             className="inline-flex items-center space-x-2 text-xs font-bold text-blue-600 hover:text-blue-800 mb-2 cursor-pointer transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />

@@ -6,8 +6,8 @@ This document details the complete 6-phase overhaul performed on Zoro English Ac
 
 ## 1. System Architecture Overview
 
-- **Backend**: Spring Boot 3.3.4 (Java 21 / 26 compatible), Spring Data JPA, Hibernate, PostgreSQL, Flyway migrations, Spring Security with JJWT 0.12.6, Bunny Stream Video Integration, Razorpay Payment Gateway.
-- **Frontend**: React 19, Vite 8, Tailwind CSS, Lucide React icons, xlsx data export.
+- **Backend**: Spring Boot 3.3.4 (**Requires JDK 21**; Java 26 is unsupported by Spring Boot 3.3.4), Spring Data JPA, Hibernate, PostgreSQL, Flyway migrations, Spring Security with JJWT 0.12.6, Bunny Stream Video Integration, Razorpay Payment Gateway.
+- **Frontend**: React 19, Vite 8, Tailwind CSS, Lucide React icons, xlsx data export, React Router (BrowserRouter).
 - **Roles & Permissions**:
   - `ADMIN`: Full administrative control (Users, Fees, Expenses, Salaries, Settings, Course Content, Activity Logs).
   - `TRAINER`: Schedules, Batches, Attendance, Assignments, Submissions Review, Doubts Resolution.
@@ -15,11 +15,11 @@ This document details the complete 6-phase overhaul performed on Zoro English Ac
 
 ---
 
-## 2. Database Schema & Flyway Migrations (V6 – V8)
+## 2. Database Schema & Flyway Migrations (V6 – V9)
 
 > **Rule Compliance**: Migrations V1 through V5 were preserved strictly untouched. All enhancements were introduced through additive, non-destructive migrations.
 
-### `V6__id_single_source_of_truth.sql`
+### `V6__ids_as_single_source_of_truth.sql`
 - **Objective**: Replaced string-based name/email linking with persistent entity IDs as the single source of truth.
 - **Key Changes**:
   - `assignments`: added `trainer_id VARCHAR(64)`.
@@ -35,7 +35,7 @@ This document details the complete 6-phase overhaul performed on Zoro English Ac
   - Created `trainer_course_requests` table (`id`, `trainer_id`, `trainer_name`, `trainer_email`, `course_id`, `course_title`, `status`, `request_date`, `created_at`, `updated_at`).
   - Added relational indexes for rapid trainer-course matching.
 
-### `V8__bug_fixes_and_schema_hardening.sql`
+### `V8__phase4_bugfixes.sql`
 - **Objective**: Enforced data integrity, idempotency, and URL slug support.
 - **Key Changes**:
   - `attendance_records`: Composite unique constraint `(student_id, schedule_id)` to ensure attendance marking is idempotent (upsert rather than duplicates).
@@ -43,6 +43,11 @@ This document details the complete 6-phase overhaul performed on Zoro English Ac
   - `courses`: Added `slug VARCHAR(160) UNIQUE` with auto-generation and slug resolution support.
   - `fee_payments`: Added index on `student_fee_id` and `created_at` for high-throughput dashboard SQL aggregations.
   - `salary_records`: Added indexes on `trainer_id` and `month`.
+
+### `V9__neutralize_seed_passwords.sql`
+- **Objective**: Neutralized seed accounts from V2 with known default passwords.
+- **Key Changes**:
+  - Scrambled and invalidated BCrypt hashes for all V2 seed accounts (`usr-admin-1`, `trn-1`, `trn-2`, `std-1`, `std-2`) so no known default password exists. Initial admin credentials are required to bootstrap via `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
 ---
 
@@ -100,16 +105,21 @@ Configure the following environment variables in production before starting the 
 
 | Variable | Description | Example / Default |
 |---|---|---|
-| `DB_URL` | PostgreSQL JDBC connection URL | `jdbc:postgresql://localhost:5432/zoro_academy_db` |
-| `DB_USERNAME` | PostgreSQL database user | `postgres` |
+| `DB_HOST` | PostgreSQL host | `localhost` |
+| `DB_PORT` | PostgreSQL port | `5432` |
+| `DB_NAME` | PostgreSQL database name | `zoro_academy` |
+| `DB_USER` | PostgreSQL database user | `postgres` |
 | `DB_PASSWORD` | PostgreSQL database password | *(Strong password)* |
-| `JWT_SECRET` | Secret for HMAC-SHA256 JWT signing | *(At least 32-byte hex/base64 string)* |
-| `ADMIN_EMAIL` | Default administrator account email | `admin@zoroacademy.com` |
-| `ADMIN_PASSWORD` | Default administrator initial password | *(Strong administrative password)* |
+| `JWT_SECRET` | Base64-encoded key for HMAC-SHA256 (>= 32 bytes) | `Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=` |
+| `JWT_EXPIRATION` | JWT token expiration in ms | `86400000` |
+| `ADMIN_EMAIL` | Administrator account email for bootstrap | `admin@zoro.com` |
+| `ADMIN_PASSWORD` | Administrator account password for bootstrap | *(Strong password)* |
+| `BUNNY_LIBRARY_ID` | Bunny.net Video Library ID (Required) | `your_bunny_library_id` |
 | `BUNNY_API_KEY` | Bunny.net Video Library API key | *(Bunny dashboard API key)* |
+| `BUNNY_CDN_HOST` | Bunny Stream Pull Zone hostname (Required) | `your_pullzone.b-cdn.net` |
 | `BUNNY_TOKEN_AUTH_KEY`| Bunny.net Stream Token authentication key | *(Bunny CDN Token key)* |
-| `BUNNY_LIBRARY_ID` | Bunny Video Library ID | `770045` |
-| `BUNNY_CDN_HOST` | Bunny Stream Pull Zone hostname | `vz-770045.b-cdn.net` |
+| `BUNNY_WEBHOOK_SECRET` | Bunny webhook verification shared secret | *(Secret string)* |
+| `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `http://localhost:5173,http://localhost:3000` |
 | `RAZORPAY_KEY_ID` | Razorpay API Key ID | `rzp_live_...` |
 | `RAZORPAY_KEY_SECRET` | Razorpay API Secret | *(Razorpay secret)* |
 

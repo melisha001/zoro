@@ -16,7 +16,7 @@ spring:
     properties:
       hibernate:
         format_sql: false
-    open-in-view: true
+    open-in-view: false
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -24,9 +24,9 @@ spring:
 
 bunny:
   stream:
-    library-id: ${BUNNY_LIBRARY_ID:770045}
+    library-id: ${BUNNY_LIBRARY_ID}
     api-key: ${BUNNY_API_KEY}
-    cdn-host: ${BUNNY_CDN_HOST:vz-251d06e3-32f.b-cdn.net}
+    cdn-host: ${BUNNY_CDN_HOST}
     token-auth-key: ${BUNNY_TOKEN_AUTH_KEY}
     token-expiration-seconds: 7200
     webhook-secret: ${BUNNY_WEBHOOK_SECRET:}

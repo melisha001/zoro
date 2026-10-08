@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Video, Layers, CheckCircle2 } from 'lucide-react';
 import { getCourseById, updateCourse } from '../../api/courseApi';
 import { getTrainers } from '../../api/userApi';
@@ -6,7 +7,10 @@ import FileUploader from '../common/FileUploader';
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-export default function EditCoursePage({ courseId, setActiveScreen }) {
+export default function EditCoursePage({ courseId: propCourseId, setActiveScreen }) {
+  const { courseId: paramCourseId } = useParams();
+  const navigate = useNavigate();
+  const courseId = propCourseId || paramCourseId;
   const [formData, setFormData] = useState(null);
   const [trainersList, setTrainersList] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -83,7 +87,8 @@ export default function EditCoursePage({ courseId, setActiveScreen }) {
       fees: Number(formData.fee || formData.fees || 15000)
     });
     setSaving(false);
-    setActiveScreen('admin-manage-courses');
+    if (setActiveScreen) setActiveScreen('admin-manage-courses');
+    navigate('/admin/courses');
   };
 
   const isOnlineOrHybrid = formData.mode === 'Online' || formData.mode === 'Hybrid';
@@ -92,7 +97,10 @@ export default function EditCoursePage({ courseId, setActiveScreen }) {
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
       <button
-        onClick={() => setActiveScreen('admin-manage-courses')}
+        onClick={() => {
+          if (setActiveScreen) setActiveScreen('admin-manage-courses');
+          navigate('/admin/courses');
+        }}
         className="inline-flex items-center space-x-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />

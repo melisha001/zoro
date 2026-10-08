@@ -34,11 +34,13 @@ class SecurityRbacTest {
         try {
             java.lang.reflect.Field secretField = JwtTokenProvider.class.getDeclaredField("jwtSecret");
             secretField.setAccessible(true);
-            secretField.set(jwtTokenProvider, "4a6f726f41636164656d795365637572654a57545365637265744b657932303236");
+            secretField.set(jwtTokenProvider, "Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=");
 
             java.lang.reflect.Field expField = JwtTokenProvider.class.getDeclaredField("jwtExpirationMs");
             expField.setAccessible(true);
             expField.set(jwtTokenProvider, 86400000L);
+
+            jwtTokenProvider.init();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

@@ -32,21 +32,21 @@ public class AdminUserInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) {
         String adminEmail = environment.getProperty("ADMIN_EMAIL");
+        if (adminEmail == null || adminEmail.isBlank()) {
+            adminEmail = environment.getProperty("admin.email");
+        }
         String adminPassword = environment.getProperty("ADMIN_PASSWORD");
+        if (adminPassword == null || adminPassword.isBlank()) {
+            adminPassword = environment.getProperty("admin.password");
+        }
 
-        boolean isProd = environment.acceptsProfiles(Profiles.of("prod"));
-
-        if (isProd) {
-            if (adminEmail == null || adminEmail.isBlank() || adminPassword == null || adminPassword.isBlank()) {
-                throw new IllegalStateException("FATAL: ADMIN_EMAIL and ADMIN_PASSWORD environment variables must be set in production profile.");
+        if (adminEmail == null || adminEmail.isBlank() || adminPassword == null || adminPassword.isBlank()) {
+            List<User> existingAdmins = userRepository.findByRoleIgnoreCase("ADMIN");
+            if (!existingAdmins.isEmpty()) {
+                log.warn("ADMIN_EMAIL and/or ADMIN_PASSWORD environment variables are not set. Skipping administrator bootstrap because existing administrator account(s) already exist.");
+                return;
             }
-        } else {
-            if (adminEmail == null || adminEmail.isBlank()) {
-                adminEmail = "admin@zoro.com";
-            }
-            if (adminPassword == null || adminPassword.isBlank()) {
-                adminPassword = "admin123";
-            }
+            throw new IllegalStateException("FATAL: ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required to bootstrap the initial administrator account.");
         }
 
         String finalEmail = adminEmail.trim().toLowerCase();

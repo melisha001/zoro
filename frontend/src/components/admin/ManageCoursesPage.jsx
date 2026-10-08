@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, BookOpen, Edit, Layers, Trash2, User, Search, DollarSign, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { getCourses, deleteCourse } from '../../api/courseApi';
 import ConfirmModal from '../common/ConfirmModal';
 
 export default function ManageCoursesPage({ setActiveScreen, setSelectedCourseIdForEdit }) {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,7 +67,7 @@ export default function ManageCoursesPage({ setActiveScreen, setSelectedCourseId
         </div>
 
         <button
-          onClick={() => setActiveScreen('admin-add-course')}
+          onClick={() => navigate('/admin/courses/new')}
           className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl shadow-lg transition-transform transform active:scale-95 flex items-center space-x-2 text-xs self-start sm:self-auto cursor-pointer"
         >
           <Plus className="w-4 h-4" />
@@ -161,8 +163,8 @@ export default function ManageCoursesPage({ setActiveScreen, setSelectedCourseId
                   {course.mode !== 'Online' ? (
                     <button
                       onClick={() => {
-                        setSelectedCourseIdForEdit(course.id);
-                        setActiveScreen('admin-course-content');
+                        if (setSelectedCourseIdForEdit) setSelectedCourseIdForEdit(course.id);
+                        navigate(`/admin/courses/${course.id}/content`);
                       }}
                       className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center space-x-1 cursor-pointer"
                     >
@@ -171,15 +173,15 @@ export default function ManageCoursesPage({ setActiveScreen, setSelectedCourseId
                     </button>
                   ) : (
                     <span className="text-xs font-bold text-slate-400 italic">
-                      Live Schedule Mode
+                       Live Schedule Mode
                     </span>
                   )}
 
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => {
-                        setSelectedCourseIdForEdit(course.id);
-                        setActiveScreen('admin-edit-course');
+                        if (setSelectedCourseIdForEdit) setSelectedCourseIdForEdit(course.id);
+                        navigate(`/admin/courses/${course.id}/edit`);
                       }}
                       className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center space-x-1 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
                     >

@@ -63,6 +63,53 @@ public class CourseService {
                 .orElseThrow(() -> new IllegalArgumentException("Course not found: " + idOrSlug));
     }
 
+    public Course sanitizeCourseForPublic(Course course) {
+        if (course == null) return null;
+        Course copy = new Course();
+        copy.setId(course.getId());
+        copy.setSlug(course.getSlug());
+        copy.setTitle(course.getTitle());
+        copy.setDescription(course.getDescription());
+        copy.setCategory(course.getCategory());
+        copy.setMode(course.getMode());
+        copy.setLevel(course.getLevel());
+        copy.setAudience(course.getAudience());
+        copy.setDuration(course.getDuration());
+        copy.setPrice(course.getPrice());
+        copy.setOriginalPrice(course.getOriginalPrice());
+        copy.setThumbnail(course.getThumbnail());
+        copy.setPreviewVideoUrl(course.getPreviewVideoUrl());
+        copy.setEnrolled(course.getEnrolled());
+        copy.setRating(course.getRating());
+        copy.setStatus(course.getStatus());
+        copy.setAssignedTrainer(course.getAssignedTrainer());
+        copy.setTrainerId(course.getTrainerId());
+        copy.setCreatedAt(course.getCreatedAt());
+        copy.setUpdatedAt(course.getUpdatedAt());
+
+        if (course.getModules() != null) {
+            java.util.List<CourseModule> safeModules = new java.util.ArrayList<>();
+            for (CourseModule m : course.getModules()) {
+                CourseModule sm = new CourseModule();
+                sm.setId(m.getId());
+                sm.setModuleOrder(m.getModuleOrder());
+                sm.setTitle(m.getTitle());
+                sm.setDescription(m.getDescription());
+                sm.setDuration(m.getDuration());
+                sm.setVideoStorageRef(null);
+                sm.setAfterSessionAssessment(null);
+                sm.setCreatedAt(m.getCreatedAt());
+                sm.setUpdatedAt(m.getUpdatedAt());
+                safeModules.add(sm);
+            }
+            copy.setModules(safeModules);
+        } else {
+            copy.setModules(new java.util.ArrayList<>());
+        }
+        copy.setResources(new java.util.ArrayList<>());
+        return copy;
+    }
+
     private String generateUniqueSlug(String titleOrSlug, String currentCourseId) {
         if (titleOrSlug == null || titleOrSlug.isBlank()) {
             return "course-" + java.util.UUID.randomUUID().toString().substring(0, 8);

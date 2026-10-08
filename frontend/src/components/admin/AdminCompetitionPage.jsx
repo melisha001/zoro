@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Trophy, Plus, Search, Filter, Calendar, Clock, MapPin, 
   FileText, Download, Edit, Trash2, Eye, X, CheckCircle2, AlertCircle, 
@@ -10,6 +11,7 @@ import { getBatches } from '../../api/batchApi';
 import ConfirmModal from '../common/ConfirmModal';
 
 export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompIdForModules }) {
+  const navigate = useNavigate();
   const todayStr = new Date().toISOString().split('T')[0];
 
   const [competitions, setCompetitions] = useState([]);
@@ -416,7 +418,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                   <button
                     onClick={() => {
                       if (setSelectedCompIdForModules) setSelectedCompIdForModules(comp.id);
-                      if (setActiveScreen) setActiveScreen('admin-competition-modules');
+                      navigate(`/admin/competitions/${comp.id}/modules`);
                     }}
                     className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold px-3 py-2 rounded-xl border border-emerald-200 flex items-center justify-center space-x-1.5 text-xs cursor-pointer"
                     title="Manage Competition Modules"

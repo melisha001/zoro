@@ -1,5 +1,6 @@
 package com.zoroacademy.config;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
@@ -14,6 +15,16 @@ public class BunnyStreamProperties {
     private String webhookSecret;
 
     public BunnyStreamProperties() {}
+
+    @PostConstruct
+    public void validate() {
+        if (libraryId == null || libraryId.isBlank()) {
+            throw new IllegalStateException("FATAL: 'bunny.stream.library-id' (BUNNY_LIBRARY_ID) configuration property is required.");
+        }
+        if (cdnHost == null || cdnHost.isBlank()) {
+            throw new IllegalStateException("FATAL: 'bunny.stream.cdn-host' (BUNNY_CDN_HOST) configuration property is required.");
+        }
+    }
 
     public String getLibraryId() {
         return libraryId;

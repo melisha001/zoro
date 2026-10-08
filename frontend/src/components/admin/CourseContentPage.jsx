@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, Video, FileText, Layers, Trash2, Edit, X, 
   ExternalLink, Image as ImageIcon, AlertCircle, CheckCircle2,
@@ -14,7 +15,10 @@ const ALLOWED_EXTENSIONS = [
   'mp3', 'wav', 'm4a'
 ];
 
-export default function CourseContentPage({ courseId, setActiveScreen }) {
+export default function CourseContentPage({ courseId: propCourseId, setActiveScreen }) {
+  const { courseId: paramCourseId } = useParams();
+  const navigate = useNavigate();
+  const courseId = propCourseId || paramCourseId;
   const [course, setCourse] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingModule, setEditingModule] = useState(null);
@@ -234,7 +238,10 @@ export default function CourseContentPage({ courseId, setActiveScreen }) {
       
       {/* Header */}
       <button
-        onClick={() => setActiveScreen('admin-manage-courses')}
+        onClick={() => {
+          if (setActiveScreen) setActiveScreen('admin-manage-courses');
+          navigate('/admin/courses');
+        }}
         className="inline-flex items-center space-x-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />

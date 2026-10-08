@@ -18,7 +18,7 @@ public class Video {
     private String bunnyVideoId;
 
     @Column(name = "library_id", nullable = false)
-    private Integer libraryId = 770045;
+    private Integer libraryId;
 
     @Column(nullable = false)
     private String title;
