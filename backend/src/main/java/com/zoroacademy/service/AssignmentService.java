@@ -19,17 +19,23 @@ public class AssignmentService {
     private final com.zoroacademy.repository.CourseRepository courseRepository;
     private final com.zoroacademy.repository.BatchRepository batchRepository;
     private final com.zoroacademy.repository.UserRepository userRepository;
+    private final NotificationService notificationService;
+    private final ActivityLogService activityLogService;
 
     public AssignmentService(AssignmentRepository assignmentRepository,
                              AssignmentSubmissionRepository submissionRepository,
                              com.zoroacademy.repository.CourseRepository courseRepository,
                              com.zoroacademy.repository.BatchRepository batchRepository,
-                             com.zoroacademy.repository.UserRepository userRepository) {
+                             com.zoroacademy.repository.UserRepository userRepository,
+                             NotificationService notificationService,
+                             ActivityLogService activityLogService) {
         this.assignmentRepository = assignmentRepository;
         this.submissionRepository = submissionRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
+        this.activityLogService = activityLogService;
     }
 
     @Transactional(readOnly = true)
@@ -69,7 +75,25 @@ public class AssignmentService {
                     .ifPresent(u -> assignment.setTrainerId(u.getId()));
         }
 
-        return assignmentRepository.save(assignment);
+        Assignment saved = assignmentRepository.save(assignment);
+
+        activityLogService.logAction(
+                saved.getTrainerId() != null ? saved.getTrainerId() : "TRAINER",
+                saved.getTrainer() != null ? saved.getTrainer() : "Trainer",
+                "ASSIGNMENT_CREATED",
+                "Created assignment: " + saved.getTitle() + " for " + saved.getCourse(),
+                "System"
+        );
+
+        notificationService.createNotification(com.zoroacademy.entity.Notification.builder()
+                .id("notif_" + java.util.UUID.randomUUID())
+                .recipientRole("STUDENT")
+                .title("New Assignment Posted")
+                .message("New assignment '" + saved.getTitle() + "' posted for " + saved.getCourse() + ".")
+                .readStatus(false)
+                .build());
+
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -142,7 +166,28 @@ public class AssignmentService {
             sub.setCorrectionAttachment(correctionAttachment);
         }
 
-        return submissionRepository.save(sub);
+        AssignmentSubmission saved = submissionRepository.save(sub);
+
+        activityLogService.logAction(
+                correctedBy != null ? correctedBy : "TRAINER",
+                correctedBy != null ? correctedBy : "Trainer",
+                "SUBMISSION_GRADED",
+                "Graded submission for " + saved.getStudentName() + " on " + saved.getAssignmentTitle() + " with score: " + score,
+                "System"
+        );
+
+        if (saved.getStudentId() != null && !saved.getStudentId().isBlank()) {
+            notificationService.createNotification(com.zoroacademy.entity.Notification.builder()
+                    .id("notif_" + java.util.UUID.randomUUID())
+                    .recipientId(saved.getStudentId())
+                    .recipientRole("STUDENT")
+                    .title("Assignment Graded")
+                    .message("Your submission for '" + saved.getAssignmentTitle() + "' has been graded: " + score + ".")
+                    .readStatus(false)
+                    .build());
+        }
+
+        return saved;
     }
 
     @Transactional

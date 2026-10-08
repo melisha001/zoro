@@ -1,17 +1,14 @@
 package com.zoroacademy.service;
 
-import com.zoroacademy.entity.Course;
-import com.zoroacademy.entity.Enrollment;
-import com.zoroacademy.entity.EnrollmentRequest;
-import com.zoroacademy.repository.CourseRepository;
-import com.zoroacademy.repository.EnrollmentRepository;
-import com.zoroacademy.repository.EnrollmentRequestRepository;
+import com.zoroacademy.entity.*;
+import com.zoroacademy.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class EnrollmentService {
@@ -19,16 +16,31 @@ public class EnrollmentService {
     private final EnrollmentRepository enrollmentRepository;
     private final EnrollmentRequestRepository requestRepository;
     private final CourseRepository courseRepository;
-    private final com.zoroacademy.repository.UserRepository userRepository;
+    private final UserRepository userRepository;
+    private final StudentCourseBatchRepository studentCourseBatchRepository;
+    private final StudentFeeRepository studentFeeRepository;
+    private final BatchRepository batchRepository;
+    private final NotificationService notificationService;
+    private final ActivityLogService activityLogService;
 
     public EnrollmentService(EnrollmentRepository enrollmentRepository,
                              EnrollmentRequestRepository requestRepository,
                              CourseRepository courseRepository,
-                             com.zoroacademy.repository.UserRepository userRepository) {
+                             UserRepository userRepository,
+                             StudentCourseBatchRepository studentCourseBatchRepository,
+                             StudentFeeRepository studentFeeRepository,
+                             BatchRepository batchRepository,
+                             NotificationService notificationService,
+                             ActivityLogService activityLogService) {
         this.enrollmentRepository = enrollmentRepository;
         this.requestRepository = requestRepository;
         this.courseRepository = courseRepository;
         this.userRepository = userRepository;
+        this.studentCourseBatchRepository = studentCourseBatchRepository;
+        this.studentFeeRepository = studentFeeRepository;
+        this.batchRepository = batchRepository;
+        this.notificationService = notificationService;
+        this.activityLogService = activityLogService;
     }
 
     @Transactional(readOnly = true)
@@ -46,55 +58,161 @@ public class EnrollmentService {
     }
 
     @Transactional
-    public Enrollment enrollStudent(String studentId, String studentEmail, String courseId, String batchName) {
+    public Enrollment enroll(String studentId, String studentEmail, String courseId, String batchIdOrName) {
         String effectiveStudentId = studentId;
         String effectiveEmail = studentEmail;
+        String studentName = "Student";
 
         if (effectiveStudentId != null && effectiveStudentId.contains("@")) {
             effectiveEmail = effectiveStudentId;
-            effectiveStudentId = userRepository.findByEmailIgnoreCase(effectiveEmail)
-                    .map(com.zoroacademy.entity.User::getId)
-                    .orElse(effectiveStudentId);
+            Optional<User> uOpt = userRepository.findByEmailIgnoreCase(effectiveEmail);
+            if (uOpt.isPresent()) {
+                effectiveStudentId = uOpt.get().getId();
+                studentName = uOpt.get().getName();
+            }
         } else if (effectiveEmail != null && (effectiveStudentId == null || effectiveStudentId.isBlank())) {
-            effectiveStudentId = userRepository.findByEmailIgnoreCase(effectiveEmail)
-                    .map(com.zoroacademy.entity.User::getId)
-                    .orElse(effectiveEmail);
-        } else if (effectiveStudentId != null && (effectiveEmail == null || effectiveEmail.isBlank())) {
-            effectiveEmail = userRepository.findById(effectiveStudentId)
-                    .map(com.zoroacademy.entity.User::getEmail)
-                    .orElse(effectiveStudentId);
+            Optional<User> uOpt = userRepository.findByEmailIgnoreCase(effectiveEmail);
+            if (uOpt.isPresent()) {
+                effectiveStudentId = uOpt.get().getId();
+                studentName = uOpt.get().getName();
+            }
+        } else if (effectiveStudentId != null) {
+            Optional<User> uOpt = userRepository.findById(effectiveStudentId);
+            if (uOpt.isPresent()) {
+                effectiveEmail = uOpt.get().getEmail();
+                studentName = uOpt.get().getName();
+            }
         }
 
-        boolean exists = enrollmentRepository.existsByStudentIdAndCourseId(effectiveStudentId, courseId)
-                || (effectiveEmail != null && enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(effectiveEmail, courseId));
-
-        if (exists) {
-            throw new IllegalArgumentException("Student is already enrolled in this course.");
+        if (effectiveStudentId == null || effectiveStudentId.isBlank()) {
+            throw new IllegalArgumentException("Valid student ID or email is required for enrollment.");
         }
 
-        Optional<Course> courseOpt = courseRepository.findById(courseId);
-        String courseTitle = courseOpt.map(Course::getTitle).orElse(courseId);
+        final String finalEffectiveStudentId = effectiveStudentId;
+        final String finalEffectiveEmail = effectiveEmail;
+        final String finalStudentName = studentName;
 
-        Enrollment enrollment = Enrollment.builder()
-                .id("enr_" + java.util.UUID.randomUUID())
-                .studentId(effectiveStudentId)
-                .studentEmail(effectiveEmail != null ? effectiveEmail : "")
-                .courseId(courseId)
-                .courseTitle(courseTitle)
-                .batchName(batchName)
+        // Resolve course
+        Optional<Course> courseOpt = courseRepository.findById(courseId)
+                .or(() -> courseRepository.findByTitleIgnoreCase(courseId));
+        if (courseOpt.isEmpty()) {
+            throw new IllegalArgumentException("Course not found: " + courseId);
+        }
+        Course course = courseOpt.get();
+        String finalCourseId = course.getId();
+        String finalCourseTitle = course.getTitle();
+
+        // Resolve batch
+        String finalBatchId = null;
+        String finalBatchName = "";
+        if (batchIdOrName != null && !batchIdOrName.isBlank()) {
+            Optional<Batch> batchOpt = batchRepository.findById(batchIdOrName)
+                    .or(() -> batchRepository.findByNameIgnoreCaseAndCourseId(batchIdOrName, finalCourseId))
+                    .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(batchIdOrName, finalCourseTitle));
+            if (batchOpt.isPresent()) {
+                finalBatchId = batchOpt.get().getId();
+                finalBatchName = batchOpt.get().getName();
+            } else {
+                finalBatchName = batchIdOrName;
+            }
+        }
+        final String resolvedBatchId = finalBatchId;
+        final String resolvedBatchName = finalBatchName;
+
+        // 1. Create or Reactivate Enrollment
+        Optional<Enrollment> existingEnr = enrollmentRepository.findByStudentIdAndCourseId(finalEffectiveStudentId, finalCourseId);
+        boolean isNew = existingEnr.isEmpty();
+        Enrollment enrollment = existingEnr.orElseGet(() -> Enrollment.builder()
+                .id("enr_" + UUID.randomUUID())
+                .studentId(finalEffectiveStudentId)
+                .studentEmail(finalEffectiveEmail != null ? finalEffectiveEmail : "")
+                .courseId(finalCourseId)
                 .enrolledDate(LocalDate.now().toString())
-                .status("Active")
-                .build();
+                .build());
 
+        enrollment.setStudentEmail(finalEffectiveEmail != null ? finalEffectiveEmail : "");
+        enrollment.setCourseTitle(finalCourseTitle);
+        enrollment.setBatchId(resolvedBatchId);
+        enrollment.setBatchName(resolvedBatchName);
+        enrollment.setStatus("Active");
         enrollment = enrollmentRepository.save(enrollment);
 
-        // Increment enrolled count on course
-        courseOpt.ifPresent(course -> {
+        // 2. Create or Update StudentCourseBatch
+        StudentCourseBatch scb = studentCourseBatchRepository.findByStudentIdAndCourseId(finalEffectiveStudentId, finalCourseId)
+                .orElseGet(() -> {
+                    StudentCourseBatch n = new StudentCourseBatch();
+                    n.setStudentId(finalEffectiveStudentId);
+                    n.setCourseId(finalCourseId);
+                    return n;
+                });
+        scb.setCourseName(finalCourseTitle);
+        scb.setBatchId(resolvedBatchId);
+        scb.setBatchName(resolvedBatchName);
+        studentCourseBatchRepository.save(scb);
+
+        // 3. Create StudentFee with amount = course.fee, paid = 0, status = 'Pending' (if not present)
+        studentFeeRepository.findByStudentIdAndCourseId(finalEffectiveStudentId, finalCourseId).ifPresentOrElse(
+                existingFee -> {
+                    if (resolvedBatchId != null) existingFee.setBatchId(resolvedBatchId);
+                    if (!resolvedBatchName.isBlank()) existingFee.setBatch(resolvedBatchName);
+                    studentFeeRepository.save(existingFee);
+                },
+                () -> {
+                    java.math.BigDecimal feeAmount = course.getPrice() != null ? course.getPrice() : java.math.BigDecimal.ZERO;
+                    StudentFee fee = StudentFee.builder()
+                            .id("fee_" + UUID.randomUUID())
+                            .studentId(finalEffectiveStudentId)
+                            .studentName(finalStudentName)
+                            .courseId(finalCourseId)
+                            .course(finalCourseTitle)
+                            .batchId(resolvedBatchId)
+                            .batch(!resolvedBatchName.isBlank() ? resolvedBatchName : "Unassigned")
+                            .totalFee(feeAmount)
+                            .paidAmount(java.math.BigDecimal.ZERO)
+                            .dueAmount(feeAmount)
+                            .status(feeAmount.compareTo(java.math.BigDecimal.ZERO) == 0 ? "Paid" : "Pending")
+                            .date(LocalDate.now().toString())
+                            .build();
+                    studentFeeRepository.save(fee);
+                }
+        );
+
+        // 4. Increment course enrolled count if new
+        if (isNew) {
             course.setEnrolled((course.getEnrolled() != null ? course.getEnrolled() : 0) + 1);
             courseRepository.save(course);
-        });
+        }
+
+        // 5. Notification & Activity Log
+        Notification notif = Notification.builder()
+                .id("notif_" + UUID.randomUUID())
+                .recipientId(effectiveStudentId)
+                .recipientRole("STUDENT")
+                .title("Enrolled in " + finalCourseTitle)
+                .message("You have been enrolled in " + finalCourseTitle + (!resolvedBatchName.isBlank() ? " (" + resolvedBatchName + ")" : "") + ".")
+                .readStatus(false)
+                .build();
+        notificationService.createNotification(notif);
+
+        activityLogService.logAction(effectiveStudentId, studentName, "COURSE_ENROLLED",
+                "Enrolled in course: " + finalCourseTitle + (!resolvedBatchName.isBlank() ? " [" + resolvedBatchName + "]" : ""), "System");
 
         return enrollment;
+    }
+
+    @Transactional
+    public Enrollment enrollStudent(String studentId, String studentEmail, String courseId, String batchName) {
+        return enroll(studentId, studentEmail, courseId, batchName);
+    }
+
+    @Transactional
+    public void deactivateEnrollment(String studentId, String courseId) {
+        enrollmentRepository.findByStudentIdAndCourseId(studentId, courseId).ifPresent(enrollment -> {
+            enrollment.setStatus("Inactive");
+            enrollmentRepository.save(enrollment);
+        });
+        studentCourseBatchRepository.findByStudentIdAndCourseId(studentId, courseId).ifPresent(studentCourseBatchRepository::delete);
+        // StudentFee is intentionally kept for accounting history per requirements
     }
 
     @Transactional(readOnly = true)
@@ -124,7 +242,7 @@ public class EnrollmentService {
         }
 
         if (req.getId() == null || req.getId().isBlank()) {
-            req.setId("enr_req_" + java.util.UUID.randomUUID());
+            req.setId("enr_req_" + UUID.randomUUID());
         }
         if (req.getStatus() == null || req.getStatus().isBlank()) {
             req.setStatus("Pending");
@@ -144,12 +262,20 @@ public class EnrollmentService {
         req.setStatus(status);
         if (remarks != null) req.setRemarks(remarks);
 
-        // If approved, automatically enroll student
+        // If approved, automatically enroll student (or assign trainer if mode is Trainer)
         if ("Approved".equalsIgnoreCase(status)) {
-            try {
-                enrollStudent(req.getStudentId(), req.getStudentEmail(), req.getCourseId(), req.getBatchName());
-            } catch (Exception ignored) {
-                // Ignore if already enrolled
+            if ("Trainer".equalsIgnoreCase(req.getMode())) {
+                courseRepository.findById(req.getCourseId()).ifPresent(course -> {
+                    course.setTrainerId(req.getStudentId());
+                    course.setAssignedTrainer(req.getStudentName());
+                    courseRepository.save(course);
+                });
+            } else {
+                try {
+                    enroll(req.getStudentId(), req.getStudentEmail(), req.getCourseId(), req.getBatchName());
+                } catch (Exception ignored) {
+                    // Ignore if already enrolled
+                }
             }
         }
 

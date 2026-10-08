@@ -1,16 +1,13 @@
 package com.zoroacademy.service;
 
-import com.zoroacademy.entity.Course;
-import com.zoroacademy.entity.CourseModule;
-import com.zoroacademy.entity.CourseResource;
-import com.zoroacademy.repository.CourseModuleRepository;
-import com.zoroacademy.repository.CourseRepository;
-import com.zoroacademy.repository.CourseResourceRepository;
-import com.zoroacademy.repository.UserRepository;
+import com.zoroacademy.entity.*;
+import com.zoroacademy.exception.ConflictException;
+import com.zoroacademy.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class CourseService {
@@ -19,15 +16,36 @@ public class CourseService {
     private final CourseModuleRepository moduleRepository;
     private final CourseResourceRepository resourceRepository;
     private final UserRepository userRepository;
+    private final BatchRepository batchRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final StudentCourseBatchRepository studentCourseBatchRepository;
+    private final StudentFeeRepository studentFeeRepository;
+    private final ScheduleRepository scheduleRepository;
+    private final AssignmentRepository assignmentRepository;
+    private final DoubtRepository doubtRepository;
 
     public CourseService(CourseRepository courseRepository,
                          CourseModuleRepository moduleRepository,
                          CourseResourceRepository resourceRepository,
-                         UserRepository userRepository) {
+                         UserRepository userRepository,
+                         BatchRepository batchRepository,
+                         EnrollmentRepository enrollmentRepository,
+                         StudentCourseBatchRepository studentCourseBatchRepository,
+                         StudentFeeRepository studentFeeRepository,
+                         ScheduleRepository scheduleRepository,
+                         AssignmentRepository assignmentRepository,
+                         DoubtRepository doubtRepository) {
         this.courseRepository = courseRepository;
         this.moduleRepository = moduleRepository;
         this.resourceRepository = resourceRepository;
         this.userRepository = userRepository;
+        this.batchRepository = batchRepository;
+        this.enrollmentRepository = enrollmentRepository;
+        this.studentCourseBatchRepository = studentCourseBatchRepository;
+        this.studentFeeRepository = studentFeeRepository;
+        this.scheduleRepository = scheduleRepository;
+        this.assignmentRepository = assignmentRepository;
+        this.doubtRepository = doubtRepository;
     }
 
     @Transactional(readOnly = true)
@@ -72,42 +90,91 @@ public class CourseService {
 
     @Transactional
     public Course updateCourse(String id, Course updated) {
-        Course existing = getCourseById(id);
-        if (updated.getTitle() != null) existing.setTitle(updated.getTitle());
-        if (updated.getDescription() != null) existing.setDescription(updated.getDescription());
-        if (updated.getCategory() != null) existing.setCategory(updated.getCategory());
-        if (updated.getMode() != null) existing.setMode(updated.getMode());
-        if (updated.getLevel() != null) existing.setLevel(updated.getLevel());
-        if (updated.getAudience() != null) existing.setAudience(updated.getAudience());
-        if (updated.getDuration() != null) existing.setDuration(updated.getDuration());
-        if (updated.getPrice() != null) existing.setPrice(updated.getPrice());
-        if (updated.getOriginalPrice() != null) existing.setOriginalPrice(updated.getOriginalPrice());
-        if (updated.getThumbnail() != null) existing.setThumbnail(updated.getThumbnail());
-        if (updated.getPreviewVideoUrl() != null) existing.setPreviewVideoUrl(updated.getPreviewVideoUrl());
-        if (updated.getEnrolled() != null) existing.setEnrolled(updated.getEnrolled());
-        if (updated.getRating() != null) existing.setRating(updated.getRating());
-        if (updated.getStatus() != null) existing.setStatus(updated.getStatus());
+        final Course targetCourse = getCourseById(id);
+        String oldTitle = targetCourse.getTitle();
+
+        if (updated.getTitle() != null) targetCourse.setTitle(updated.getTitle());
+        if (updated.getDescription() != null) targetCourse.setDescription(updated.getDescription());
+        if (updated.getCategory() != null) targetCourse.setCategory(updated.getCategory());
+        if (updated.getMode() != null) targetCourse.setMode(updated.getMode());
+        if (updated.getLevel() != null) targetCourse.setLevel(updated.getLevel());
+        if (updated.getAudience() != null) targetCourse.setAudience(updated.getAudience());
+        if (updated.getDuration() != null) targetCourse.setDuration(updated.getDuration());
+        if (updated.getPrice() != null) targetCourse.setPrice(updated.getPrice());
+        if (updated.getOriginalPrice() != null) targetCourse.setOriginalPrice(updated.getOriginalPrice());
+        if (updated.getThumbnail() != null) targetCourse.setThumbnail(updated.getThumbnail());
+        if (updated.getPreviewVideoUrl() != null) targetCourse.setPreviewVideoUrl(updated.getPreviewVideoUrl());
+        if (updated.getEnrolled() != null) targetCourse.setEnrolled(updated.getEnrolled());
+        if (updated.getRating() != null) targetCourse.setRating(updated.getRating());
+        if (updated.getStatus() != null) targetCourse.setStatus(updated.getStatus());
 
         if (updated.getTrainerId() != null && !updated.getTrainerId().isBlank()) {
-            existing.setTrainerId(updated.getTrainerId());
-            userRepository.findById(updated.getTrainerId()).ifPresent(u -> existing.setAssignedTrainer(u.getName()));
+            targetCourse.setTrainerId(updated.getTrainerId());
+            userRepository.findById(updated.getTrainerId()).ifPresent(u -> targetCourse.setAssignedTrainer(u.getName()));
         } else if (updated.getAssignedTrainer() != null) {
-            existing.setAssignedTrainer(updated.getAssignedTrainer());
+            targetCourse.setAssignedTrainer(updated.getAssignedTrainer());
             if ("None (Self-Paced)".equalsIgnoreCase(updated.getAssignedTrainer()) || "Unassigned".equalsIgnoreCase(updated.getAssignedTrainer())) {
-                existing.setTrainerId(null);
+                targetCourse.setTrainerId(null);
             } else {
                 userRepository.findByNameIgnoreCase(updated.getAssignedTrainer()).stream()
                         .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
                         .findFirst()
-                        .ifPresent(u -> existing.setTrainerId(u.getId()));
+                        .ifPresent(u -> targetCourse.setTrainerId(u.getId()));
             }
         }
 
-        return courseRepository.save(existing);
+        Course savedCourse = courseRepository.save(targetCourse);
+
+        // Propagate renamed course title to related records
+        if (updated.getTitle() != null && !updated.getTitle().equalsIgnoreCase(oldTitle)) {
+            String newTitle = updated.getTitle();
+            String cId = savedCourse.getId();
+
+            for (Batch b : batchRepository.findByCourseId(cId)) {
+                b.setCourseName(newTitle);
+                batchRepository.save(b);
+            }
+            for (Enrollment e : enrollmentRepository.findByCourseId(cId)) {
+                e.setCourseTitle(newTitle);
+                enrollmentRepository.save(e);
+            }
+            for (StudentCourseBatch scb : studentCourseBatchRepository.findByCourseId(cId)) {
+                scb.setCourseName(newTitle);
+                studentCourseBatchRepository.save(scb);
+            }
+            for (StudentFee f : studentFeeRepository.findByCourseId(cId)) {
+                f.setCourse(newTitle);
+                studentFeeRepository.save(f);
+            }
+            for (Schedule s : scheduleRepository.findByCourseId(cId)) {
+                s.setCourse(newTitle);
+                scheduleRepository.save(s);
+            }
+            for (Assignment a : assignmentRepository.findByCourseId(cId)) {
+                a.setCourse(newTitle);
+                assignmentRepository.save(a);
+            }
+            for (Doubt d : doubtRepository.findByCourseId(cId)) {
+                d.setCourseTitle(newTitle);
+                doubtRepository.save(d);
+            }
+        }
+
+        return savedCourse;
     }
 
     @Transactional
     public void deleteCourse(String id) {
+        long activeEnrollments = enrollmentRepository.findByCourseId(id).stream()
+                .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
+                .count();
+        if (activeEnrollments > 0) {
+            throw new ConflictException("Cannot delete course with " + activeEnrollments + " active enrollments");
+        }
+        List<Batch> batches = batchRepository.findByCourseId(id);
+        if (!batches.isEmpty()) {
+            throw new ConflictException("Cannot delete course with " + batches.size() + " active batches");
+        }
         courseRepository.deleteById(id);
     }
 
@@ -115,7 +182,7 @@ public class CourseService {
     public CourseModule addModule(String courseId, CourseModule module) {
         Course course = getCourseById(courseId);
         if (module.getId() == null || module.getId().isBlank()) {
-            module.setId("mod_" + java.util.UUID.randomUUID());
+            module.setId("mod_" + UUID.randomUUID());
         }
         module.setCourse(course);
         return moduleRepository.save(module);
@@ -144,7 +211,7 @@ public class CourseService {
     public CourseResource addResource(String courseId, CourseResource resource) {
         Course course = getCourseById(courseId);
         if (resource.getId() == null || resource.getId().isBlank()) {
-            resource.setId("res_" + java.util.UUID.randomUUID());
+            resource.setId("res_" + UUID.randomUUID());
         }
         resource.setCourse(course);
         return resourceRepository.save(resource);

@@ -12,6 +12,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, String> 
     List<Enrollment> findByStudentId(String studentId);
     List<Enrollment> findByStudentEmailIgnoreCase(String studentEmail);
     List<Enrollment> findByCourseId(String courseId);
+    List<Enrollment> findByBatchId(String batchId);
+    List<Enrollment> findByBatchNameIgnoreCase(String batchName);
     Optional<Enrollment> findByStudentIdAndCourseId(String studentId, String courseId);
     Optional<Enrollment> findByStudentEmailIgnoreCaseAndCourseId(String studentEmail, String courseId);
     boolean existsByStudentIdAndCourseId(String studentId, String courseId);

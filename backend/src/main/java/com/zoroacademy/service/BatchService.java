@@ -1,13 +1,13 @@
 package com.zoroacademy.service;
 
-import com.zoroacademy.entity.Batch;
-import com.zoroacademy.repository.BatchRepository;
-import com.zoroacademy.repository.CourseRepository;
-import com.zoroacademy.repository.UserRepository;
+import com.zoroacademy.entity.*;
+import com.zoroacademy.exception.ConflictException;
+import com.zoroacademy.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class BatchService {
@@ -15,13 +15,28 @@ public class BatchService {
     private final BatchRepository batchRepository;
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final StudentCourseBatchRepository studentCourseBatchRepository;
+    private final StudentFeeRepository studentFeeRepository;
+    private final ScheduleRepository scheduleRepository;
+    private final AssignmentRepository assignmentRepository;
 
     public BatchService(BatchRepository batchRepository,
                         CourseRepository courseRepository,
-                        UserRepository userRepository) {
+                        UserRepository userRepository,
+                        EnrollmentRepository enrollmentRepository,
+                        StudentCourseBatchRepository studentCourseBatchRepository,
+                        StudentFeeRepository studentFeeRepository,
+                        ScheduleRepository scheduleRepository,
+                        AssignmentRepository assignmentRepository) {
         this.batchRepository = batchRepository;
         this.courseRepository = courseRepository;
         this.userRepository = userRepository;
+        this.enrollmentRepository = enrollmentRepository;
+        this.studentCourseBatchRepository = studentCourseBatchRepository;
+        this.studentFeeRepository = studentFeeRepository;
+        this.scheduleRepository = scheduleRepository;
+        this.assignmentRepository = assignmentRepository;
     }
 
     @Transactional(readOnly = true)
@@ -58,7 +73,7 @@ public class BatchService {
     @Transactional
     public Batch createBatch(Batch batch) {
         if (batch.getId() == null || batch.getId().isBlank()) {
-            batch.setId("btc_" + java.util.UUID.randomUUID());
+            batch.setId("btc_" + UUID.randomUUID());
         }
 
         // Resolve Course
@@ -83,38 +98,79 @@ public class BatchService {
 
     @Transactional
     public Batch updateBatch(String id, Batch updated) {
-        Batch existing = getBatchById(id);
-        if (updated.getName() != null) existing.setName(updated.getName());
-        if (updated.getDays() != null) existing.setDays(updated.getDays());
-        if (updated.getSession() != null) existing.setSession(updated.getSession());
-        if (updated.getStatus() != null) existing.setStatus(updated.getStatus());
+        final Batch targetBatch = getBatchById(id);
+        String oldName = targetBatch.getName();
+
+        if (updated.getName() != null) targetBatch.setName(updated.getName());
+        if (updated.getDays() != null) targetBatch.setDays(updated.getDays());
+        if (updated.getSession() != null) targetBatch.setSession(updated.getSession());
+        if (updated.getStatus() != null) targetBatch.setStatus(updated.getStatus());
 
         // Update Course
         if (updated.getCourseId() != null && !updated.getCourseId().isBlank()) {
-            existing.setCourseId(updated.getCourseId());
-            courseRepository.findById(updated.getCourseId()).ifPresent(c -> existing.setCourseName(c.getTitle()));
+            targetBatch.setCourseId(updated.getCourseId());
+            courseRepository.findById(updated.getCourseId()).ifPresent(c -> targetBatch.setCourseName(c.getTitle()));
         } else if (updated.getCourseName() != null && !updated.getCourseName().isBlank()) {
-            existing.setCourseName(updated.getCourseName());
-            courseRepository.findByTitleIgnoreCase(updated.getCourseName()).ifPresent(c -> existing.setCourseId(c.getId()));
+            targetBatch.setCourseName(updated.getCourseName());
+            courseRepository.findByTitleIgnoreCase(updated.getCourseName()).ifPresent(c -> targetBatch.setCourseId(c.getId()));
         }
 
         // Update Trainer
         if (updated.getTrainerId() != null && !updated.getTrainerId().isBlank()) {
-            existing.setTrainerId(updated.getTrainerId());
-            userRepository.findById(updated.getTrainerId()).ifPresent(u -> existing.setTrainerName(u.getName()));
+            targetBatch.setTrainerId(updated.getTrainerId());
+            userRepository.findById(updated.getTrainerId()).ifPresent(u -> targetBatch.setTrainerName(u.getName()));
         } else if (updated.getTrainerName() != null) {
-            existing.setTrainerName(updated.getTrainerName());
+            targetBatch.setTrainerName(updated.getTrainerName());
             userRepository.findByNameIgnoreCase(updated.getTrainerName()).stream()
                     .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
                     .findFirst()
-                    .ifPresent(u -> existing.setTrainerId(u.getId()));
+                    .ifPresent(u -> targetBatch.setTrainerId(u.getId()));
         }
 
-        return batchRepository.save(existing);
+        Batch savedBatch = batchRepository.save(targetBatch);
+
+        // Propagate renamed batch name to related records
+        if (updated.getName() != null && !updated.getName().equalsIgnoreCase(oldName)) {
+            String newName = updated.getName();
+            String bId = savedBatch.getId();
+
+            for (Enrollment e : enrollmentRepository.findByBatchId(bId)) {
+                e.setBatchName(newName);
+                enrollmentRepository.save(e);
+            }
+            for (StudentCourseBatch scb : studentCourseBatchRepository.findByBatchId(bId)) {
+                scb.setBatchName(newName);
+                studentCourseBatchRepository.save(scb);
+            }
+            for (StudentFee f : studentFeeRepository.findByBatchId(bId)) {
+                f.setBatch(newName);
+                studentFeeRepository.save(f);
+            }
+            for (Schedule s : scheduleRepository.findByBatchId(bId)) {
+                s.setBatch(newName);
+                scheduleRepository.save(s);
+            }
+            for (Assignment a : assignmentRepository.findByBatchId(bId)) {
+                a.setBatch(newName);
+                assignmentRepository.save(a);
+            }
+        }
+
+        return savedBatch;
     }
 
     @Transactional
     public void deleteBatch(String id) {
+        List<StudentCourseBatch> assignedStudents = studentCourseBatchRepository.findByBatchId(id);
+        if (!assignedStudents.isEmpty()) {
+            throw new ConflictException("Cannot delete batch with " + assignedStudents.size() + " active student assignments");
+        }
+        List<Enrollment> enrollments = enrollmentRepository.findByBatchId(id).stream()
+                .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
+                .toList();
+        if (!enrollments.isEmpty()) {
+            throw new ConflictException("Cannot delete batch with " + enrollments.size() + " active enrollments");
+        }
         batchRepository.deleteById(id);
     }
 }

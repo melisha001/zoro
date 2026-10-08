@@ -30,6 +30,10 @@ public class TrainerDependencyTest {
     private CourseRepository courseRepository;
     private BatchRepository batchRepository;
     private ScheduleRepository scheduleRepository;
+    private StudentFeeRepository studentFeeRepository;
+    private com.zoroacademy.service.EnrollmentService enrollmentService;
+    private com.zoroacademy.service.NotificationService notificationService;
+    private com.zoroacademy.service.ActivityLogService activityLogService;
 
     private UserService userService;
 
@@ -42,9 +46,14 @@ public class TrainerDependencyTest {
         courseRepository = mock(CourseRepository.class);
         batchRepository = mock(BatchRepository.class);
         scheduleRepository = mock(ScheduleRepository.class);
+        studentFeeRepository = mock(StudentFeeRepository.class);
+        enrollmentService = mock(com.zoroacademy.service.EnrollmentService.class);
+        notificationService = mock(com.zoroacademy.service.NotificationService.class);
+        activityLogService = mock(com.zoroacademy.service.ActivityLogService.class);
 
         userService = new UserService(userRepository, passwordEncoder, studentCourseBatchRepository,
-                enrollmentRepository, courseRepository, batchRepository, scheduleRepository);
+                enrollmentRepository, courseRepository, batchRepository, scheduleRepository,
+                studentFeeRepository, enrollmentService, notificationService, activityLogService);
     }
 
     @Test

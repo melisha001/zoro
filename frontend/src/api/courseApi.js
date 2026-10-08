@@ -79,14 +79,16 @@ export const addLesson = async (courseId, moduleId, lessonData) => {
   return apiResponse(lessonData, true, 'Lesson updated');
 };
 
-// --- TRAINER COURSE REQUESTS API (mapped to enrollment-requests backend) ---
-export const getTrainerCourseRequests = async () => {
-  const res = await apiGet('/enrollment-requests');
+// --- TRAINER COURSE REQUESTS API ---
+export const getTrainerCourseRequests = async (trainerId = null) => {
+  const url = trainerId ? `/trainer-course-requests?trainerId=${encodeURIComponent(trainerId)}` : '/trainer-course-requests';
+  const res = await apiGet(url);
   if (res.success && Array.isArray(res.data)) {
     const normalized = res.data.map(r => ({
       id: r.id,
-      trainerName: r.studentName,
-      trainerEmail: r.studentEmail,
+      trainerId: r.trainerId,
+      trainerName: r.trainerName,
+      trainerEmail: r.trainerEmail,
       courseId: r.courseId,
       courseTitle: r.courseTitle,
       requestedAt: r.requestDate,
@@ -97,18 +99,17 @@ export const getTrainerCourseRequests = async () => {
   return apiResponse([]);
 };
 
-export const createTrainerCourseRequest = async ({ trainerName, trainerEmail, courseId, courseTitle }) => {
+export const createTrainerCourseRequest = async ({ trainerId, trainerName, trainerEmail, courseId, courseTitle }) => {
   const payload = {
-    studentId: trainerEmail,
-    studentName: trainerName,
-    studentEmail: trainerEmail,
+    trainerId: trainerId || trainerEmail,
+    trainerName,
+    trainerEmail,
     courseId,
     courseTitle,
-    mode: 'Trainer',
     status: 'Pending',
     requestDate: new Date().toLocaleDateString('en-GB')
   };
-  const res = await apiPost('/enrollment-requests', payload);
+  const res = await apiPost('/trainer-course-requests', payload);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Course access requested successfully');
   }
@@ -116,7 +117,7 @@ export const createTrainerCourseRequest = async ({ trainerName, trainerEmail, co
 };
 
 export const updateTrainerCourseRequestStatus = async (requestId, status) => {
-  const res = await apiPut(`/enrollment-requests/${requestId}/status`, { status });
+  const res = await apiPut(`/trainer-course-requests/${requestId}/status`, { status });
   if (res.success) {
     return apiResponse(true, true, 'Status updated');
   }

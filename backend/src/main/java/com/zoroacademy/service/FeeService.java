@@ -21,17 +21,23 @@ public class FeeService {
     private final com.zoroacademy.repository.UserRepository userRepository;
     private final com.zoroacademy.repository.CourseRepository courseRepository;
     private final com.zoroacademy.repository.BatchRepository batchRepository;
+    private final NotificationService notificationService;
+    private final ActivityLogService activityLogService;
 
     public FeeService(StudentFeeRepository feeRepository,
                       FeePaymentRepository paymentRepository,
                       com.zoroacademy.repository.UserRepository userRepository,
                       com.zoroacademy.repository.CourseRepository courseRepository,
-                      com.zoroacademy.repository.BatchRepository batchRepository) {
+                      com.zoroacademy.repository.BatchRepository batchRepository,
+                      NotificationService notificationService,
+                      ActivityLogService activityLogService) {
         this.feeRepository = feeRepository;
         this.paymentRepository = paymentRepository;
         this.userRepository = userRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
+        this.notificationService = notificationService;
+        this.activityLogService = activityLogService;
     }
 
     @Transactional(readOnly = true)
@@ -145,6 +151,18 @@ public class FeeService {
                 .notes(notes)
                 .build();
         paymentRepository.save(payment);
+
+        notificationService.createNotification(com.zoroacademy.entity.Notification.builder()
+                .id("notif_" + java.util.UUID.randomUUID())
+                .recipientId(fee.getStudentId())
+                .recipientRole("STUDENT")
+                .title("Fee Payment Received")
+                .message("Payment of ₹" + amount + " for course " + fee.getCourse() + " was received successfully.")
+                .readStatus(false)
+                .build());
+
+        activityLogService.logAction(fee.getStudentId(), fee.getStudentName(), "FEE_PAID",
+                "Paid fee amount ₹" + amount + " for " + fee.getCourse() + (ref != null ? " (Ref: " + ref + ")" : ""), "System");
 
         return fee;
     }

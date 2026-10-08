@@ -23,6 +23,10 @@ public class UserService {
     private final CourseRepository courseRepository;
     private final BatchRepository batchRepository;
     private final ScheduleRepository scheduleRepository;
+    private final StudentFeeRepository studentFeeRepository;
+    private final EnrollmentService enrollmentService;
+    private final NotificationService notificationService;
+    private final ActivityLogService activityLogService;
 
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
@@ -30,7 +34,11 @@ public class UserService {
                        EnrollmentRepository enrollmentRepository,
                        CourseRepository courseRepository,
                        BatchRepository batchRepository,
-                       ScheduleRepository scheduleRepository) {
+                       ScheduleRepository scheduleRepository,
+                       StudentFeeRepository studentFeeRepository,
+                       EnrollmentService enrollmentService,
+                       NotificationService notificationService,
+                       ActivityLogService activityLogService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.studentCourseBatchRepository = studentCourseBatchRepository;
@@ -38,6 +46,10 @@ public class UserService {
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
         this.scheduleRepository = scheduleRepository;
+        this.studentFeeRepository = studentFeeRepository;
+        this.enrollmentService = enrollmentService;
+        this.notificationService = notificationService;
+        this.activityLogService = activityLogService;
     }
 
     private UserDto convertUserToDto(User user) {
@@ -155,9 +167,13 @@ public class UserService {
         user = userRepository.save(user);
 
 
-        // Relational course-batch & enrollment synchronization
+        // Relational course-batch & enrollment synchronization via EnrollmentService
         if (dto.getCourseBatches() != null) {
-            studentCourseBatchRepository.deleteByStudentId(userId);
+            Set<String> previousCourseIds = enrollmentRepository.findByStudentId(userId).stream()
+                    .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
+                    .map(Enrollment::getCourseId)
+                    .collect(Collectors.toSet());
+            Set<String> newCourseIds = new HashSet<>();
             List<String> readableEntries = new ArrayList<>();
 
             for (Map<String, Object> item : dto.getCourseBatches()) {
@@ -175,60 +191,34 @@ public class UserService {
                     resolvedCName = courseRepository.findById(resolvedCId).map(Course::getTitle).orElse(resolvedCId);
                 }
 
-                final String finalCId = resolvedCId;
-                final String finalCName = resolvedCName;
-
                 String resolvedBId = rawBId;
                 String resolvedBName = rawBName;
 
                 if ((resolvedBId == null || resolvedBId.isBlank()) && !resolvedBName.isBlank()) {
                     final String matchBName = resolvedBName;
-                    if (finalCId != null) {
-                        resolvedBId = batchRepository.findByNameIgnoreCaseAndCourseId(matchBName, finalCId)
+                    if (resolvedCId != null) {
+                        resolvedBId = batchRepository.findByNameIgnoreCaseAndCourseId(matchBName, resolvedCId)
                                 .map(Batch::getId).orElse(null);
                     }
-                    if (resolvedBId == null && finalCName != null) {
-                        resolvedBId = batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(matchBName, finalCName)
+                    if (resolvedBId == null && resolvedCName != null) {
+                        resolvedBId = batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(matchBName, resolvedCName)
                                 .map(Batch::getId).orElse(null);
                     }
                 } else if (resolvedBId != null && !resolvedBId.isBlank() && resolvedBName.isBlank()) {
                     resolvedBName = batchRepository.findById(resolvedBId).map(Batch::getName).orElse(resolvedBId);
                 }
 
-                if (!resolvedCName.isBlank()) {
-                    StudentCourseBatch scb = new StudentCourseBatch();
-                    scb.setStudentId(userId);
-                    scb.setCourseName(resolvedCName);
-                    scb.setCourseId(resolvedCId);
-                    scb.setBatchName(resolvedBName);
-                    scb.setBatchId(resolvedBId);
-                    studentCourseBatchRepository.save(scb);
-
+                if (resolvedCId != null && !resolvedCId.isBlank()) {
+                    newCourseIds.add(resolvedCId);
+                    enrollmentService.enroll(userId, dto.getEmail(), resolvedCId, resolvedBId != null ? resolvedBId : resolvedBName);
                     readableEntries.add(resolvedCName + (!resolvedBName.isBlank() ? " (" + resolvedBName + ")" : ""));
+                }
+            }
 
-                    // Synchronize relational Enrollment
-                    if (resolvedCId != null && !resolvedCId.isBlank()) {
-                        final String enrCourseId = resolvedCId;
-                        final String enrCourseTitle = resolvedCName;
-                        final String enrBatchName = resolvedBName;
-                        final String enrBatchId = resolvedBId;
-
-                        Enrollment enrollment = enrollmentRepository.findByStudentIdAndCourseId(userId, enrCourseId)
-                                .orElseGet(() -> Enrollment.builder()
-                                        .id("enr_" + UUID.randomUUID().toString())
-                                        .studentId(userId)
-                                        .studentEmail(dto.getEmail())
-                                        .courseId(enrCourseId)
-                                        .courseTitle(enrCourseTitle)
-                                        .enrolledDate(dto.getJoinedOn() != null ? dto.getJoinedOn() : java.time.LocalDate.now().toString())
-                                        .status("Active")
-                                        .build());
-                        enrollment.setStudentEmail(dto.getEmail());
-                        enrollment.setCourseTitle(enrCourseTitle);
-                        enrollment.setBatchName(enrBatchName);
-                        enrollment.setBatchId(enrBatchId);
-                        enrollmentRepository.save(enrollment);
-                    }
+            // Deactivate any courses from which the student was removed
+            for (String oldCourseId : previousCourseIds) {
+                if (!newCourseIds.contains(oldCourseId)) {
+                    enrollmentService.deactivateEnrollment(userId, oldCourseId);
                 }
             }
 
@@ -404,6 +394,18 @@ public class UserService {
             userRepository.save(oldTrainer);
         }
 
+        activityLogService.logAction(newId, newName, "TRAINER_REPLACED",
+                "Replaced trainer " + oldName + " with " + newName + " (" + courses.size() + " courses, " + batches.size() + " batches, " + schedules.size() + " schedules)", "System");
+
+        notificationService.createNotification(Notification.builder()
+                .id("notif_" + UUID.randomUUID())
+                .recipientId(newId)
+                .recipientRole("TRAINER")
+                .title("Assigned to Replacement Courses & Batches")
+                .message("You have been assigned to replace " + oldName + " across " + courses.size() + " courses and " + batches.size() + " batches.")
+                .readStatus(false)
+                .build());
+
         return true;
     }
 
@@ -443,7 +445,22 @@ public class UserService {
         if ("TRAINER".equalsIgnoreCase(user.getRole())) {
             TrainerDependencyDto dep = getTrainerDependencies(user.getId());
             if (dep.isHasDependencies()) {
-                throw new IllegalStateException("Cannot delete trainer assigned to active courses (" + dep.getCourseCount() + ") or batches (" + dep.getBatchCount() + "). Please reassign dependencies first.");
+                throw new com.zoroacademy.exception.ConflictException("Cannot delete trainer with " + dep.getCourseCount() + " assigned courses, " + dep.getBatchCount() + " batches, and " + dep.getScheduleCount() + " schedules. Reassign them first.");
+            }
+        }
+
+        if ("STUDENT".equalsIgnoreCase(user.getRole())) {
+            List<Enrollment> activeEnrs = enrollmentRepository.findByStudentId(user.getId()).stream()
+                    .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
+                    .toList();
+            if (!activeEnrs.isEmpty()) {
+                throw new com.zoroacademy.exception.ConflictException("Cannot delete student with " + activeEnrs.size() + " active course enrollments.");
+            }
+            List<StudentFee> pendingFees = studentFeeRepository.findByStudentId(user.getId()).stream()
+                    .filter(f -> "Pending".equalsIgnoreCase(f.getStatus()))
+                    .toList();
+            if (!pendingFees.isEmpty()) {
+                throw new com.zoroacademy.exception.ConflictException("Cannot delete student with " + pendingFees.size() + " pending fee records.");
             }
         }
 
