@@ -139,6 +139,8 @@ public class CourseService {
 
         if (updated.getSlug() != null && !updated.getSlug().isBlank()) {
             targetCourse.setSlug(generateUniqueSlug(updated.getSlug(), targetCourse.getId()));
+        } else if (updated.getTitle() != null && !updated.getTitle().equalsIgnoreCase(oldTitle)) {
+            targetCourse.setSlug(generateUniqueSlug(targetCourse.getTitle(), targetCourse.getId()));
         } else if (targetCourse.getSlug() == null || targetCourse.getSlug().isBlank()) {
             targetCourse.setSlug(generateUniqueSlug(targetCourse.getTitle(), targetCourse.getId()));
         }

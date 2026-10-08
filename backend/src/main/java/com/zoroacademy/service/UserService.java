@@ -129,14 +129,14 @@ public class UserService {
 
         // Prevent duplicate email with another account
         userRepository.findByEmailIgnoreCase(cleanEmail).ifPresent(existing -> {
-            if (!existing.getId().equals(userId)) {
+            if (existing.getId() == null || !existing.getId().equals(userId)) {
                 throw new com.zoroacademy.exception.ConflictException("Email is already registered: " + cleanEmail);
             }
         });
 
         // Prevent duplicate username with another account
         userRepository.findByUsernameIgnoreCase(cleanUsername).ifPresent(existing -> {
-            if (!existing.getId().equals(userId)) {
+            if (existing.getId() == null || !existing.getId().equals(userId)) {
                 throw new com.zoroacademy.exception.ConflictException("Username is already taken: " + cleanUsername);
             }
         });
