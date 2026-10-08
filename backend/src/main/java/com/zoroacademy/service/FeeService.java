@@ -4,8 +4,10 @@ import com.zoroacademy.entity.FeePayment;
 import com.zoroacademy.entity.StudentFee;
 import com.zoroacademy.repository.FeePaymentRepository;
 import com.zoroacademy.repository.StudentFeeRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.zoroacademy.exception.ConflictException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -15,6 +17,9 @@ import java.util.Map;
 
 @Service
 public class FeeService {
+
+    @Value("${razorpay.key-secret:}")
+    private String razorpayKeySecret;
 
     private final StudentFeeRepository feeRepository;
     private final FeePaymentRepository paymentRepository;
@@ -127,6 +132,15 @@ public class FeeService {
 
     @Transactional
     public StudentFee recordPayment(String feeIdOrStudentId, BigDecimal amount, String method, String ref, String notes) {
+        return recordPayment(feeIdOrStudentId, amount, method, ref, notes, null, null);
+    }
+
+    @Transactional
+    public StudentFee recordPayment(String feeIdOrStudentId, BigDecimal amount, String method, String ref, String notes, String orderId, String signature) {
+        if ("RAZORPAY".equalsIgnoreCase(method) && signature != null && !signature.isBlank()) {
+            verifyRazorpaySignature(orderId, ref, signature);
+        }
+
         StudentFee fee = feeRepository.findById(feeIdOrStudentId)
                 .or(() -> feeRepository.findByStudentId(feeIdOrStudentId).stream().findFirst())
                 .orElseThrow(() -> new IllegalArgumentException("Fee record not found: " + feeIdOrStudentId));
@@ -167,12 +181,72 @@ public class FeeService {
         return fee;
     }
 
+    private void verifyRazorpaySignature(String orderId, String paymentId, String signature) {
+        if (razorpayKeySecret == null || razorpayKeySecret.isBlank()) {
+            return;
+        }
+        try {
+            String data = (orderId != null ? orderId : "") + "|" + (paymentId != null ? paymentId : "");
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            javax.crypto.spec.SecretKeySpec secretKey = new javax.crypto.spec.SecretKeySpec(
+                    razorpayKeySecret.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(secretKey);
+            byte[] hash = mac.doFinal(data.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            String expected = hexString.toString();
+            if (!java.security.MessageDigest.isEqual(expected.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    signature.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
+                throw new ConflictException("Invalid Razorpay payment signature");
+            }
+        } catch (ConflictException ce) {
+            throw ce;
+        } catch (Exception e) {
+            throw new RuntimeException("Error verifying Razorpay signature: " + e.getMessage(), e);
+        }
+    }
+
+    @Transactional
+    public StudentFee updateFeeRecord(String id, StudentFee updated) {
+        StudentFee fee = feeRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Fee record not found: " + id));
+
+        BigDecimal currentPaid = fee.getPaidAmount() != null ? fee.getPaidAmount() : BigDecimal.ZERO;
+
+        if (updated.getTotalFee() != null) {
+            if (updated.getTotalFee().compareTo(currentPaid) < 0) {
+                throw new ConflictException(
+                        "Cannot lower total fee (" + updated.getTotalFee() + ") below already paid amount (" + currentPaid + ")");
+            }
+            fee.setTotalFee(updated.getTotalFee());
+            BigDecimal due = updated.getTotalFee().subtract(currentPaid).max(BigDecimal.ZERO);
+            fee.setDueAmount(due);
+            fee.setStatus(due.compareTo(BigDecimal.ZERO) == 0 ? "Paid" : "Pending");
+        }
+
+        if (updated.getCourse() != null) fee.setCourse(updated.getCourse());
+        if (updated.getCourseId() != null) fee.setCourseId(updated.getCourseId());
+        if (updated.getBatch() != null) fee.setBatch(updated.getBatch());
+        if (updated.getBatchId() != null) fee.setBatchId(updated.getBatchId());
+
+        return feeRepository.save(fee);
+    }
+
     @Transactional
     public void deleteFeeRecord(String id) {
-        if (!feeRepository.existsById(id)) {
-            throw new IllegalArgumentException("Fee record not found: " + id);
+        StudentFee fee = feeRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Fee record not found: " + id));
+        if ("Paid".equalsIgnoreCase(fee.getStatus())) {
+            throw new ConflictException("Cannot delete fee record with status 'Paid'");
         }
-        feeRepository.deleteById(id);
+        if (fee.getPaidAmount() != null && fee.getPaidAmount().compareTo(BigDecimal.ZERO) > 0) {
+            throw new ConflictException("Cannot delete fee record with recorded payments");
+        }
+        feeRepository.delete(fee);
     }
 
     @Transactional

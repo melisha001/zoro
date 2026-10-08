@@ -15,6 +15,7 @@ public class AdminDashboardService {
     private final CourseRepository courseRepository;
     private final BatchRepository batchRepository;
     private final StudentFeeRepository feeRepository;
+    private final FeePaymentRepository paymentRepository;
     private final ExpenseRepository expenseRepository;
     private final SalaryRecordRepository salaryRepository;
     private final CompetitionRegistrationRepository compRegRepository;
@@ -26,6 +27,7 @@ public class AdminDashboardService {
             CourseRepository courseRepository,
             BatchRepository batchRepository,
             StudentFeeRepository feeRepository,
+            FeePaymentRepository paymentRepository,
             ExpenseRepository expenseRepository,
             SalaryRecordRepository salaryRepository,
             CompetitionRegistrationRepository compRegRepository,
@@ -35,6 +37,7 @@ public class AdminDashboardService {
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
         this.feeRepository = feeRepository;
+        this.paymentRepository = paymentRepository;
         this.expenseRepository = expenseRepository;
         this.salaryRepository = salaryRepository;
         this.compRegRepository = compRegRepository;
@@ -46,72 +49,48 @@ public class AdminDashboardService {
     public Map<String, Object> getDashboardData() {
         Map<String, Object> data = new HashMap<>();
 
-        // 1. User & Course counts
+        // 1. User & Course counts via COUNT(*)
         long studentCount = userRepository.countByRole("STUDENT");
         long trainerCount = userRepository.countByRole("TRAINER");
         long courseCount = courseRepository.count();
         long batchCount = batchRepository.count();
 
-        // 2. Financial Metrics from Database
-        List<StudentFee> allFees = feeRepository.findAll();
-        BigDecimal studentFeeIncome = allFees.stream()
-                .map(f -> f.getPaidAmount() != null ? f.getPaidAmount() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        BigDecimal pendingDues = allFees.stream()
-                .map(f -> f.getDueAmount() != null ? f.getDueAmount() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        List<CompetitionRegistration> compRegs = compRegRepository.findAll();
-        BigDecimal competitionIncome = compRegs.stream()
-                .filter(r -> "Paid".equalsIgnoreCase(r.getPaymentStatus()))
-                .map(r -> (r.getCompetition() != null && r.getCompetition().getRegistrationFee() != null)
-                        ? r.getCompetition().getRegistrationFee()
-                        : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // 2. Financial Metrics via SUM(*) queries
+        BigDecimal studentFeeIncome = feeRepository.sumTotalPaidAmount();
+        BigDecimal pendingDues = feeRepository.sumTotalDueAmount();
+        BigDecimal competitionIncome = compRegRepository.sumPaidCompetitionFees();
 
         BigDecimal totalIncome = studentFeeIncome.add(competitionIncome);
 
-        List<Expense> allExpenses = expenseRepository.findAll();
-        BigDecimal manualExpenses = allExpenses.stream()
-                .map(e -> e.getAmount() != null ? e.getAmount() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        List<SalaryRecord> allSalaries = salaryRepository.findAll();
-        BigDecimal salaryExpenses = allSalaries.stream()
-                .filter(s -> "Paid".equalsIgnoreCase(s.getStatus()))
-                .map(s -> s.getAmount() != null ? s.getAmount() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal manualExpenses = expenseRepository.sumTotalAmount();
+        BigDecimal salaryExpenses = salaryRepository.sumPaidSalaries();
 
         BigDecimal totalExpenses = manualExpenses.add(salaryExpenses);
         BigDecimal netBalance = totalIncome.subtract(totalExpenses);
 
-        // 3. Attendance
-        List<AttendanceRecord> attendanceRecords = attendanceRepository.findAll();
-        long presentCount = attendanceRecords.stream()
-                .filter(r -> "PRESENT".equalsIgnoreCase(r.getStatus()) || "Present".equalsIgnoreCase(r.getStatus()))
-                .count();
-        long totalAttendanceRecords = attendanceRecords.size();
+        // 3. Attendance via DB COUNT queries
+        long presentCount = attendanceRepository.countByStatusIgnoreCase("Present") + attendanceRepository.countByStatusIgnoreCase("PRESENT");
+        long totalAttendanceRecords = attendanceRepository.count();
         int attendanceRate = totalAttendanceRecords > 0
                 ? (int) Math.round(((double) presentCount / totalAttendanceRecords) * 100)
                 : 0;
 
-        // 4. Monthly admissions & collections trends
+        // 4. Monthly admissions & collections trends via real GROUP BY queries
         List<Map<String, Object>> monthlyAdmissions = new ArrayList<>();
-        List<Map<String, Object>> monthlyCollections = new ArrayList<>();
-        String[] months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"};
-        for (String m : months) {
+        List<Object[]> admRows = userRepository.findMonthlyStudentRegistrations();
+        for (Object[] row : admRows) {
             Map<String, Object> adm = new HashMap<>();
-            adm.put("month", m);
-            adm.put("students", Math.max(0, studentCount > 0 ? (int)(studentCount / 9 + (m.hashCode() % 3)) : 0));
+            adm.put("month", row[0] != null ? row[0].toString() : "Unknown");
+            adm.put("students", row[1] != null ? ((Number) row[1]).longValue() : 0L);
             monthlyAdmissions.add(adm);
+        }
 
+        List<Map<String, Object>> monthlyCollections = new ArrayList<>();
+        List<Object[]> colRows = paymentRepository.findMonthlyCollections();
+        for (Object[] row : colRows) {
             Map<String, Object> col = new HashMap<>();
-            col.put("month", m);
-            BigDecimal mVal = studentFeeIncome.compareTo(BigDecimal.ZERO) > 0
-                    ? studentFeeIncome.divide(BigDecimal.valueOf(9), 2, java.math.RoundingMode.HALF_UP)
-                    : BigDecimal.ZERO;
-            col.put("fees", mVal);
+            col.put("month", row[0] != null ? row[0].toString() : "Unknown");
+            col.put("fees", row[1] != null ? row[1] : BigDecimal.ZERO);
             monthlyCollections.add(col);
         }
 

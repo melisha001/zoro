@@ -100,6 +100,18 @@ public class CompetitionService {
             });
         }
 
+        // Idempotency check: 409 Conflict if already registered
+        if (reg.getStudentEmail() != null && !reg.getStudentEmail().isBlank()) {
+            if (registrationRepository.findByCompetitionIdAndStudentEmailIgnoreCase(compId, reg.getStudentEmail()).isPresent()) {
+                throw new com.zoroacademy.exception.ConflictException("Student with email " + reg.getStudentEmail() + " is already registered for this competition");
+            }
+        }
+        if (reg.getStudentId() != null && !reg.getStudentId().isBlank()) {
+            if (registrationRepository.findByCompetitionIdAndStudentId(compId, reg.getStudentId()).isPresent()) {
+                throw new com.zoroacademy.exception.ConflictException("Student is already registered for this competition");
+            }
+        }
+
         reg.setCompetition(comp);
         return registrationRepository.save(reg);
     }

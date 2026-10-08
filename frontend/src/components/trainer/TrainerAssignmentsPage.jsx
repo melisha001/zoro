@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, BookOpen, AlertTriangle, X, Eye, Users, Layers, Check } from 'lucide-react';
+import { Plus, Search, BookOpen, AlertTriangle, X, Eye, Users, Layers, Check, Edit, Trash2 } from 'lucide-react';
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
-import { getCreatedAssignments, createExtraAssignment } from '../../api/assignmentApi';
+import { getCreatedAssignments, createExtraAssignment, updateAssignment, deleteAssignment } from '../../api/assignmentApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { getStudents } from '../../api/userApi';
@@ -18,6 +18,7 @@ export default function TrainerAssignmentsPage() {
   const [selectedBatch, setSelectedBatch] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [allowCreation, setAllowCreation] = useState(true);
+  const [editingAssignmentId, setEditingAssignmentId] = useState(null);
 
   const [assignments, setAssignments] = useState([]);
   const [coursesList, setCoursesList] = useState([]);
@@ -146,9 +147,39 @@ export default function TrainerAssignmentsPage() {
       attachmentType: 'application/pdf',
       attachmentSize: ''
     });
+    setEditingAssignmentId(null);
     setSelectedStudentObjects([]);
     setShowCreateModal(true);
     setShowPreviewModal(false);
+  };
+
+  const handleEditAssignment = (item) => {
+    setEditingAssignmentId(item.id);
+    setFormData({
+      title: item.title || '',
+      description: item.description || '',
+      course: item.course || '',
+      targetType: item.targetType || 'batch',
+      targetBatch: item.batch || '',
+      dueDate: item.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      attachmentName: item.attachment?.name || '',
+      attachmentUrl: item.attachment?.url || '',
+      attachmentType: item.attachment?.type || 'application/pdf',
+      attachmentSize: item.attachment?.size || ''
+    });
+    setSelectedStudentObjects([]);
+    setShowCreateModal(true);
+    setShowPreviewModal(false);
+  };
+
+  const handleDeleteAssignment = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this assignment?')) return;
+    const res = await deleteAssignment(id);
+    if (res.success) {
+      setToastMsg('Assignment deleted successfully');
+      setTimeout(() => setToastMsg(''), 3000);
+      loadAllData();
+    }
   };
 
   const handleFormNextOrSubmit = (e) => {
@@ -201,17 +232,22 @@ export default function TrainerAssignmentsPage() {
       dueDate: formData.dueDate,
       attachment: formData.attachmentName ? {
         name: formData.attachmentName,
-        url: formData.attachmentUrl || 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+        url: formData.attachmentUrl || '',
         type: formData.attachmentType,
-        size: formData.attachmentSize || '500 KB'
+        size: formData.attachmentSize || ''
       } : null
     };
 
-    await createExtraAssignment(payload);
+    if (editingAssignmentId) {
+      await updateAssignment(editingAssignmentId, payload);
+      setToastMsg('Assignment updated successfully!');
+    } else {
+      await createExtraAssignment(payload);
+      setToastMsg('Extra Assignment created successfully & synced to Admin Portal!');
+    }
     setSavingAsg(false);
     setShowPreviewModal(false);
     setShowCreateModal(false);
-    setToastMsg('Extra Assignment created successfully & synced to Admin Portal!');
     setTimeout(() => setToastMsg(''), 3000);
     loadAllData();
   };
@@ -355,17 +391,33 @@ export default function TrainerAssignmentsPage() {
                     </td>
                     <td className="py-4 px-4 text-slate-600 font-bold">{item.dueDate}</td>
                     <td className="py-4 px-4 text-right">
-                      {item.attachment ? (
+                      <div className="flex items-center justify-end space-x-1.5">
+                        {item.attachment && (
+                          <button
+                            onClick={() => setViewerFile(item.attachment)}
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] px-2.5 py-1.5 rounded-xl border border-blue-200 inline-flex items-center space-x-1 cursor-pointer"
+                            title="View Attachment"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-blue-600" />
+                            <span>View</span>
+                          </button>
+                        )}
                         <button
-                          onClick={() => setViewerFile(item.attachment)}
-                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] px-3.5 py-1.5 rounded-xl border border-blue-200 inline-flex items-center space-x-1 cursor-pointer"
+                          onClick={() => handleEditAssignment(item)}
+                          className="bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-[11px] px-2.5 py-1.5 rounded-xl border border-amber-200 inline-flex items-center space-x-1 cursor-pointer"
+                          title="Edit Assignment"
                         >
-                          <Eye className="w-3.5 h-3.5 text-blue-600" />
-                          <span>View File</span>
+                          <Edit className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Edit</span>
                         </button>
-                      ) : (
-                        <span className="text-slate-400 text-[11px] italic">No attachment</span>
-                      )}
+                        <button
+                          onClick={() => handleDeleteAssignment(item.id)}
+                          className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] px-2 py-1.5 rounded-xl border border-rose-200 inline-flex items-center cursor-pointer"
+                          title="Delete Assignment"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -394,7 +446,7 @@ export default function TrainerAssignmentsPage() {
 
             <div>
               <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Extra Assignment</span>
-              <h3 className="text-xl font-black text-slate-900">Create New Assignment</h3>
+              <h3 className="text-xl font-black text-slate-900">{editingAssignmentId ? 'Edit Assignment' : 'Create New Assignment'}</h3>
               <p className="text-xs text-slate-500 font-semibold">Assign tasks to an entire batch, all students in a course, or specific individual students.</p>
             </div>
 

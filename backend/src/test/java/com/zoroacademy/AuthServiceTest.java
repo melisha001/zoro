@@ -119,6 +119,11 @@ class AuthServiceTest {
             return "STUDENT".equalsIgnoreCase(role) ? 1 : 0;
         }
 
+        @Override
+        public List<Object[]> findMonthlyStudentRegistrations() {
+            return Collections.emptyList();
+        }
+
         @Override public void flush() {}
         @Override public <S extends User> S saveAndFlush(S entity) { return entity; }
         @Override public <S extends User> List<S> saveAllAndFlush(Iterable<S> entities) { return Collections.emptyList(); }

@@ -18,6 +18,9 @@ public class Course {
     @Column(length = 128)
     private String id;
 
+    @Column(unique = true, length = 160)
+    private String slug;
+
     @Column(nullable = false)
     private String title;
 
@@ -113,6 +116,14 @@ public class Course {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getSlug() {
+        return slug;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
     }
 
     public String getTitle() {
@@ -377,13 +388,22 @@ public class Course {
             this.createdAt = createdAt;
             return this;
         }
+        private String slug;
+
+        public Builder slug(String slug) {
+            this.slug = slug;
+            return this;
+        }
+
         public Builder updatedAt(LocalDateTime updatedAt) {
             this.updatedAt = updatedAt;
             return this;
         }
 
         public Course build() {
-            return new Course(id, title, description, category, mode, level, audience, duration, price, originalPrice, thumbnail, previewVideoUrl, enrolled, rating, status, assignedTrainer, modules, resources, createdAt, updatedAt);
+            Course c = new Course(id, title, description, category, mode, level, audience, duration, price, originalPrice, thumbnail, previewVideoUrl, enrolled, rating, status, assignedTrainer, modules, resources, createdAt, updatedAt);
+            c.setSlug(slug);
+            return c;
         }
     }
 

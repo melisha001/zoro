@@ -15,4 +15,6 @@ public interface CourseRepository extends JpaRepository<Course, String> {
     List<Course> findByAssignedTrainerIgnoreCase(String assignedTrainer);
     List<Course> findByTrainerIdOrAssignedTrainerIgnoreCase(String trainerId, String assignedTrainer);
     java.util.Optional<Course> findByTitleIgnoreCase(String title);
+    java.util.Optional<Course> findBySlug(String slug);
+    boolean existsBySlug(String slug);
 }

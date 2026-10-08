@@ -9,4 +9,7 @@ import java.util.List;
 @Repository
 public interface ExpenseRepository extends JpaRepository<Expense, String> {
     List<Expense> findByCategoryIgnoreCase(String category);
+
+    @org.springframework.data.jpa.repository.Query("SELECT COALESCE(SUM(e.amount), 0) FROM Expense e")
+    java.math.BigDecimal sumTotalAmount();
 }

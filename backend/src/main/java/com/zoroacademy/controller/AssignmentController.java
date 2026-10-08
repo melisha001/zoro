@@ -21,13 +21,21 @@ public class AssignmentController {
     // --- ASSIGNMENTS ---
 
     @GetMapping("/api/assignments")
-    public ApiResponse<List<Assignment>> getAssignments() {
+    public ApiResponse<List<Assignment>> getAssignments(@RequestParam(required = false) String studentId) {
+        if (studentId != null && !studentId.isBlank()) {
+            return ApiResponse.ok(assignmentService.getAssignmentsForStudent(studentId));
+        }
         return ApiResponse.ok(assignmentService.getAllAssignments());
     }
 
     @PostMapping("/api/assignments")
     public ApiResponse<Assignment> createAssignment(@RequestBody Assignment assignment) {
         return ApiResponse.ok(assignmentService.createAssignment(assignment), "Assignment created");
+    }
+
+    @PutMapping("/api/assignments/{id}")
+    public ApiResponse<Assignment> updateAssignment(@PathVariable String id, @RequestBody Assignment assignment) {
+        return ApiResponse.ok(assignmentService.updateAssignment(id, assignment), "Assignment updated successfully");
     }
 
     // --- SUBMISSIONS ---

@@ -39,14 +39,26 @@ public class FeeController {
         return ApiResponse.ok(feeService.createFeeRecord(fee), "Fee record created");
     }
 
+    @PutMapping("/{id}")
+    public ApiResponse<StudentFee> updateFeeRecord(@PathVariable String id, @RequestBody StudentFee fee) {
+        return ApiResponse.ok(feeService.updateFeeRecord(id, fee), "Fee record updated successfully");
+    }
+
     @PostMapping("/{id}/payments")
-    public ApiResponse<StudentFee> recordPayment(@PathVariable String id, @RequestBody Map<String, Object> body) {
+    public ApiResponse<StudentFee> recordPayment(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Razorpay-Signature", required = false) String headerSig,
+            @RequestBody Map<String, Object> body) {
         BigDecimal amount = new BigDecimal(body.get("amount").toString());
         String method = (String) body.get("paymentMethod");
         String ref = (String) body.get("transactionRef");
         String notes = (String) body.get("notes");
 
-        StudentFee updated = feeService.recordPayment(id, amount, method, ref, notes);
+        String orderId = (String) body.getOrDefault("orderId", body.getOrDefault("razorpayOrderId", body.get("razorpay_order_id")));
+        String bodySig = (String) body.getOrDefault("razorpaySignature", body.get("razorpay_signature"));
+        String signature = (headerSig != null && !headerSig.isBlank()) ? headerSig : bodySig;
+
+        StudentFee updated = feeService.recordPayment(id, amount, method, ref, notes, orderId, signature);
         return ApiResponse.ok(updated, "Payment recorded successfully");
     }
 

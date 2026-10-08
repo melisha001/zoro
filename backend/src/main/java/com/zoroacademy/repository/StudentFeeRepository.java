@@ -15,4 +15,12 @@ public interface StudentFeeRepository extends JpaRepository<StudentFee, String> 
     List<StudentFee> findByStatusIgnoreCase(String status);
     Optional<StudentFee> findByStudentIdAndCourseId(String studentId, String courseId);
     Optional<StudentFee> findByStudentIdAndCourseIgnoreCase(String studentId, String course);
+
+    @org.springframework.data.jpa.repository.Query("SELECT COALESCE(SUM(f.paidAmount), 0) FROM StudentFee f")
+    java.math.BigDecimal sumTotalPaidAmount();
+
+    @org.springframework.data.jpa.repository.Query("SELECT COALESCE(SUM(f.dueAmount), 0) FROM StudentFee f")
+    java.math.BigDecimal sumTotalDueAmount();
+
+    long countByStatusIgnoreCase(String status);
 }

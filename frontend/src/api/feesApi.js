@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiDelete, apiResponse } from './client';
+import { apiGet, apiPost, apiPut, apiDelete, apiResponse } from './client';
 
 /**
  * Student Fees API
@@ -50,6 +50,14 @@ export const createFeeRecord = async (newFeeData) => {
     return apiResponse(res.data, true, 'Fee record created');
   }
   return apiResponse(null, false, res.message || 'Failed to create fee record');
+};
+
+export const updateFeeRecord = async (id, updatedFeeData) => {
+  const res = await apiPut(`/fees/${id}`, updatedFeeData);
+  if (res.success && res.data) {
+    return apiResponse(res.data, true, 'Fee record updated successfully');
+  }
+  return apiResponse(null, false, res.message || 'Failed to update fee record');
 };
 
 export const recordStudentPayment = async (id, amount, method = 'Online', ref = '', notes = '') => {

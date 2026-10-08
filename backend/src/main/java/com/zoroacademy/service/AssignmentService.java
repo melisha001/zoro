@@ -19,6 +19,7 @@ public class AssignmentService {
     private final com.zoroacademy.repository.CourseRepository courseRepository;
     private final com.zoroacademy.repository.BatchRepository batchRepository;
     private final com.zoroacademy.repository.UserRepository userRepository;
+    private final com.zoroacademy.repository.StudentCourseBatchRepository studentCourseBatchRepository;
     private final NotificationService notificationService;
     private final ActivityLogService activityLogService;
 
@@ -27,6 +28,7 @@ public class AssignmentService {
                              com.zoroacademy.repository.CourseRepository courseRepository,
                              com.zoroacademy.repository.BatchRepository batchRepository,
                              com.zoroacademy.repository.UserRepository userRepository,
+                             com.zoroacademy.repository.StudentCourseBatchRepository studentCourseBatchRepository,
                              NotificationService notificationService,
                              ActivityLogService activityLogService) {
         this.assignmentRepository = assignmentRepository;
@@ -34,6 +36,7 @@ public class AssignmentService {
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
         this.userRepository = userRepository;
+        this.studentCourseBatchRepository = studentCourseBatchRepository;
         this.notificationService = notificationService;
         this.activityLogService = activityLogService;
     }
@@ -96,6 +99,55 @@ public class AssignmentService {
         return saved;
     }
 
+    @Transactional
+    public Assignment updateAssignment(String id, Assignment updated) {
+        Assignment existing = assignmentRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Assignment not found: " + id));
+
+        if (updated.getTitle() != null) existing.setTitle(updated.getTitle());
+        if (updated.getDescription() != null) existing.setDescription(updated.getDescription());
+        if (updated.getDueDate() != null) existing.setDueDate(updated.getDueDate());
+        if (updated.getAttachment() != null) existing.setAttachment(updated.getAttachment());
+        if (updated.getCourseId() != null) existing.setCourseId(updated.getCourseId());
+        if (updated.getCourse() != null) existing.setCourse(updated.getCourse());
+        if (updated.getBatchId() != null) existing.setBatchId(updated.getBatchId());
+        if (updated.getBatch() != null) existing.setBatch(updated.getBatch());
+        if (updated.getTrainerId() != null) existing.setTrainerId(updated.getTrainerId());
+        if (updated.getTrainer() != null) existing.setTrainer(updated.getTrainer());
+
+        // Re-resolve course if needed
+        if (existing.getCourseId() != null && !existing.getCourseId().isBlank()) {
+            courseRepository.findById(existing.getCourseId()).ifPresent(c -> existing.setCourse(c.getTitle()));
+        }
+        // Re-resolve batch if needed
+        if (existing.getBatchId() != null && !existing.getBatchId().isBlank() && !"All".equalsIgnoreCase(existing.getBatchId())) {
+            batchRepository.findById(existing.getBatchId()).ifPresent(b -> existing.setBatch(b.getName()));
+        } else if ("All".equalsIgnoreCase(existing.getBatchId()) || existing.getBatchId() == null) {
+            existing.setBatch("All");
+        }
+        // Re-resolve trainer if needed
+        if (existing.getTrainerId() != null && !existing.getTrainerId().isBlank()) {
+            userRepository.findById(existing.getTrainerId()).ifPresent(u -> existing.setTrainer(u.getName()));
+        }
+
+        return assignmentRepository.save(existing);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Assignment> getAssignmentsForStudent(String studentId) {
+        List<com.zoroacademy.entity.StudentCourseBatch> scbs = studentCourseBatchRepository.findByStudentId(studentId);
+        java.util.Set<String> courseIds = scbs.stream().map(com.zoroacademy.entity.StudentCourseBatch::getCourseId).collect(java.util.stream.Collectors.toSet());
+        java.util.Set<String> batchIds = scbs.stream().map(com.zoroacademy.entity.StudentCourseBatch::getBatchId).collect(java.util.stream.Collectors.toSet());
+
+        return assignmentRepository.findAll().stream()
+                .filter(a -> {
+                    boolean matchCourse = a.getCourseId() != null && courseIds.contains(a.getCourseId());
+                    boolean matchBatch = a.getBatchId() == null || "All".equalsIgnoreCase(a.getBatchId()) || batchIds.contains(a.getBatchId());
+                    return matchCourse && matchBatch;
+                })
+                .collect(java.util.stream.Collectors.toList());
+    }
+
     @Transactional(readOnly = true)
     public List<AssignmentSubmission> getAllSubmissions() {
         return submissionRepository.findAll();
@@ -146,6 +198,17 @@ public class AssignmentService {
                 if (submission.getBatchName() == null) submission.setBatchName(a.getBatch());
                 if (submission.getTrainerId() == null) submission.setTrainerId(a.getTrainerId());
                 if (submission.getAssignedTrainer() == null) submission.setAssignedTrainer(a.getTrainer());
+
+                // Enforce batch targeting: when assignment has batch_id (not null and not "All"), only students in that batch can submit
+                if (a.getBatchId() != null && !a.getBatchId().isBlank() && !"All".equalsIgnoreCase(a.getBatchId())) {
+                    if (submission.getStudentId() != null && !submission.getStudentId().isBlank()) {
+                        boolean inBatch = studentCourseBatchRepository.findByStudentId(submission.getStudentId()).stream()
+                                .anyMatch(scb -> a.getBatchId().equals(scb.getBatchId()));
+                        if (!inBatch) {
+                            throw new IllegalArgumentException("Student is not assigned to batch " + (a.getBatch() != null ? a.getBatch() : a.getBatchId()) + " for this assignment");
+                        }
+                    }
+                }
             });
         }
 

@@ -17,4 +17,7 @@ public interface UserRepository extends JpaRepository<User, String> {
     long countByRole(String role);
     boolean existsByEmailIgnoreCase(String email);
     boolean existsByUsernameIgnoreCase(String username);
+
+    @org.springframework.data.jpa.repository.Query("SELECT SUBSTRING(u.joinDate, 1, 7) AS month, COUNT(u) AS total FROM User u WHERE UPPER(u.role) = 'STUDENT' AND u.joinDate IS NOT NULL GROUP BY SUBSTRING(u.joinDate, 1, 7) ORDER BY SUBSTRING(u.joinDate, 1, 7) ASC")
+    List<Object[]> findMonthlyStudentRegistrations();
 }

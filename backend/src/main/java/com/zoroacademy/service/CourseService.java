@@ -57,15 +57,44 @@ public class CourseService {
     }
 
     @Transactional(readOnly = true)
-    public Course getCourseById(String id) {
-        return courseRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
+    public Course getCourseById(String idOrSlug) {
+        return courseRepository.findById(idOrSlug)
+                .or(() -> courseRepository.findBySlug(idOrSlug))
+                .orElseThrow(() -> new IllegalArgumentException("Course not found: " + idOrSlug));
+    }
+
+    private String generateUniqueSlug(String titleOrSlug, String currentCourseId) {
+        if (titleOrSlug == null || titleOrSlug.isBlank()) {
+            return "course-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        }
+        String baseSlug = titleOrSlug.toLowerCase()
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-|-$)", "");
+        if (baseSlug.isBlank()) {
+            baseSlug = "course-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        }
+        String candidate = baseSlug;
+        int counter = 1;
+        while (true) {
+            java.util.Optional<Course> existing = courseRepository.findBySlug(candidate);
+            if (existing.isEmpty() || (currentCourseId != null && existing.get().getId().equals(currentCourseId))) {
+                return candidate;
+            }
+            counter++;
+            candidate = baseSlug + "-" + counter;
+        }
     }
 
     @Transactional
     public Course createCourse(Course course) {
         if (course.getId() == null || course.getId().isBlank()) {
-            course.setId(course.getTitle().toLowerCase().replaceAll("[^a-z0-9]+", "-"));
+            course.setId("crs_" + java.util.UUID.randomUUID());
+        }
+
+        if (course.getSlug() == null || course.getSlug().isBlank()) {
+            course.setSlug(generateUniqueSlug(course.getTitle(), null));
+        } else {
+            course.setSlug(generateUniqueSlug(course.getSlug(), null));
         }
 
         if (course.getTrainerId() != null && !course.getTrainerId().isBlank()) {
@@ -107,6 +136,12 @@ public class CourseService {
         if (updated.getEnrolled() != null) targetCourse.setEnrolled(updated.getEnrolled());
         if (updated.getRating() != null) targetCourse.setRating(updated.getRating());
         if (updated.getStatus() != null) targetCourse.setStatus(updated.getStatus());
+
+        if (updated.getSlug() != null && !updated.getSlug().isBlank()) {
+            targetCourse.setSlug(generateUniqueSlug(updated.getSlug(), targetCourse.getId()));
+        } else if (targetCourse.getSlug() == null || targetCourse.getSlug().isBlank()) {
+            targetCourse.setSlug(generateUniqueSlug(targetCourse.getTitle(), targetCourse.getId()));
+        }
 
         if (updated.getTrainerId() != null && !updated.getTrainerId().isBlank()) {
             targetCourse.setTrainerId(updated.getTrainerId());

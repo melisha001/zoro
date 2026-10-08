@@ -44,8 +44,9 @@ export default function AssignmentPage({ setActiveScreen }) {
       
       // Filter Extra Assignments targeted to this student
       const targetedAsgs = allAsgs.filter(asg => {
-        if (asg.targetType === 'course') return true;
-        if (asg.targetType === 'batch' && (asg.batch === studentBatch || asg.targetBatch === studentBatch || asg.targetName === studentBatch)) return true;
+        const isBatchAll = !asg.batch || asg.batch === 'All' || asg.targetBatch === 'All';
+        if (asg.targetType === 'course' || isBatchAll) return true;
+        if ((asg.targetType === 'batch' || asg.batch) && (asg.batch === studentBatch || asg.targetBatch === studentBatch || asg.targetName === studentBatch)) return true;
         if (asg.targetType === 'student') {
           if (asg.targetStudentEmail && asg.targetStudentEmail.toLowerCase() === studentIdentifier.toLowerCase()) return true;
           if (Array.isArray(asg.targetStudentEmails) && asg.targetStudentEmails.some(e => e.toLowerCase() === studentIdentifier.toLowerCase())) return true;
@@ -54,7 +55,7 @@ export default function AssignmentPage({ setActiveScreen }) {
         return false;
       });
 
-      setCreatedAssignments(targetedAsgs.length > 0 ? targetedAsgs : allAsgs);
+      setCreatedAssignments(targetedAsgs);
     } catch (err) {
       console.error('Error loading student assignments:', err);
     }

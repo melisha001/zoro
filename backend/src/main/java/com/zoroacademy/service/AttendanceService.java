@@ -54,6 +54,14 @@ public class AttendanceService {
             record.setDate(LocalDate.now().toString());
         }
 
+        if (record.getScheduleId() != null && !record.getScheduleId().isBlank()) {
+            scheduleRepository.findById(record.getScheduleId()).ifPresent(sch -> {
+                if (record.getCourseId() == null || record.getCourseId().isBlank()) record.setCourseId(sch.getCourseId());
+                if (record.getBatchId() == null || record.getBatchId().isBlank()) record.setBatchId(sch.getBatchId());
+                if (record.getDate() == null || record.getDate().isBlank()) record.setDate(sch.getDate());
+            });
+        }
+
         // Upsert by (studentId, scheduleId) if scheduleId is provided
         if (record.getScheduleId() != null && !record.getScheduleId().isBlank() && record.getStudentId() != null) {
             java.util.Optional<AttendanceRecord> existing = attendanceRepository.findByStudentIdAndScheduleId(record.getStudentId(), record.getScheduleId());
@@ -63,6 +71,8 @@ public class AttendanceService {
                 if (record.getRemarks() != null) att.setRemarks(record.getRemarks());
                 if (record.getDate() != null) att.setDate(record.getDate());
                 if (record.getRecordedBy() != null) att.setRecordedBy(record.getRecordedBy());
+                if (record.getCourseId() != null) att.setCourseId(record.getCourseId());
+                if (record.getBatchId() != null) att.setBatchId(record.getBatchId());
                 return attendanceRepository.save(att);
             }
         }
@@ -72,6 +82,11 @@ public class AttendanceService {
         }
 
         return attendanceRepository.save(record);
+    }
+
+    @Transactional
+    public AttendanceRecord markAttendance(AttendanceRecord record) {
+        return recordAttendance(record);
     }
 
     @Transactional

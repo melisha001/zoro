@@ -1,108 +1,46 @@
-import { getItem, setItem, apiResponse, apiGet, apiPost } from './client';
-import { getStudentEnrolledCourses } from './enrollmentApi';
+import { apiResponse, apiGet, apiPost } from './client';
 
-const PROGRESS_KEY = 'student_progress_db';
-
-const INITIAL_PROGRESS = [
-  {
-    studentId: 'arjun@student.com',
-    courseId: 'english-comm',
-    moduleId: 'mod-1',
-    lastPosition: 45, // seconds
-    completionPercentage: 100,
-    status: 'Completed',
-    lastAccessedTime: '2026-09-25T20:00:00.000Z'
-  },
-  {
-    studentId: 'arjun@student.com',
-    courseId: 'english-comm',
-    moduleId: 'mod-2',
-    lastPosition: 120, // seconds
-    completionPercentage: 50,
-    status: 'In Progress',
-    lastAccessedTime: '2026-09-25T21:30:00.000Z'
-  }
-];
+/**
+ * Student Video Watch Progress API
+ * 100% Database-backed via Spring Boot REST endpoints and PostgreSQL (student_module_progress).
+ * ZERO mock data. ZERO localStorage persistence.
+ */
 
 export const getStudentProgress = async (studentId, courseId) => {
-  // Try backend first
-  if (studentId && courseId) {
-    try {
-      const res = await apiGet(`/progress/${encodeURIComponent(studentId)}/${encodeURIComponent(courseId)}`);
-      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-        return apiResponse(res.data);
-      }
-    } catch (e) {
-      console.warn('[Progress] Backend fetch error:', e);
+  if (!studentId || !courseId) {
+    return apiResponse([]);
+  }
+  try {
+    const res = await apiGet(`/progress/${encodeURIComponent(studentId)}/${encodeURIComponent(courseId)}`);
+    if (res.success && Array.isArray(res.data)) {
+      return apiResponse(res.data);
     }
+  } catch (e) {
+    console.error('[Progress] Fetch error:', e);
   }
-
-  let allProgress = getItem(PROGRESS_KEY, null);
-  if (!allProgress) {
-    allProgress = INITIAL_PROGRESS;
-    setItem(PROGRESS_KEY, allProgress);
-  }
-
-  const sIdLower = (studentId || '').toLowerCase().trim();
-  const filtered = allProgress.filter(
-    p => (p.studentId || '').toLowerCase().trim() === sIdLower && p.courseId === courseId
-  );
-
-  return apiResponse(filtered);
+  return apiResponse([]);
 };
 
 export const updateModuleProgress = async ({ studentId, courseId, moduleId, lastPosition, completionPercentage, status }) => {
-  // Sync to backend
   try {
-    apiPost('/progress', {
+    const res = await apiPost('/progress', {
       studentId,
       courseId,
       moduleId,
       lastPosition,
       completionPercentage,
       status
-    }).catch(() => {});
-  } catch (e) {}
-
-  let allProgress = getItem(PROGRESS_KEY, INITIAL_PROGRESS);
-  const sIdLower = (studentId || '').toLowerCase().trim();
-
-  const existingIndex = allProgress.findIndex(
-    p => (p.studentId || '').toLowerCase().trim() === sIdLower &&
-         p.courseId === courseId &&
-         p.moduleId === moduleId
-  );
-
-  const calcStatus = status || (completionPercentage >= 80 ? 'Completed' : completionPercentage > 0 ? 'In Progress' : 'Not Started');
-
-  let updated;
-  if (existingIndex >= 0) {
-    updated = [...allProgress];
-    updated[existingIndex] = {
-      ...updated[existingIndex],
-      lastPosition: lastPosition !== undefined ? lastPosition : updated[existingIndex].lastPosition,
-      completionPercentage: completionPercentage !== undefined ? completionPercentage : updated[existingIndex].completionPercentage,
-      status: calcStatus,
-      lastAccessedTime: new Date().toISOString()
-    };
-  } else {
-    const newProg = {
-      studentId,
-      courseId,
-      moduleId,
-      lastPosition: lastPosition || 0,
-      completionPercentage: completionPercentage || 0,
-      status: calcStatus,
-      lastAccessedTime: new Date().toISOString()
-    };
-    updated = [newProg, ...allProgress];
+    });
+    if (res.success && res.data) {
+      return apiResponse(res.data, true, 'Progress saved successfully');
+    }
+  } catch (e) {
+    console.error('[Progress] Update error:', e);
   }
-
-  setItem(PROGRESS_KEY, updated);
-  return apiResponse(updated);
+  return apiResponse(null, false, 'Failed to save progress');
 };
 
-// Requirement #5 & #16: Secure Video Playback Authorization Check with Bunny Stream
+// Secure Video Playback Authorization Check with Bunny Stream
 export const authorizeVideoPlayback = async (studentId, courseId, moduleId) => {
   if (!studentId) {
     return apiResponse(null, false, 'Access Denied: Authentication required.');
@@ -127,4 +65,3 @@ export const authorizeVideoPlayback = async (studentId, courseId, moduleId) => {
     return apiResponse(null, false, err.message || 'Playback authorization failed.');
   }
 };
-

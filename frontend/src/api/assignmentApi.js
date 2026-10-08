@@ -6,8 +6,9 @@ import { apiGet, apiPost, apiPut, apiDelete, apiResponse } from './client';
  * ZERO mock data. ZERO localStorage persistence.
  */
 
-export const getAssignments = async () => {
-  const res = await apiGet('/assignments');
+export const getAssignments = async (studentId) => {
+  const endpoint = studentId ? `/assignments?studentId=${encodeURIComponent(studentId)}` : '/assignments';
+  const res = await apiGet(endpoint);
   if (res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
@@ -20,6 +21,14 @@ export const createAssignment = async (assignmentData) => {
     return apiResponse(res.data, true, 'Assignment published successfully');
   }
   return apiResponse(null, false, res.message || 'Failed to create assignment');
+};
+
+export const updateAssignment = async (id, assignmentData) => {
+  const res = await apiPut(`/assignments/${id}`, assignmentData);
+  if (res.success && res.data) {
+    return apiResponse(res.data, true, 'Assignment updated successfully');
+  }
+  return apiResponse(null, false, res.message || 'Failed to update assignment');
 };
 
 export const deleteAssignment = async (id) => {

@@ -12,4 +12,5 @@ public interface AttendanceRecordRepository extends JpaRepository<AttendanceReco
     List<AttendanceRecord> findByStudentId(String studentId);
     List<AttendanceRecord> findByDate(String date);
     java.util.Optional<AttendanceRecord> findByStudentIdAndScheduleId(String studentId, String scheduleId);
+    long countByStatusIgnoreCase(String status);
 }
