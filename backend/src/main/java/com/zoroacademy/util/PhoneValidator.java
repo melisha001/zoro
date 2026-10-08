@@ -30,4 +30,13 @@ public final class PhoneValidator {
         String sanitized = sanitize(phone);
         return INDIAN_PHONE_PATTERN.matcher(sanitized).matches();
     }
+
+    /**
+     * Asserts that string is a valid Indian 10-digit mobile number, throwing IllegalArgumentException otherwise.
+     */
+    public static void validate(String phone) {
+        if (!isValid(phone)) {
+            throw new IllegalArgumentException("Invalid phone number. Must be a valid 10-digit Indian mobile number starting with 6-9.");
+        }
+    }
 }

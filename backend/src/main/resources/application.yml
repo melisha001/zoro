@@ -1,5 +1,6 @@
 server:
   port: 8080
+  forward-headers-strategy: framework
 
 spring:
   application:
@@ -7,7 +8,7 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:zoro_academy}
     username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:password}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -24,13 +25,14 @@ spring:
 bunny:
   stream:
     library-id: ${BUNNY_LIBRARY_ID:770045}
-    api-key: ${BUNNY_API_KEY:0726be56-9703-46cd-a987ac2f79f2-558e-4b2c4}
+    api-key: ${BUNNY_API_KEY}
     cdn-host: ${BUNNY_CDN_HOST:vz-251d06e3-32f.b-cdn.net}
-    token-auth-key: ${BUNNY_TOKEN_AUTH_KEY:0726be56-9703-46cd-a987ac2f79f2-558e-4b2c4}
+    token-auth-key: ${BUNNY_TOKEN_AUTH_KEY}
     token-expiration-seconds: 7200
+    webhook-secret: ${BUNNY_WEBHOOK_SECRET:}
 
 jwt:
-  secret: ${JWT_SECRET:4a6f726f41636164656d795365637572654a57545365637265744b657932303236}
+  secret: ${JWT_SECRET}
   expiration: 86400000
 
 cors:

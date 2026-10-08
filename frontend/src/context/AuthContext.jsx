@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getItem, setItem } from '../api/client';
+import { getItem, setItem, setAuthToken, clearAuthSession } from '../api/client';
 
 const AuthContext = createContext();
 
@@ -12,10 +12,19 @@ export function AuthProvider({ children }) {
       setItem('user', user);
       setItem('role', user.role || role);
     } else {
-      localStorage.removeItem('zoro_english_academy_user');
-      localStorage.removeItem('zoro_english_academy_role');
+      clearAuthSession();
     }
   }, [user, role]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUser(null);
+      setRole(null);
+      clearAuthSession();
+    };
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+  }, []);
 
   const login = (userData) => {
     const formattedRole = (userData.role || 'STUDENT').toUpperCase();
@@ -41,8 +50,8 @@ export function AuthProvider({ children }) {
   const logout = () => {
     setUser(null);
     setRole(null);
-    localStorage.removeItem('zoro_english_academy_user');
-    localStorage.removeItem('zoro_english_academy_role');
+    setAuthToken(null);
+    clearAuthSession();
   };
 
   return (

@@ -5,34 +5,36 @@ import com.zoroacademy.dto.LoginResponse;
 import com.zoroacademy.dto.RegisterRequest;
 import com.zoroacademy.dto.UserDto;
 import com.zoroacademy.entity.User;
+import com.zoroacademy.exception.ConflictException;
 import com.zoroacademy.repository.UserRepository;
 import com.zoroacademy.security.JwtTokenProvider;
+import com.zoroacademy.util.PhoneValidator;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Service
 public class AuthService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuthService.class);
-
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
+
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
     }
 
-
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
         String identifier = request.getEmail() != null && !request.getEmail().isBlank() 
-                ? request.getEmail() 
+                ? request.getEmail().trim() 
                 : request.getUsername();
 
         if (identifier == null || identifier.isBlank()) {
@@ -42,13 +44,11 @@ public class AuthService {
         User user = userRepository.findByEmailIgnoreCase(identifier)
                 .or(() -> userRepository.findByUsernameIgnoreCase(identifier))
                 .or(() -> userRepository.findById(identifier))
-                .orElseThrow(() -> new IllegalArgumentException("User not found with email/username: " + identifier));
+                .orElseThrow(() -> new IllegalArgumentException("Invalid email/username or password"));
 
+        // Strictly verify password via BCrypt. No hardcoded or plaintext fallbacks.
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            // Also accept plain text password if stored before migration or in demo mode
-            if (!request.getPassword().equals(user.getPassword()) && !"password123".equals(request.getPassword()) && !"admin123".equals(request.getPassword())) {
-                throw new IllegalArgumentException("Invalid password");
-            }
+            throw new IllegalArgumentException("Invalid email/username or password");
         }
 
         String token = tokenProvider.generateTokenFromUsername(
@@ -63,32 +63,47 @@ public class AuthService {
 
     @Transactional
     public UserDto register(RegisterRequest request) {
-        if (userRepository.existsByEmailIgnoreCase(request.getEmail())) {
-            throw new IllegalArgumentException("Email is already registered: " + request.getEmail());
+        if (request.getEmail() == null || request.getEmail().isBlank()) {
+            throw new IllegalArgumentException("Email is required");
+        }
+        String cleanEmail = request.getEmail().toLowerCase().trim();
+        if (!EMAIL_PATTERN.matcher(cleanEmail).matches()) {
+            throw new IllegalArgumentException("Invalid email format: " + cleanEmail);
         }
 
-        String id = request.getId();
-        if (id == null || id.isBlank()) {
-            String rolePrefix = "std";
-            if ("ADMIN".equalsIgnoreCase(request.getRole())) rolePrefix = "admin";
-            else if ("TRAINER".equalsIgnoreCase(request.getRole())) rolePrefix = "trn";
-            id = rolePrefix + "_" + System.currentTimeMillis();
+        if (userRepository.existsByEmailIgnoreCase(cleanEmail)) {
+            throw new ConflictException("Email is already registered: " + cleanEmail);
         }
+
+        if (request.getPassword() == null || request.getPassword().length() < 8) {
+            throw new IllegalArgumentException("Password must be at least 8 characters long");
+        }
+
+        String cleanUsername = request.getUsername() != null && !request.getUsername().isBlank()
+                ? request.getUsername().trim()
+                : cleanEmail;
+        if (userRepository.existsByUsernameIgnoreCase(cleanUsername)) {
+            throw new ConflictException("Username is already taken: " + cleanUsername);
+        }
+
+        String phone = request.getPhone();
+        if (phone != null && !phone.isBlank()) {
+            PhoneValidator.validate(phone);
+            phone = PhoneValidator.sanitize(phone);
+        }
+
+        // Public registration always assigns role STUDENT
+        String id = "std_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
 
         User user = User.builder()
                 .id(id)
-                .email(request.getEmail().toLowerCase().trim())
-                .username(request.getUsername() != null ? request.getUsername().trim() : request.getEmail())
+                .email(cleanEmail)
+                .username(cleanUsername)
                 .password(passwordEncoder.encode(request.getPassword()))
-                .name(request.getName())
-                .role(request.getRole() != null ? request.getRole().toUpperCase() : "STUDENT")
-                .phone(request.getPhone())
+                .name(request.getName() != null ? request.getName().trim() : "Student")
+                .role("STUDENT")
+                .phone(phone)
                 .address(request.getAddress())
-                .specialty(request.getSpecialty())
-                .code(request.getCode())
-                .salaryAmount(request.getSalaryAmount())
-                .salaryCreditDate(request.getSalaryCreditDate())
-                .course(request.getCourse())
                 .status("Active")
                 .build();
 

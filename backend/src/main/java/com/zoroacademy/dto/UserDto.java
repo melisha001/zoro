@@ -19,6 +19,7 @@ public class UserDto {
     private BigDecimal salaryAmount;
     private String salaryCreditDate;
     private String course;
+    private String temporaryPassword;
     private java.util.List<java.util.Map<String, Object>> courseBatches;
 
     public UserDto() {}
@@ -73,6 +74,8 @@ public class UserDto {
     public void setSalaryCreditDate(String salaryCreditDate) { this.salaryCreditDate = salaryCreditDate; }
     public String getCourse() { return course; }
     public void setCourse(String course) { this.course = course; }
+    public String getTemporaryPassword() { return temporaryPassword; }
+    public void setTemporaryPassword(String temporaryPassword) { this.temporaryPassword = temporaryPassword; }
     public java.util.List<java.util.Map<String, Object>> getCourseBatches() { return courseBatches; }
     public void setCourseBatches(java.util.List<java.util.Map<String, Object>> courseBatches) { this.courseBatches = courseBatches; }
 
@@ -115,6 +118,7 @@ public class UserDto {
         private BigDecimal salaryAmount;
         private String salaryCreditDate;
         private String course;
+        private String temporaryPassword;
 
         public Builder id(String id) { this.id = id; return this; }
         public Builder email(String email) { this.email = email; return this; }
@@ -131,9 +135,13 @@ public class UserDto {
         public Builder salaryAmount(BigDecimal salaryAmount) { this.salaryAmount = salaryAmount; return this; }
         public Builder salaryCreditDate(String salaryCreditDate) { this.salaryCreditDate = salaryCreditDate; return this; }
         public Builder course(String course) { this.course = course; return this; }
+        public Builder temporaryPassword(String temporaryPassword) { this.temporaryPassword = temporaryPassword; return this; }
 
         public UserDto build() {
-            return new UserDto(id, email, username, name, role, phone, avatar, status, address, joinedOn, specialty, code, salaryAmount, salaryCreditDate, course);
+            UserDto dto = new UserDto(id, email, username, name, role, phone, avatar, status, address, joinedOn, specialty, code, salaryAmount, salaryCreditDate, course);
+            dto.setTemporaryPassword(temporaryPassword);
+            return dto;
         }
+
     }
 }

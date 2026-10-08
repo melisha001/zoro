@@ -91,26 +91,69 @@ public class UserService {
         return convertUserToDto(user);
     }
 
+    private String generateTemporaryPassword() {
+        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$";
+        StringBuilder sb = new StringBuilder();
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        for (int i = 0; i < 10; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
+    }
+
     @Transactional
     public UserDto saveStudent(UserDto dto) {
+        if (dto.getEmail() == null || dto.getEmail().isBlank()) {
+            throw new IllegalArgumentException("Student email is required");
+        }
+        final String cleanEmail = dto.getEmail().trim().toLowerCase();
+        final String cleanUsername = dto.getUsername() != null && !dto.getUsername().isBlank()
+                ? dto.getUsername().trim()
+                : cleanEmail;
+
         final String userId = (dto.getId() != null && !dto.getId().isBlank()) 
                 ? dto.getId() 
                 : "std_" + System.currentTimeMillis();
 
+        // Prevent duplicate email with another account
+        userRepository.findByEmailIgnoreCase(cleanEmail).ifPresent(existing -> {
+            if (!existing.getId().equals(userId)) {
+                throw new com.zoroacademy.exception.ConflictException("Email is already registered: " + cleanEmail);
+            }
+        });
+
+        // Prevent duplicate username with another account
+        userRepository.findByUsernameIgnoreCase(cleanUsername).ifPresent(existing -> {
+            if (!existing.getId().equals(userId)) {
+                throw new com.zoroacademy.exception.ConflictException("Username is already taken: " + cleanUsername);
+            }
+        });
+
         User user = userRepository.findById(userId).orElseGet(() -> User.builder().id(userId).role("STUDENT").build());
-        user.setEmail(dto.getEmail());
-        user.setName(dto.getName());
-        user.setUsername(dto.getUsername() != null ? dto.getUsername() : dto.getEmail());
-        user.setPhone(dto.getPhone());
+        user.setEmail(cleanEmail);
+        user.setName(dto.getName() != null ? dto.getName().trim() : "Student");
+        user.setUsername(cleanUsername);
+
+        if (dto.getPhone() != null && !dto.getPhone().isBlank()) {
+            PhoneValidator.validate(dto.getPhone());
+            user.setPhone(PhoneValidator.sanitize(dto.getPhone()));
+        } else {
+            user.setPhone(null);
+        }
+
         user.setAddress(dto.getAddress());
         user.setJoinedOn(dto.getJoinedOn());
         user.setStatus(dto.getStatus() != null ? dto.getStatus() : "Active");
         user.setCourse(dto.getCourse());
-        if (user.getPassword() == null) {
-            user.setPassword(passwordEncoder.encode("password123"));
+
+        String generatedTempPassword = null;
+        if (user.getPassword() == null || user.getPassword().isBlank()) {
+            generatedTempPassword = generateTemporaryPassword();
+            user.setPassword(passwordEncoder.encode(generatedTempPassword));
         }
 
         user = userRepository.save(user);
+
 
         // Relational course-batch & enrollment synchronization
         if (dto.getCourseBatches() != null) {
@@ -192,20 +235,53 @@ public class UserService {
             }
         }
 
-        return convertUserToDto(user);
+        UserDto resultDto = convertUserToDto(user);
+        if (generatedTempPassword != null) {
+            resultDto.setTemporaryPassword(generatedTempPassword);
+        }
+        return resultDto;
     }
 
     @Transactional
     public UserDto saveTrainer(UserDto dto) {
+        if (dto.getEmail() == null || dto.getEmail().isBlank()) {
+            throw new IllegalArgumentException("Trainer email is required");
+        }
+        final String cleanEmail = dto.getEmail().trim().toLowerCase();
+        final String cleanUsername = dto.getUsername() != null && !dto.getUsername().isBlank()
+                ? dto.getUsername().trim()
+                : cleanEmail;
+
         final String userId = (dto.getId() != null && !dto.getId().isBlank()) 
                 ? dto.getId() 
                 : "trn_" + System.currentTimeMillis();
 
+        // Prevent duplicate email with another account
+        userRepository.findByEmailIgnoreCase(cleanEmail).ifPresent(existing -> {
+            if (!existing.getId().equals(userId)) {
+                throw new com.zoroacademy.exception.ConflictException("Email is already registered: " + cleanEmail);
+            }
+        });
+
+        // Prevent duplicate username with another account
+        userRepository.findByUsernameIgnoreCase(cleanUsername).ifPresent(existing -> {
+            if (!existing.getId().equals(userId)) {
+                throw new com.zoroacademy.exception.ConflictException("Username is already taken: " + cleanUsername);
+            }
+        });
+
         User user = userRepository.findById(userId).orElseGet(() -> User.builder().id(userId).role("TRAINER").build());
-        user.setEmail(dto.getEmail());
-        user.setName(dto.getName());
-        user.setUsername(dto.getUsername() != null ? dto.getUsername() : dto.getEmail());
-        user.setPhone(PhoneValidator.sanitize(dto.getPhone()));
+        user.setEmail(cleanEmail);
+        user.setName(dto.getName() != null ? dto.getName().trim() : "Trainer");
+        user.setUsername(cleanUsername);
+
+        if (dto.getPhone() != null && !dto.getPhone().isBlank()) {
+            PhoneValidator.validate(dto.getPhone());
+            user.setPhone(PhoneValidator.sanitize(dto.getPhone()));
+        } else {
+            user.setPhone(null);
+        }
+
         user.setAddress(dto.getAddress());
         user.setJoinedOn(dto.getJoinedOn());
         user.setStatus(dto.getStatus() != null ? dto.getStatus() : "Active");
@@ -213,12 +289,21 @@ public class UserService {
         user.setCode(dto.getCode());
         user.setSalaryAmount(dto.getSalaryAmount());
         user.setSalaryCreditDate(dto.getSalaryCreditDate());
-        if (user.getPassword() == null) {
-            user.setPassword(passwordEncoder.encode("password123"));
+
+        String generatedTempPassword = null;
+        if (user.getPassword() == null || user.getPassword().isBlank()) {
+            generatedTempPassword = generateTemporaryPassword();
+            user.setPassword(passwordEncoder.encode(generatedTempPassword));
         }
 
-        return UserDto.fromEntity(userRepository.save(user));
+        user = userRepository.save(user);
+        UserDto resultDto = UserDto.fromEntity(user);
+        if (generatedTempPassword != null) {
+            resultDto.setTemporaryPassword(generatedTempPassword);
+        }
+        return resultDto;
     }
+
 
     @Transactional(readOnly = true)
     public TrainerDependencyDto getTrainerDependencies(String trainerId) {
@@ -341,11 +426,16 @@ public class UserService {
 
     @Transactional
     public boolean updatePassword(String userIdOrEmail, String currentPassword, String newPassword) {
+        if (newPassword == null || newPassword.length() < 8) {
+            throw new IllegalArgumentException("New password must be at least 8 characters long");
+        }
+
         User user = userRepository.findById(userIdOrEmail)
                 .or(() -> userRepository.findByEmailIgnoreCase(userIdOrEmail))
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + userIdOrEmail));
 
-        if (!passwordEncoder.matches(currentPassword, user.getPassword()) && !currentPassword.equals(user.getPassword())) {
+        // Strictly verify current password using passwordEncoder
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
             return false;
         }
 
@@ -356,19 +446,30 @@ public class UserService {
 
     @Transactional
     public void deleteUser(String id) {
-        Optional<User> uOpt = userRepository.findById(id);
-        if (uOpt.isPresent() && "TRAINER".equalsIgnoreCase(uOpt.get().getRole())) {
-            TrainerDependencyDto dep = getTrainerDependencies(id);
+        User user = userRepository.findById(id)
+                .or(() -> userRepository.findByEmailIgnoreCase(id))
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
+
+        if ("ADMIN".equalsIgnoreCase(user.getRole())) {
+            long adminCount = userRepository.countByRoleIgnoreCase("ADMIN");
+            if (adminCount <= 1) {
+                throw new IllegalStateException("Cannot delete the last remaining administrator account");
+            }
+        }
+
+        if ("TRAINER".equalsIgnoreCase(user.getRole())) {
+            TrainerDependencyDto dep = getTrainerDependencies(user.getId());
             if (dep.isHasDependencies()) {
                 throw new IllegalStateException("Cannot delete trainer assigned to active courses (" + dep.getCourseCount() + ") or batches (" + dep.getBatchCount() + "). Please reassign dependencies first.");
             }
         }
 
-        studentCourseBatchRepository.deleteByStudentId(id);
-        List<Enrollment> enrs = enrollmentRepository.findByStudentId(id);
+        studentCourseBatchRepository.deleteByStudentId(user.getId());
+        List<Enrollment> enrs = enrollmentRepository.findByStudentId(user.getId());
         if (enrs != null && !enrs.isEmpty()) {
             enrollmentRepository.deleteAll(enrs);
         }
-        userRepository.deleteById(id);
+        userRepository.delete(user);
     }
+
 }

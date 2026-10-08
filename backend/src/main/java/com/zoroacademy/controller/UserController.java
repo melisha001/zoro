@@ -2,7 +2,10 @@ package com.zoroacademy.controller;
 
 import com.zoroacademy.common.ApiResponse;
 import com.zoroacademy.dto.UserDto;
+import com.zoroacademy.security.UserPrincipal;
 import com.zoroacademy.service.UserService;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,45 +20,58 @@ public class UserController {
         this.userService = userService;
     }
 
-
     @GetMapping("/students")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<UserDto>> getStudents() {
         return ApiResponse.ok(userService.getStudents());
     }
 
     @PostMapping("/students")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserDto> createStudent(@RequestBody UserDto student) {
         return ApiResponse.ok(userService.saveStudent(student), "Student created successfully");
     }
 
     @PutMapping("/students/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserDto> updateStudent(@PathVariable String id, @RequestBody UserDto student) {
         student.setId(id);
         return ApiResponse.ok(userService.saveStudent(student), "Student updated successfully");
     }
 
     @GetMapping("/trainers")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<UserDto>> getTrainers() {
         return ApiResponse.ok(userService.getTrainers());
     }
 
     @PostMapping("/trainers")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserDto> createTrainer(@RequestBody UserDto trainer) {
         return ApiResponse.ok(userService.saveTrainer(trainer), "Trainer created successfully");
     }
 
     @PutMapping("/trainers/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserDto> updateTrainer(@PathVariable String id, @RequestBody UserDto trainer) {
         trainer.setId(id);
         return ApiResponse.ok(userService.saveTrainer(trainer), "Trainer updated successfully");
     }
 
     @PostMapping("/password")
-    public ApiResponse<Boolean> updatePassword(@RequestBody Map<String, String> body) {
-        String id = body.get("id");
+    public ApiResponse<Boolean> updatePassword(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody Map<String, String> body) {
+        if (principal == null) {
+            return ApiResponse.error("Authentication required to update password");
+        }
         String currentPassword = body.get("currentPassword");
         String newPassword = body.get("newPassword");
-        boolean success = userService.updatePassword(id, currentPassword, newPassword);
+        if (currentPassword == null || newPassword == null) {
+            return ApiResponse.error("Current and new passwords are required");
+        }
+
+        boolean success = userService.updatePassword(principal.getId(), currentPassword, newPassword);
         if (success) {
             return ApiResponse.ok(true, "Password updated successfully");
         } else {
@@ -64,12 +80,19 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or #id == principal.id")
     public ApiResponse<UserDto> getUserById(@PathVariable String id) {
         return ApiResponse.ok(userService.getUserById(id));
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Boolean> deleteUser(@PathVariable String id) {
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<Boolean> deleteUser(
+            @PathVariable String id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal != null && (principal.getId().equals(id) || principal.getEmail().equalsIgnoreCase(id))) {
+            throw new IllegalArgumentException("You cannot delete your own account");
+        }
         userService.deleteUser(id);
         return ApiResponse.ok(true, "User deleted successfully");
     }

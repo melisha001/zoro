@@ -19,7 +19,6 @@ public class AuthController {
         this.authService = authService;
     }
 
-
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@RequestBody LoginRequest request) {
         LoginResponse response = authService.login(request);
@@ -33,13 +32,11 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public ApiResponse<UserDto> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails,
-                                              @RequestParam(required = false) String email) {
-        String identifier = userDetails != null ? userDetails.getUsername() : email;
-        if (identifier == null) {
+    public ApiResponse<UserDto> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails) {
+        if (userDetails == null) {
             return ApiResponse.error("Unauthenticated");
         }
-        UserDto user = authService.getCurrentUser(identifier);
+        UserDto user = authService.getCurrentUser(userDetails.getUsername());
         return ApiResponse.ok(user);
     }
 }

@@ -33,7 +33,6 @@ public class SecurityConfig {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
-
     @Value("${cors.allowed-origins:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}")
     private String allowedOrigins;
 
@@ -54,19 +53,56 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Public Endpoints
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/webhooks/**").permitAll()
+                        // 1. Strictly Public Endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/enquiries", "/api/enquiries/").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/courses/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/website-settings/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/enquiries/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/enquiries/**").permitAll() // Frontend allows enquiry list inspection
-                        .requestMatchers(HttpMethod.GET, "/api/batches/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/schedules/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/competitions/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/competitions/{id}/registrations").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/competitions", "/api/competitions/", "/api/competitions/{id}", "/api/competitions/{id}/modules").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/webhooks/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
-                        // All other endpoints require authentication (or permit if in dev / transition)
-                        .requestMatchers("/api/**").permitAll() // Ensure smooth frontend migration without blocking unauthenticated public UI calls
+
+                        // 2. ADMIN Role Specific Endpoints
+                        .requestMatchers("/api/dashboard/**").hasRole("ADMIN")
+                        .requestMatchers("/api/activity-logs/**").hasRole("ADMIN")
+                        .requestMatchers("/api/fees/**").hasRole("ADMIN")
+                        .requestMatchers("/api/expenses/**").hasRole("ADMIN")
+                        .requestMatchers("/api/salary/**").hasRole("ADMIN")
+                        .requestMatchers("/api/settings/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/enquiries/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/enquiries/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/enquiries/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/website-settings/**").hasRole("ADMIN")
+                        .requestMatchers("/api/enrollments/requests/**").hasRole("ADMIN")
+                        .requestMatchers("/api/trainers/{id}/replace").hasRole("ADMIN")
+                        .requestMatchers("/api/trainers/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/courses/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/courses/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/courses/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/batches/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/batches/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/batches/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/competitions").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/competitions/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/competitions/**").hasRole("ADMIN")
+                        .requestMatchers("/api/competitions/registrations", "/api/competitions/registrations/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/competitions/{id}/registrations").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/users/students", "/api/users/trainers").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/users/students", "/api/users/trainers").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/users/students/**", "/api/users/trainers/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/users/**").hasRole("ADMIN")
+
+                        // 3. TRAINER or ADMIN Endpoints
+                        .requestMatchers(HttpMethod.GET, "/api/batches/**").hasAnyRole("ADMIN", "TRAINER")
+                        .requestMatchers("/api/schedules/**").hasAnyRole("ADMIN", "TRAINER")
+                        .requestMatchers("/api/attendance/**").hasAnyRole("ADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.POST, "/api/assignments").hasAnyRole("ADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.PUT, "/api/assignments/**").hasAnyRole("ADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/assignments/**").hasAnyRole("ADMIN", "TRAINER")
+                        .requestMatchers("/api/submissions/review/**").hasAnyRole("ADMIN", "TRAINER")
+
+                        // 4. Any other authenticated request (e.g. /api/auth/me, /api/users/password, student progress, playback)
                         .anyRequest().authenticated()
                 );
 

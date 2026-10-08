@@ -6,11 +6,12 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "bunny.stream")
 public class BunnyStreamProperties {
-    private String libraryId = "770045";
-    private String apiKey = "0726be56-9703-46cd-a987ac2f79f2-558e-4b2c4";
-    private String cdnHost = "vz-251d06e3-32f.b-cdn.net";
-    private String tokenAuthKey = "0726be56-9703-46cd-a987ac2f79f2-558e-4b2c4";
+    private String libraryId;
+    private String apiKey;
+    private String cdnHost;
+    private String tokenAuthKey;
     private long tokenExpirationSeconds = 7200;
+    private String webhookSecret;
 
     public BunnyStreamProperties() {}
 
@@ -52,5 +53,13 @@ public class BunnyStreamProperties {
 
     public void setTokenExpirationSeconds(long tokenExpirationSeconds) {
         this.tokenExpirationSeconds = tokenExpirationSeconds;
+    }
+
+    public String getWebhookSecret() {
+        return webhookSecret;
+    }
+
+    public void setWebhookSecret(String webhookSecret) {
+        this.webhookSecret = webhookSecret;
     }
 }

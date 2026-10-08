@@ -1,0 +1,36 @@
+server:
+  port: 8080
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: zoro-academy-backend-test
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: false
+
+bunny:
+  stream:
+    library-id: "770045"
+    api-key: "test-bunny-api-key-test"
+    cdn-host: "vz-test.b-cdn.net"
+    token-auth-key: "test-bunny-token-key-test"
+    token-expiration-seconds: 7200
+    webhook-secret: "test-webhook-secret"
+
+jwt:
+  secret: "4a6f726f41636164656d795365637572654a57545365637265744b657932303236"
+  expiration: 86400000
+
+cors:
+  allowed-origins: "*"

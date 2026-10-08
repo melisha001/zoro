@@ -24,20 +24,36 @@ export const setItem = (key, value) => {
 
 export const getAuthToken = () => {
   try {
-    return getItem('authToken') || localStorage.getItem('zoro_token') || null;
+    return getItem('authToken') || localStorage.getItem('zoro_token') || localStorage.getItem('authToken') || null;
   } catch (e) {
     return null;
   }
 };
 
 export const setAuthToken = (token) => {
-  setItem('authToken', token);
-  try {
-    if (token) {
+  if (token) {
+    setItem('authToken', token);
+    try {
       localStorage.setItem('zoro_token', token);
-    } else {
+      localStorage.setItem('authToken', token);
+    } catch (e) {}
+  } else {
+    try {
+      localStorage.removeItem(STORAGE_PREFIX + 'authToken');
       localStorage.removeItem('zoro_token');
-    }
+      localStorage.removeItem('authToken');
+    } catch (e) {}
+  }
+};
+
+export const clearAuthSession = () => {
+  setAuthToken(null);
+  try {
+    localStorage.removeItem(STORAGE_PREFIX + 'user');
+    localStorage.removeItem(STORAGE_PREFIX + 'role');
+    localStorage.removeItem(STORAGE_PREFIX + 'authToken');
+    localStorage.removeItem('zoro_token');
+    localStorage.removeItem('authToken');
   } catch (e) {}
 };
 
@@ -67,23 +83,34 @@ export const apiFetch = async (endpoint, options = {}) => {
       json = null;
     }
 
+    if (res.status === 401) {
+      // Clear token and user session on 401 Unauthorized
+      clearAuthSession();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      }
+      return {
+        success: false,
+        status: 401,
+        message: json?.message || 'Session expired or unauthorized. Please log in.',
+        data: null
+      };
+    }
+
     if (!res.ok) {
       return {
         success: false,
         status: res.status,
         message: json?.message || `HTTP ${res.status}: ${res.statusText}`,
-        data: json?.data || null,
-        fallback: true
+        data: json?.data || null
       };
     }
     return json;
   } catch (err) {
-    console.warn(`[REST API] Call to ${endpoint} failed (${err.message}). Using local store fallback.`);
     return {
       success: false,
-      message: err.message,
-      data: null,
-      fallback: true
+      message: err.message || 'Network error while contacting server.',
+      data: null
     };
   }
 };

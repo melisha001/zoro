@@ -108,46 +108,23 @@ export const authorizeVideoPlayback = async (studentId, courseId, moduleId) => {
     return apiResponse(null, false, 'Access Denied: Authentication required.');
   }
 
-  const targetId = moduleId || courseId || 'demo-video';
+  const targetId = moduleId || courseId;
+  if (!targetId) {
+    return apiResponse(null, false, 'Video or module identifier is required.');
+  }
 
-  // 1. Try real backend Bunny Stream signed playback token
+  const params = new URLSearchParams();
+  if (courseId) params.append('courseId', courseId);
+  const queryStr = params.toString() ? `?${params.toString()}` : '';
+
   try {
-    const backendRes = await apiGet(`/videos/${encodeURIComponent(targetId)}/playback?studentId=${encodeURIComponent(studentId)}&courseId=${encodeURIComponent(courseId || '')}`);
+    const backendRes = await apiGet(`/videos/${encodeURIComponent(targetId)}/playback${queryStr}`);
     if (backendRes.success && backendRes.data && backendRes.data.authorized) {
       return apiResponse(backendRes.data, true, 'Playback authorized successfully');
     }
-    if (backendRes.status === 403 || (backendRes.data && backendRes.data.authorized === false)) {
-      return apiResponse(null, false, backendRes.message || 'Access Denied: You are not enrolled in this course.');
-    }
+    return apiResponse(null, false, backendRes.message || 'Access Denied: You are not authorized to stream this video.');
   } catch (err) {
-    console.warn('[Playback Authorization] Spring Boot backend unreachable, evaluating local enrollment:', err);
-  }
-
-  // 2. Local fallback check
-  try {
-    const enrolledCourses = await getStudentEnrolledCourses(studentId);
-    const isEnrolled = (enrolledCourses || []).some(c => c.id === courseId || c.title?.toLowerCase() === courseId?.toLowerCase());
-
-    if (!isEnrolled) {
-      return apiResponse(null, false, 'Access Denied: You are not enrolled in this course.');
-    }
-
-    // Generate signed playback access token
-    const token = `sig_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const expiresAt = Date.now() + 3600 * 1000;
-
-    return apiResponse({
-      authorized: true,
-      token,
-      expiresAt,
-      studentId,
-      courseId,
-      moduleId,
-      streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
-    }, true, 'Playback authorized successfully');
-
-  } catch (err) {
-    console.error('Playback authorization failed:', err);
-    return apiResponse(null, false, 'Authorization check error.');
+    return apiResponse(null, false, err.message || 'Playback authorization failed.');
   }
 };
+

@@ -146,9 +146,8 @@ export const authenticateUser = async (email, password) => {
 // --- AUTO DETECT USER BY EMAIL / USERNAME ---
 export const findUserByEmail = async (email) => {
   const lowerEmail = (email || '').toLowerCase().trim();
-  if (lowerEmail.includes('admin')) {
-    return { name: 'System Administrator', email: lowerEmail, role: 'ADMIN' };
-  }
+  if (!lowerEmail) return null;
+
   const { data: students } = await getStudents();
   const foundStudent = (students || []).find(s => 
     (s.email && s.email.toLowerCase() === lowerEmail) || (s.username && s.username.toLowerCase() === lowerEmail)
@@ -164,3 +163,4 @@ export const findUserByEmail = async (email) => {
 
   return { name: email ? email.split('@')[0] : 'User', email: lowerEmail, role: 'STUDENT' };
 };
+

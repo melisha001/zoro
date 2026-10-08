@@ -7,7 +7,9 @@ import com.zoroacademy.dto.BunnyWebhookPayload;
 import com.zoroacademy.dto.VideoPlaybackResponse;
 import com.zoroacademy.dto.VideoUploadRequest;
 import com.zoroacademy.dto.VideoUploadResponse;
+import com.zoroacademy.entity.CourseModule;
 import com.zoroacademy.entity.Video;
+import com.zoroacademy.repository.CourseModuleRepository;
 import com.zoroacademy.repository.EnrollmentRepository;
 import com.zoroacademy.repository.VideoRepository;
 import org.springframework.http.HttpEntity;
@@ -24,16 +26,22 @@ import java.util.*;
 public class BunnyStreamService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(BunnyStreamService.class);
 
-
     private final BunnyStreamProperties properties;
     private final BunnyTokenService tokenService;
     private final VideoRepository videoRepository;
     private final EnrollmentRepository enrollmentRepository;
-    public BunnyStreamService(BunnyStreamProperties properties, BunnyTokenService tokenService, VideoRepository videoRepository, EnrollmentRepository enrollmentRepository) {
+    private final CourseModuleRepository courseModuleRepository;
+
+    public BunnyStreamService(BunnyStreamProperties properties,
+                              BunnyTokenService tokenService,
+                              VideoRepository videoRepository,
+                              EnrollmentRepository enrollmentRepository,
+                              CourseModuleRepository courseModuleRepository) {
         this.properties = properties;
         this.tokenService = tokenService;
         this.videoRepository = videoRepository;
         this.enrollmentRepository = enrollmentRepository;
+        this.courseModuleRepository = courseModuleRepository;
     }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -41,7 +49,6 @@ public class BunnyStreamService {
 
     /**
      * Creates an upload session with Bunny Stream API.
-     * Admin creates a video entry on Bunny and gets back video ID & upload URL.
      */
     @Transactional
     public VideoUploadResponse createUploadSession(VideoUploadRequest request) {
@@ -78,7 +85,7 @@ public class BunnyStreamService {
         Video video = Video.builder()
                 .id(videoId)
                 .bunnyVideoId(videoId)
-                .libraryId(Integer.parseInt(properties.getLibraryId()))
+                .libraryId(properties.getLibraryId() != null ? Integer.parseInt(properties.getLibraryId()) : 770045)
                 .title(videoTitle)
                 .courseId(request.getCourseId())
                 .moduleId(request.getModuleId())
@@ -95,7 +102,7 @@ public class BunnyStreamService {
 
         return VideoUploadResponse.builder()
                 .videoId(videoId)
-                .libraryId(Integer.parseInt(properties.getLibraryId()))
+                .libraryId(properties.getLibraryId() != null ? Integer.parseInt(properties.getLibraryId()) : 770045)
                 .uploadUrl(uploadUrl)
                 .authorizationSignature(properties.getApiKey())
                 .directStreamUrl(streamUrl)
@@ -106,10 +113,11 @@ public class BunnyStreamService {
 
     /**
      * Authorizes video playback for student/trainer/admin and returns signed Bunny token & URL.
+     * Enforces course enrollment and denies access if video has no course.
      */
     @Transactional(readOnly = true)
-    public VideoPlaybackResponse getPlaybackAuthorization(String videoOrModuleId, String studentIdOrEmail, String userRole, String clientIp) {
-        // Find video by ID or moduleId
+    public VideoPlaybackResponse getPlaybackAuthorization(String videoOrModuleId, String authenticatedUserId, String userRole, String clientIp) {
+        // Resolve video by ID, bunnyVideoId, or moduleId in videos table
         Optional<Video> videoOpt = videoRepository.findById(videoOrModuleId)
                 .or(() -> videoRepository.findByBunnyVideoId(videoOrModuleId))
                 .or(() -> {
@@ -117,32 +125,67 @@ public class BunnyStreamService {
                     return byMod.isEmpty() ? Optional.empty() : Optional.of(byMod.get(0));
                 });
 
-        String effectiveVideoId = videoOpt.map(Video::getBunnyVideoId).orElse(videoOrModuleId);
-        String courseId = videoOpt.map(Video::getCourseId).orElse(null);
+        // Also resolve through course_modules table to unify source of truth
+        Optional<CourseModule> moduleOpt = courseModuleRepository.findById(videoOrModuleId);
+        if (moduleOpt.isEmpty() && videoOpt.isPresent() && videoOpt.get().getModuleId() != null) {
+            moduleOpt = courseModuleRepository.findById(videoOpt.get().getModuleId());
+        }
 
-        // Verification: Admin and Trainer always authorized; Student must be enrolled if courseId is present
+        String effectiveVideoId = videoOpt.map(Video::getBunnyVideoId).orElse(null);
+        String courseId = videoOpt.map(Video::getCourseId).orElse(null);
+        String moduleId = videoOpt.map(Video::getModuleId).orElse(null);
+
+        if (moduleOpt.isPresent()) {
+            CourseModule mod = moduleOpt.get();
+            if (moduleId == null) {
+                moduleId = mod.getId();
+            }
+            if (courseId == null && mod.getCourse() != null) {
+                courseId = mod.getCourse().getId();
+            }
+            if (effectiveVideoId == null && mod.getVideoStorageRef() != null) {
+                try {
+                    JsonNode node = objectMapper.readTree(mod.getVideoStorageRef());
+                    if (node.has("videoId")) {
+                        effectiveVideoId = node.get("videoId").asText();
+                    } else if (node.has("storageKey")) {
+                        effectiveVideoId = node.get("storageKey").asText().replace("bunny_", "");
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+
+        if (effectiveVideoId == null) {
+            effectiveVideoId = videoOrModuleId;
+        }
+
+        // Strict Requirement: If the video has no course, DENY access
+        if (courseId == null || courseId.isBlank()) {
+            return VideoPlaybackResponse.builder()
+                    .authorized(false)
+                    .videoId(effectiveVideoId)
+                    .message("Access Denied: Video is not associated with any active course.")
+                    .build();
+        }
+
+        // Verification: Admin and Trainer are authorized; Student must have active enrollment
         boolean isAuthorized = false;
         String authMessage = "Authorized";
 
         if ("ADMIN".equalsIgnoreCase(userRole) || "TRAINER".equalsIgnoreCase(userRole)) {
             isAuthorized = true;
-        } else if (studentIdOrEmail != null && !studentIdOrEmail.isBlank()) {
-            if (courseId == null) {
-                // If courseId is not attached to video, check general enrollment or allow logged-in student
+        } else if (authenticatedUserId != null && !authenticatedUserId.isBlank()) {
+            boolean enrolled = enrollmentRepository.existsByStudentIdAndCourseId(authenticatedUserId, courseId)
+                    || enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(authenticatedUserId, courseId);
+            if (enrolled) {
                 isAuthorized = true;
             } else {
-                boolean enrolled = enrollmentRepository.existsByStudentIdAndCourseId(studentIdOrEmail, courseId)
-                        || enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(studentIdOrEmail, courseId);
-                if (enrolled) {
-                    isAuthorized = true;
-                } else {
-                    isAuthorized = false;
-                    authMessage = "Access Denied: You are not enrolled in this course.";
-                }
+                isAuthorized = false;
+                authMessage = "Access Denied: You are not enrolled in this course.";
             }
         } else {
             isAuthorized = false;
-            authMessage = "Access Denied: Please log in to stream private videos.";
+            authMessage = "Access Denied: Authentication required to stream course videos.";
         }
 
         if (!isAuthorized) {
@@ -155,22 +198,25 @@ public class BunnyStreamService {
         }
 
         long expiresAt = (System.currentTimeMillis() / 1000) + properties.getTokenExpirationSeconds();
-        String token = tokenService.generateToken(effectiveVideoId, expiresAt, clientIp);
+        // Drop IP binding to ensure reliable playback across dynamic networks/proxies
+        String streamToken = tokenService.generateToken(effectiveVideoId, expiresAt, null);
+        String embedToken = tokenService.generateEmbedToken(effectiveVideoId, expiresAt);
+
         String signedStreamUrl = String.format("https://%s/%s/playlist.m3u8?token=%s&expires=%d",
-                properties.getCdnHost(), effectiveVideoId, token, expiresAt);
+                properties.getCdnHost(), effectiveVideoId, streamToken, expiresAt);
         String signedEmbedUrl = String.format("https://iframe.mediadelivery.net/embed/%s/%s?token=%s&expires=%d",
-                properties.getLibraryId(), effectiveVideoId, token, expiresAt);
+                properties.getLibraryId(), effectiveVideoId, embedToken, expiresAt);
 
         return VideoPlaybackResponse.builder()
                 .authorized(true)
                 .videoId(effectiveVideoId)
                 .courseId(courseId)
-                .moduleId(videoOpt.map(Video::getModuleId).orElse(null))
-                .token(token)
+                .moduleId(moduleId)
+                .token(embedToken)
                 .expiresAt(expiresAt)
                 .streamUrl(signedStreamUrl)
                 .embedUrl(signedEmbedUrl)
-                .fallbackUrl("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
+                .fallbackUrl(null)
                 .message("Playback authorized successfully")
                 .build();
     }
