@@ -23,10 +23,13 @@ export const getDoubts = async () => {
     }));
     return apiResponse(normalized);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch doubts');
 };
 
 export const createDoubt = async (doubtData) => {
+  if (!doubtData?.question) {
+    return apiResponse(null, false, 'Question is required');
+  }
   const payload = {
     studentId: doubtData.studentId,
     studentName: doubtData.studentName,
@@ -43,7 +46,10 @@ export const createDoubt = async (doubtData) => {
 };
 
 export const resolveDoubt = async (doubtId, trainerName, answerText) => {
-  const res = await apiPut(`/doubts/${doubtId}/reply`, {
+  if (!doubtId) {
+    return apiResponse(null, false, 'Doubt ID is required');
+  }
+  const res = await apiPut(`/doubts/${encodeURIComponent(doubtId)}/reply`, {
     reply: answerText,
     trainerName: trainerName || 'Trainer'
   });
@@ -54,7 +60,10 @@ export const resolveDoubt = async (doubtId, trainerName, answerText) => {
 };
 
 export const deleteDoubt = async (doubtId) => {
-  const res = await apiDelete(`/doubts/${doubtId}`);
+  if (!doubtId) {
+    return apiResponse(false, false, 'Doubt ID is required');
+  }
+  const res = await apiDelete(`/doubts/${encodeURIComponent(doubtId)}`);
   if (res && res.success) {
     return apiResponse(true);
   }

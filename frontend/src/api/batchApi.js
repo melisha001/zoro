@@ -27,18 +27,24 @@ export const getBatches = async (courseId = null, trainerId = null) => {
     });
     return apiResponse(normalized);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch batches');
 };
 
 export const getBatchById = async (id) => {
-  const res = await apiGet(`/batches/${id}`);
+  if (!id) {
+    return apiResponse(null, false, 'Batch ID is required');
+  }
+  const res = await apiGet(`/batches/${encodeURIComponent(id)}`);
   if (res.success && res.data) {
     return apiResponse(res.data);
   }
-  return apiResponse(null, false, res.message || 'Batch not found');
+  return apiResponse(null, false, res?.message || 'Batch not found');
 };
 
 export const createBatch = async (batchData) => {
+  if (!batchData?.name && !batchData?.batchName) {
+    return apiResponse(null, false, 'Batch name is required');
+  }
   const daysStr = Array.isArray(batchData.days) ? batchData.days.join(', ') : (batchData.day || '');
   const payload = {
     ...batchData,
@@ -49,26 +55,32 @@ export const createBatch = async (batchData) => {
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Batch created successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to create batch');
+  return apiResponse(null, false, res?.message || 'Failed to create batch');
 };
 
 export const updateBatch = async (id, updatedData) => {
+  if (!id) {
+    return apiResponse(null, false, 'Batch ID is required');
+  }
   const daysStr = Array.isArray(updatedData.days) ? updatedData.days.join(', ') : (updatedData.day !== undefined ? updatedData.day : undefined);
   const payload = {
     ...updatedData,
     ...(daysStr !== undefined ? { days: daysStr, day: daysStr } : {})
   };
-  const res = await apiPut(`/batches/${id}`, payload);
+  const res = await apiPut(`/batches/${encodeURIComponent(id)}`, payload);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Batch updated successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to update batch');
+  return apiResponse(null, false, res?.message || 'Failed to update batch');
 };
 
 export const deleteBatch = async (id) => {
-  const res = await apiDelete(`/batches/${id}`);
+  if (!id) {
+    return apiResponse(false, false, 'Batch ID is required');
+  }
+  const res = await apiDelete(`/batches/${encodeURIComponent(id)}`);
   if (res.success) {
     return apiResponse(true, true, 'Batch deleted successfully');
   }
-  return apiResponse(false, false, res.message || 'Failed to delete batch');
+  return apiResponse(false, false, res?.message || 'Failed to delete batch');
 };

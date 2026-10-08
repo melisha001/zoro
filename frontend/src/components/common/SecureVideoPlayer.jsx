@@ -1,6 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, RefreshCw, Lock, AlertCircle, ShieldCheck } from 'lucide-react';
 
+import usePolling from '../../hooks/usePolling';
+
 export default function SecureVideoPlayer({
   videoRefData,
   videoTitle,
@@ -25,20 +27,16 @@ export default function SecureVideoPlayer({
   // Requirement #7: Moving Watermark Position State (changes position periodically)
   const [watermarkPos, setWatermarkPos] = useState({ top: '10%', left: '10%' });
 
-  useEffect(() => {
-    // Watermark position shifting every 6 seconds
-    const interval = setInterval(() => {
-      const topPositions = ['10%', '25%', '65%', '80%', '40%'];
-      const leftPositions = ['10%', '60%', '15%', '70%', '45%'];
-      const randIdx = Math.floor(Math.random() * topPositions.length);
-      setWatermarkPos({
-        top: topPositions[randIdx],
-        left: leftPositions[randIdx]
-      });
-    }, 6000);
-
-    return () => clearInterval(interval);
-  }, []);
+  // Watermark position shifting every 6 seconds using visibility-aware usePolling
+  usePolling(() => {
+    const topPositions = ['10%', '25%', '65%', '80%', '40%'];
+    const leftPositions = ['10%', '60%', '15%', '70%', '45%'];
+    const randIdx = Math.floor(Math.random() * topPositions.length);
+    setWatermarkPos({
+      top: topPositions[randIdx],
+      left: leftPositions[randIdx]
+    });
+  }, 6000, true);
 
   const handleLoadedMetadata = () => {
     if (videoRef.current) {

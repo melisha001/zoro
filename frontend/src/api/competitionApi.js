@@ -26,18 +26,21 @@ export const getCompetitions = async () => {
     }));
     return apiResponse(normalized);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch competitions');
 };
 
 export const createCompetition = async (newCompData) => {
+  if (!newCompData?.title && !newCompData?.name) {
+    return apiResponse(null, false, 'Competition title is required');
+  }
   const payload = {
     title: newCompData.title || newCompData.name,
-    category: newCompData.category || newCompData.courseName,
-    startDate: newCompData.startDate || newCompData.date,
-    endDate: newCompData.endDate || newCompData.date,
+    category: newCompData.category || newCompData.courseName || '',
+    startDate: newCompData.startDate || newCompData.date || '',
+    endDate: newCompData.endDate || newCompData.date || '',
     registrationFee: parseFloat(newCompData.registrationFee || newCompData.fee || 0),
-    description: newCompData.description,
-    rules: newCompData.rules || newCompData.instructions,
+    description: newCompData.description || '',
+    rules: newCompData.rules || newCompData.instructions || '',
     status: newCompData.status || 'Active'
   };
 
@@ -50,6 +53,9 @@ export const createCompetition = async (newCompData) => {
 };
 
 export const updateCompetition = async (id, updatedData) => {
+  if (!id) {
+    return apiResponse(null, false, 'Competition ID is required');
+  }
   const payload = {
     title: updatedData.title || updatedData.name,
     category: updatedData.category || updatedData.courseName,
@@ -61,7 +67,7 @@ export const updateCompetition = async (id, updatedData) => {
     status: updatedData.status || 'Active'
   };
 
-  const res = await apiPut(`/competitions/${id}`, payload);
+  const res = await apiPut(`/competitions/${encodeURIComponent(id)}`, payload);
   if (res && res.success) {
     await logActivity('Competitions', 'Competition Updated', `Updated competition "${payload.title || id}"`);
     return apiResponse(res.data);
@@ -70,7 +76,10 @@ export const updateCompetition = async (id, updatedData) => {
 };
 
 export const deleteCompetition = async (id) => {
-  const res = await apiDelete(`/competitions/${id}`);
+  if (!id) {
+    return apiResponse(false, false, 'Competition ID is required');
+  }
+  const res = await apiDelete(`/competitions/${encodeURIComponent(id)}`);
   if (res && res.success) {
     await logActivity('Competitions', 'Competition Deleted', `Deleted competition "${id}"`);
     return apiResponse(true);

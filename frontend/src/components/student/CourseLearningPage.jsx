@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, Play, FileText, BookOpen, PlusCircle, Sparkles, ExternalLink, Calendar, Clock, Video, Lock, Layers, CheckCircle2, ShieldCheck, Download, Eye, Upload, Send, Award, MessageSquare } from 'lucide-react';
-import { getCourses, getCourseById } from '../../api/courseApi';
-import { getStudentEnrolledCourses, enrollStudentInCourse } from '../../api/enrollmentApi';
+import { getCourses } from '../../api/courseApi';
+import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { createEnquiry, getEnquiries } from '../../api/enquiryApi';
 import { getStudentProgress, updateModuleProgress, authorizeVideoPlayback } from '../../api/progressApi';
 import { getSchedules } from '../../api/scheduleApi';
@@ -12,7 +12,7 @@ import SecureVideoPlayer from '../common/SecureVideoPlayer';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 
 export default function CourseLearningPage({ courseId: initialCourseId, setActiveScreen }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('my-courses'); // 'my-courses' | 'explore' | 'learn'
   const [hybridTab, setHybridTab] = useState('live'); // 'live' | 'recorded'
   

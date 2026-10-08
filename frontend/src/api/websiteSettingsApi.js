@@ -84,7 +84,7 @@ export const getWebsiteSettings = async () => {
     };
     return apiResponse(merged);
   }
-  return apiResponse(DEFAULT_WEBSITE_SETTINGS);
+  return apiResponse(DEFAULT_WEBSITE_SETTINGS, true);
 };
 
 export const saveWebsiteSettings = async (newSettingsData) => {
@@ -105,7 +105,7 @@ export const saveWebsiteSettings = async (newSettingsData) => {
 
   const res = await apiPut('/website-settings', payload);
   if (res && res.success) {
-    return apiResponse(updated);
+    return apiResponse(updated, true, 'Settings saved successfully');
   }
-  return apiResponse(updated);
+  return apiResponse(null, false, res?.message || 'Failed to save website settings');
 };

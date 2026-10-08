@@ -1,8 +1,10 @@
 // Centralized API Client with LocalStorage Persistence & REST backend integration
 const STORAGE_PREFIX = 'zoro_english_academy_';
-export const API_BASE_URL = typeof window !== 'undefined' && window.__VITE_API_BASE_URL__ 
-  ? window.__VITE_API_BASE_URL__ 
-  : 'http://localhost:8080/api';
+export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL !== undefined)
+  ? import.meta.env.VITE_API_BASE_URL
+  : (typeof window !== 'undefined' && window.__VITE_API_BASE_URL__)
+    ? window.__VITE_API_BASE_URL__
+    : 'http://localhost:8080/api';
 
 export const getItem = (key, defaultVal = null) => {
   try {

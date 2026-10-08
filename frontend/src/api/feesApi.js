@@ -20,47 +20,59 @@ export const getFeeRecords = async () => {
     }));
     return apiResponse(normalized);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch fee records');
 };
 
 export const getFeeById = async (id) => {
-  const res = await apiGet(`/fees/${id}`);
+  if (!id) {
+    return apiResponse(null, false, 'Fee record ID is required');
+  }
+  const res = await apiGet(`/fees/${encodeURIComponent(id)}`);
   if (res.success && res.data) {
     return apiResponse(res.data);
   }
-  return apiResponse(null, false, res.message || 'Fee record not found');
+  return apiResponse(null, false, res?.message || 'Fee record not found');
 };
 
 export const createFeeRecord = async (newFeeData) => {
-  const student = newFeeData.student || newFeeData.studentName || 'Student';
+  const student = newFeeData?.student || newFeeData?.studentName || 'Student';
   const payload = {
-    studentId: newFeeData.studentId || newFeeData.id || `std_${student.toLowerCase().replace(/\s+/g, '')}`,
+    studentId: newFeeData?.studentId || newFeeData?.id || `std_${student.toLowerCase().replace(/\s+/g, '')}`,
     studentName: student,
-    course: newFeeData.course || newFeeData.courseName || '',
-    batch: newFeeData.batch || newFeeData.batchName || 'Unassigned',
-    totalFee: parseFloat(newFeeData.totalFee || 0),
-    paidAmount: parseFloat(newFeeData.paidAmount || 0),
-    dueAmount: parseFloat(newFeeData.dueAmount || 0),
-    status: (parseFloat(newFeeData.dueAmount || 0)) === 0 ? 'Paid' : 'Pending',
-    date: newFeeData.date || new Date().toISOString().split('T')[0]
+    course: newFeeData?.course || newFeeData?.courseName || '',
+    batch: newFeeData?.batch || newFeeData?.batchName || 'Unassigned',
+    totalFee: parseFloat(newFeeData?.totalFee || 0),
+    paidAmount: parseFloat(newFeeData?.paidAmount || 0),
+    dueAmount: parseFloat(newFeeData?.dueAmount || 0),
+    status: (parseFloat(newFeeData?.dueAmount || 0)) === 0 ? 'Paid' : 'Pending',
+    date: newFeeData?.date || new Date().toISOString().split('T')[0]
   };
 
   const res = await apiPost('/fees', payload);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Fee record created');
   }
-  return apiResponse(null, false, res.message || 'Failed to create fee record');
+  return apiResponse(null, false, res?.message || 'Failed to create fee record');
 };
 
 export const updateFeeRecord = async (id, updatedFeeData) => {
-  const res = await apiPut(`/fees/${id}`, updatedFeeData);
+  if (!id) {
+    return apiResponse(null, false, 'Fee record ID is required');
+  }
+  const res = await apiPut(`/fees/${encodeURIComponent(id)}`, updatedFeeData);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Fee record updated successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to update fee record');
+  return apiResponse(null, false, res?.message || 'Failed to update fee record');
 };
 
 export const recordStudentPayment = async (id, amount, method = 'Online', ref = '', notes = '') => {
+  if (!id) {
+    return apiResponse(null, false, 'Fee record ID is required');
+  }
+  if (amount === undefined || amount === null || isNaN(parseFloat(amount))) {
+    return apiResponse(null, false, 'Valid payment amount is required');
+  }
   const payload = {
     amount: parseFloat(amount),
     paymentMethod: method,
@@ -68,27 +80,33 @@ export const recordStudentPayment = async (id, amount, method = 'Online', ref = 
     notes: notes || 'Student payment'
   };
 
-  const res = await apiPost(`/fees/${id}/payments`, payload);
+  const res = await apiPost(`/fees/${encodeURIComponent(id)}/payments`, payload);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Payment recorded successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to record payment');
+  return apiResponse(null, false, res?.message || 'Failed to record payment');
 };
 
 export const deleteFeeRecord = async (id) => {
-  const res = await apiDelete(`/fees/${id}`);
+  if (!id) {
+    return apiResponse(false, false, 'Fee record ID is required');
+  }
+  const res = await apiDelete(`/fees/${encodeURIComponent(id)}`);
   if (res.success) {
     return apiResponse(true, true, 'Fee record deleted successfully');
   }
-  return apiResponse(false, false, res.message || 'Failed to delete fee record');
+  return apiResponse(false, false, res?.message || 'Failed to delete fee record');
 };
 
 export const deleteFeePayment = async (paymentId) => {
-  const res = await apiDelete(`/fees/payments/${paymentId}`);
+  if (!paymentId) {
+    return apiResponse(false, false, 'Payment ID is required');
+  }
+  const res = await apiDelete(`/fees/payments/${encodeURIComponent(paymentId)}`);
   if (res.success) {
     return apiResponse(true, true, 'Payment deleted successfully');
   }
-  return apiResponse(false, false, res.message || 'Failed to delete payment');
+  return apiResponse(false, false, res?.message || 'Failed to delete payment');
 };
 
 export const getFeeStats = async () => {
@@ -101,5 +119,5 @@ export const getFeeStats = async () => {
     pendingDues: 0,
     paidCount: 0,
     totalRecords: 0
-  });
+  }, false, res?.message || 'Failed to fetch fee statistics');
 };

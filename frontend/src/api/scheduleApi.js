@@ -69,11 +69,13 @@ export const getSchedules = async () => {
     })));
     return apiResponse(sorted);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch schedules');
 };
 
 export const getTrainerSchedules = async (trainerName) => {
-  if (!trainerName) return apiResponse([]);
+  if (!trainerName) {
+    return apiResponse([], false, 'Trainer identifier is required');
+  }
   const res = await apiGet(`/schedules/trainer/${encodeURIComponent(trainerName)}`);
   if (res.success && Array.isArray(res.data)) {
     const sorted = sortSchedulesByTime(res.data.map(s => ({
@@ -82,13 +84,13 @@ export const getTrainerSchedules = async (trainerName) => {
     })));
     return apiResponse(sorted);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch trainer schedules');
 };
 
 export const createSchedule = async (scheduleData) => {
   const payload = {
     ...scheduleData,
-    status: scheduleData.status || 'Upcoming'
+    status: scheduleData?.status || 'Upcoming'
   };
   const res = await apiPost('/schedules', payload);
   if (res.success && res.data) {
@@ -98,7 +100,10 @@ export const createSchedule = async (scheduleData) => {
 };
 
 export const updateSchedule = async (id, updatedData) => {
-  const res = await apiPut(`/schedules/${id}`, updatedData);
+  if (!id) {
+    return apiResponse(null, false, 'Schedule ID is required');
+  }
+  const res = await apiPut(`/schedules/${encodeURIComponent(id)}`, updatedData);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Schedule updated successfully');
   }
@@ -106,7 +111,10 @@ export const updateSchedule = async (id, updatedData) => {
 };
 
 export const deleteSchedule = async (id) => {
-  const res = await apiDelete(`/schedules/${id}`);
+  if (!id) {
+    return apiResponse(false, false, 'Schedule ID is required');
+  }
+  const res = await apiDelete(`/schedules/${encodeURIComponent(id)}`);
   if (res.success) {
     return apiResponse(true, true, 'Schedule deleted successfully');
   }

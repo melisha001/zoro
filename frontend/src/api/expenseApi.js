@@ -20,28 +20,32 @@ export const getExpenses = async () => {
       source: 'Manual Expense',
       isAutoSalary: false
     }));
+  } else if (res && !res.success) {
+    return apiResponse([], false, res?.message || 'Failed to fetch expenses');
   }
 
   // Fetch dynamic paid trainer salaries from central salaryApi
   let autoSalaryExpenses = [];
   try {
     const salRes = await getSalaryPayments();
-    const paidSalaries = (salRes.data || []).filter(s => s.status?.toUpperCase() === 'PAID');
-    autoSalaryExpenses = paidSalaries.map(sal => ({
-      id: `auto-sal-${sal.id}`,
-      originalSalaryId: sal.id,
-      title: `${sal.trainerName || 'Trainer'} - Salary`,
-      category: 'Salary',
-      description: sal.notes || `Trainer salary disbursement for ${sal.month || ''}`,
-      amount: parseFloat(sal.amount || 0),
-      date: sal.date || new Date().toISOString().split('T')[0],
-      paymentMethod: sal.method || 'Bank Transfer',
-      paidTo: sal.trainerName || 'Trainer',
-      referenceNo: sal.reference || sal.id,
-      notes: sal.notes || '',
-      source: 'Trainer Salary',
-      isAutoSalary: true
-    }));
+    if (salRes && salRes.success) {
+      const paidSalaries = (salRes.data || []).filter(s => s.status?.toUpperCase() === 'PAID');
+      autoSalaryExpenses = paidSalaries.map(sal => ({
+        id: `auto-sal-${sal.id}`,
+        originalSalaryId: sal.id,
+        title: `${sal.trainerName || 'Trainer'} - Salary`,
+        category: 'Salary',
+        description: sal.notes || `Trainer salary disbursement for ${sal.month || ''}`,
+        amount: parseFloat(sal.amount || 0),
+        date: sal.date || new Date().toISOString().split('T')[0],
+        paymentMethod: sal.method || 'Bank Transfer',
+        paidTo: sal.trainerName || 'Trainer',
+        referenceNo: sal.reference || sal.id,
+        notes: sal.notes || '',
+        source: 'Trainer Salary',
+        isAutoSalary: true
+      }));
+    }
   } catch (err) {
     console.error('Error fetching salary expenses in expenseApi:', err);
   }
@@ -53,6 +57,9 @@ export const getExpenses = async () => {
 };
 
 export const createExpense = async (newExpData) => {
+  if (newExpData?.amount === undefined || newExpData?.amount === null) {
+    return apiResponse(null, false, 'Expense amount is required');
+  }
   const payload = {
     category: newExpData.category || 'General',
     amount: parseFloat(newExpData.amount || 0),
@@ -69,6 +76,9 @@ export const createExpense = async (newExpData) => {
 };
 
 export const updateExpense = async (id, updatedData) => {
+  if (!id) {
+    return apiResponse(null, false, 'Expense ID is required');
+  }
   const payload = {
     category: updatedData.category,
     amount: parseFloat(updatedData.amount || 0),
@@ -76,7 +86,7 @@ export const updateExpense = async (id, updatedData) => {
     description: updatedData.title ? `${updatedData.title}: ${updatedData.description || ''}`.trim() : updatedData.description
   };
 
-  const res = await apiPut(`/expenses/${id}`, payload);
+  const res = await apiPut(`/expenses/${encodeURIComponent(id)}`, payload);
   if (res && res.success) {
     await logActivity('Expenses', 'Expense Updated', `Updated expense "${payload.description || id}"`);
     return apiResponse(res.data);
@@ -85,7 +95,10 @@ export const updateExpense = async (id, updatedData) => {
 };
 
 export const deleteExpense = async (id) => {
-  const res = await apiDelete(`/expenses/${id}`);
+  if (!id) {
+    return apiResponse(false, false, 'Expense ID is required');
+  }
+  const res = await apiDelete(`/expenses/${encodeURIComponent(id)}`);
   if (res && res.success) {
     await logActivity('Expenses', 'Expense Deleted', `Deleted expense "${id}"`);
     return apiResponse(true);

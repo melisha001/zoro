@@ -38,6 +38,9 @@ export const saveSettings = async (newSettingsData) => {
     ...current,
     ...newSettingsData
   };
-  await saveWebsiteSettings({ adminSettings: updatedAdminSettings });
-  return apiResponse(updatedAdminSettings);
+  const saveRes = await saveWebsiteSettings({ adminSettings: updatedAdminSettings });
+  if (saveRes && saveRes.success) {
+    return apiResponse(updatedAdminSettings, true, 'Settings saved successfully');
+  }
+  return apiResponse(null, false, saveRes?.message || 'Failed to save settings');
 };

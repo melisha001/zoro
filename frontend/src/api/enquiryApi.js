@@ -16,16 +16,19 @@ export const getEnquiries = async () => {
     }));
     return apiResponse(normalized);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch enquiries');
 };
 
 export const createEnquiry = async (enquiryData) => {
+  if (!enquiryData?.name) {
+    return apiResponse(null, false, 'Name is required');
+  }
   const payload = {
     name: enquiryData.name,
-    email: enquiryData.email,
-    phone: enquiryData.phone,
-    courseInterest: enquiryData.course || enquiryData.courseInterest,
-    message: enquiryData.message,
+    email: enquiryData.email || '',
+    phone: enquiryData.phone || '',
+    courseInterest: enquiryData.course || enquiryData.courseInterest || '',
+    message: enquiryData.message || '',
     status: 'New'
   };
   const res = await apiPost('/enquiries', payload);
@@ -36,7 +39,10 @@ export const createEnquiry = async (enquiryData) => {
 };
 
 export const updateEnquiryStatus = async (id, status) => {
-  const res = await apiPut(`/enquiries/${id}/status`, { status });
+  if (!id) {
+    return apiResponse(null, false, 'Enquiry ID is required');
+  }
+  const res = await apiPut(`/enquiries/${encodeURIComponent(id)}/status`, { status });
   if (res && res.success) {
     return apiResponse(res.data);
   }
@@ -44,7 +50,10 @@ export const updateEnquiryStatus = async (id, status) => {
 };
 
 export const deleteEnquiry = async (id) => {
-  const res = await apiDelete(`/enquiries/${id}`);
+  if (!id) {
+    return apiResponse(false, false, 'Enquiry ID is required');
+  }
+  const res = await apiDelete(`/enquiries/${encodeURIComponent(id)}`);
   if (res && res.success) {
     return apiResponse(true);
   }

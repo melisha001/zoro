@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import PublicNavbar from './components/layout/PublicNavbar';
 import DashboardSidebar from './components/layout/DashboardSidebar';
@@ -11,51 +11,63 @@ import ContactPage from './components/public/ContactPage';
 import EnquireModal from './components/public/EnquireModal';
 import LoginModal from './components/public/LoginModal';
 
-import AdminDashboard from './components/admin/AdminDashboard';
-import ManageCoursesPage from './components/admin/ManageCoursesPage';
-import AdminBatchManagementPage from './components/admin/AdminBatchManagementPage';
-import AddCoursePage from './components/admin/AddCoursePage';
-import EditCoursePage from './components/admin/EditCoursePage';
-import CourseContentPage from './components/admin/CourseContentPage';
-import ManageStudentsPage from './components/admin/ManageStudentsPage';
-import ManageTrainersPage from './components/admin/ManageTrainersPage';
-import AdminAttendancePage from './components/admin/AttendancePage';
-import AdminSchedulePage from './components/admin/AdminSchedulePage';
-import AdminFeesPage from './components/admin/AdminFeesPage';
-import AdminExpensesPage from './components/admin/AdminExpensesPage';
-import AdminSalaryPage from './components/admin/AdminSalaryPage';
-import AdminDailyReportPage from './components/admin/AdminDailyReportPage';
-import AdminCompetitionPage from './components/admin/AdminCompetitionPage';
-import AdminCompetitionRegistrationsPage from './components/admin/AdminCompetitionRegistrationsPage';
-import AdminCompetitionModulesPage from './components/admin/AdminCompetitionModulesPage';
-import AdminAssignmentsPage from './components/admin/AdminAssignmentsPage';
-import AdminDoubtsPage from './components/admin/AdminDoubtsPage';
-import AdminEnquiryPage from './components/admin/AdminEnquiryPage';
-import AdminReportsPage from './components/admin/AdminReportsPage';
-import AdminSettingsPage from './components/admin/AdminSettingsPage';
+// Code-splitting via React.lazy for portal screens
+const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
+const ManageCoursesPage = lazy(() => import('./components/admin/ManageCoursesPage'));
+const AdminBatchManagementPage = lazy(() => import('./components/admin/AdminBatchManagementPage'));
+const AddCoursePage = lazy(() => import('./components/admin/AddCoursePage'));
+const EditCoursePage = lazy(() => import('./components/admin/EditCoursePage'));
+const CourseContentPage = lazy(() => import('./components/admin/CourseContentPage'));
+const ManageStudentsPage = lazy(() => import('./components/admin/ManageStudentsPage'));
+const ManageTrainersPage = lazy(() => import('./components/admin/ManageTrainersPage'));
+const AdminAttendancePage = lazy(() => import('./components/admin/AttendancePage'));
+const AdminSchedulePage = lazy(() => import('./components/admin/AdminSchedulePage'));
+const AdminFeesPage = lazy(() => import('./components/admin/AdminFeesPage'));
+const AdminExpensesPage = lazy(() => import('./components/admin/AdminExpensesPage'));
+const AdminSalaryPage = lazy(() => import('./components/admin/AdminSalaryPage'));
+const AdminDailyReportPage = lazy(() => import('./components/admin/AdminDailyReportPage'));
+const AdminCompetitionPage = lazy(() => import('./components/admin/AdminCompetitionPage'));
+const AdminCompetitionRegistrationsPage = lazy(() => import('./components/admin/AdminCompetitionRegistrationsPage'));
+const AdminCompetitionModulesPage = lazy(() => import('./components/admin/AdminCompetitionModulesPage'));
+const AdminAssignmentsPage = lazy(() => import('./components/admin/AdminAssignmentsPage'));
+const AdminDoubtsPage = lazy(() => import('./components/admin/AdminDoubtsPage'));
+const AdminEnquiryPage = lazy(() => import('./components/admin/AdminEnquiryPage'));
+const AdminReportsPage = lazy(() => import('./components/admin/AdminReportsPage'));
+const AdminSettingsPage = lazy(() => import('./components/admin/AdminSettingsPage'));
 
-import TrainerDashboard from './components/trainer/TrainerDashboard';
-import TrainerCoursesPage from './components/trainer/TrainerCoursesPage';
-import TrainerStudentsPage from './components/trainer/TrainerStudentsPage';
-import TrainerSchedulePage from './components/trainer/TrainerSchedulePage';
-import TrainerSessionsPage from './components/trainer/TrainerSessionsPage';
-import TrainerAssignmentsPage from './components/trainer/TrainerAssignmentsPage';
-import TrainerSubmissionsPage from './components/trainer/TrainerSubmissionsPage';
-import TrainerDoubtsPage from './components/trainer/TrainerDoubtsPage';
-import TrainerAttendancePage from './components/trainer/TrainerAttendancePage';
-import TrainerNotificationsPage from './components/trainer/TrainerNotificationsPage';
-import TrainerProfilePage from './components/trainer/TrainerProfilePage';
+const TrainerDashboard = lazy(() => import('./components/trainer/TrainerDashboard'));
+const TrainerCoursesPage = lazy(() => import('./components/trainer/TrainerCoursesPage'));
+const TrainerStudentsPage = lazy(() => import('./components/trainer/TrainerStudentsPage'));
+const TrainerSchedulePage = lazy(() => import('./components/trainer/TrainerSchedulePage'));
+const TrainerSessionsPage = lazy(() => import('./components/trainer/TrainerSessionsPage'));
+const TrainerAssignmentsPage = lazy(() => import('./components/trainer/TrainerAssignmentsPage'));
+const TrainerSubmissionsPage = lazy(() => import('./components/trainer/TrainerSubmissionsPage'));
+const TrainerDoubtsPage = lazy(() => import('./components/trainer/TrainerDoubtsPage'));
+const TrainerAttendancePage = lazy(() => import('./components/trainer/TrainerAttendancePage'));
+const TrainerNotificationsPage = lazy(() => import('./components/trainer/TrainerNotificationsPage'));
+const TrainerProfilePage = lazy(() => import('./components/trainer/TrainerProfilePage'));
 
-import StudentDashboard from './components/student/StudentDashboard';
-import CourseLearningPage from './components/student/CourseLearningPage';
-import StudentAttendancePage from './components/student/AttendancePage';
-import JoinSessionPage from './components/student/JoinSessionPage';
-import AssignmentPage from './components/student/AssignmentPage';
-import DoubtPage from './components/student/DoubtPage';
-import StudentProfilePage from './components/student/StudentProfilePage';
+const StudentDashboard = lazy(() => import('./components/student/StudentDashboard'));
+const CourseLearningPage = lazy(() => import('./components/student/CourseLearningPage'));
+const StudentAttendancePage = lazy(() => import('./components/student/AttendancePage'));
+const JoinSessionPage = lazy(() => import('./components/student/JoinSessionPage'));
+const AssignmentPage = lazy(() => import('./components/student/AssignmentPage'));
+const DoubtPage = lazy(() => import('./components/student/DoubtPage'));
+const StudentProfilePage = lazy(() => import('./components/student/StudentProfilePage'));
+
+function PortalLoadingFallback() {
+  return (
+    <div className="flex h-64 w-full items-center justify-center">
+      <div className="flex flex-col items-center space-y-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        <span className="text-sm font-medium text-slate-500">Loading module...</span>
+      </div>
+    </div>
+  );
+}
 
 function MainApp() {
-  const { user, role } = useAuth();
+  const { user, role, loading } = useAuth();
   const [activeScreen, setActiveScreen] = useState('public-home');
   const [isEnquireOpen, setIsEnquireOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -81,14 +93,40 @@ function MainApp() {
       } else if (path === '/competitions') {
         setActiveScreen('public-competition');
       } else if (path === '/' || path === '/home') {
-        setActiveScreen('public-home');
+        if (!user) {
+          setActiveScreen('public-home');
+        }
       }
     };
 
     handleLocationChange();
     window.addEventListener('popstate', handleLocationChange);
     return () => window.removeEventListener('popstate', handleLocationChange);
-  }, []);
+  }, [user]);
+
+  // If session restored and user is authenticated on home path, redirect to their role dashboard
+  React.useEffect(() => {
+    if (!loading && user && activeScreen === 'public-home') {
+      const path = window.location.pathname.toLowerCase();
+      if (path === '/' || path === '/home' || path === '') {
+        const roleUpper = (user.role || role || 'STUDENT').toUpperCase();
+        if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN') {
+          setActiveScreen('admin-dash');
+        } else if (roleUpper === 'TRAINER') {
+          setActiveScreen('trainer-dash');
+        } else {
+          setActiveScreen('student-dash');
+        }
+      }
+    }
+  }, [loading, user, role, activeScreen]);
+
+  // If user logs out, redirect to public home
+  React.useEffect(() => {
+    if (!loading && !user && !isPublicPage) {
+      setActiveScreen('public-home');
+    }
+  }, [loading, user, isPublicPage]);
 
   // Update browser URL when public screens change
   React.useEffect(() => {
@@ -120,7 +158,17 @@ function MainApp() {
     } else if ((role === 'ADMIN' || role === 'SUPER_ADMIN') && (isTrainerPage || isStudentPage)) {
       setActiveScreen('admin-dash');
     }
-  }, [role, activeScreen]);
+  }, [role, activeScreen, isAdminPage, isTrainerPage, isStudentPage]);
+
+  // Session restore loading screen
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white">
+        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-slate-300 font-medium">Loading Zoro English Academy...</p>
+      </div>
+    );
+  }
 
   const currentUser = user || (
     isAdminPage
@@ -200,76 +248,77 @@ function MainApp() {
               setActiveScreen={setActiveScreen}
             />
             <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-              {/* Admin Views */}
-              {activeScreen === 'admin-dash' && <AdminDashboard setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'admin-manage-courses' && (
-                <ManageCoursesPage 
-                  setActiveScreen={setActiveScreen} 
-                  setSelectedCourseIdForEdit={setSelectedCourseIdForEdit} 
-                />
-              )}
-              {activeScreen === 'admin-batch-management' && <AdminBatchManagementPage />}
-              {activeScreen === 'admin-add-course' && <AddCoursePage setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'admin-edit-course' && (
-                <EditCoursePage courseId={selectedCourseIdForEdit} setActiveScreen={setActiveScreen} />
-              )}
-              {activeScreen === 'admin-course-content' && (
-                <CourseContentPage courseId={selectedCourseIdForEdit} setActiveScreen={setActiveScreen} />
-              )}
-              {activeScreen === 'admin-manage-students' && <ManageStudentsPage />}
-              {activeScreen === 'admin-manage-trainers' && <ManageTrainersPage />}
-              {activeScreen === 'admin-attendance' && <AdminAttendancePage setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'admin-schedule' && <AdminSchedulePage />}
-              {activeScreen === 'admin-assignments' && <AdminAssignmentsPage />}
-              {activeScreen === 'admin-doubts' && <AdminDoubtsPage />}
-              {activeScreen === 'admin-enquiries' && <AdminEnquiryPage />}
-              {activeScreen === 'admin-fees' && <AdminFeesPage />}
-              {activeScreen === 'admin-expenses' && <AdminExpensesPage setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'admin-salary' && <AdminSalaryPage />}
-              {activeScreen === 'admin-daily-reports' && <AdminDailyReportPage />}
-              {activeScreen === 'admin-competition' && (
-                <AdminCompetitionPage 
-                  setActiveScreen={setActiveScreen} 
-                  setSelectedCompIdForModules={setSelectedCompIdForModules} 
-                />
-              )}
-              {activeScreen === 'admin-competition-modules' && (
-                <AdminCompetitionModulesPage 
-                  competitionId={selectedCompIdForModules} 
-                  setActiveScreen={setActiveScreen} 
-                />
-              )}
-              {activeScreen === 'admin-competition-registrations' && (
-                <AdminCompetitionRegistrationsPage setActiveScreen={setActiveScreen} />
-              )}
-              {activeScreen === 'admin-reports' && <AdminReportsPage />}
-              {activeScreen === 'admin-settings' && <AdminSettingsPage />}
+              <Suspense fallback={<PortalLoadingFallback />}>
+                {/* Admin Views */}
+                {activeScreen === 'admin-dash' && <AdminDashboard setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'admin-manage-courses' && (
+                  <ManageCoursesPage 
+                    setActiveScreen={setActiveScreen} 
+                    setSelectedCourseIdForEdit={setSelectedCourseIdForEdit} 
+                  />
+                )}
+                {activeScreen === 'admin-batch-management' && <AdminBatchManagementPage />}
+                {activeScreen === 'admin-add-course' && <AddCoursePage setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'admin-edit-course' && (
+                  <EditCoursePage courseId={selectedCourseIdForEdit} setActiveScreen={setActiveScreen} />
+                )}
+                {activeScreen === 'admin-course-content' && (
+                  <CourseContentPage courseId={selectedCourseIdForEdit} setActiveScreen={setActiveScreen} />
+                )}
+                {activeScreen === 'admin-manage-students' && <ManageStudentsPage />}
+                {activeScreen === 'admin-manage-trainers' && <ManageTrainersPage />}
+                {activeScreen === 'admin-attendance' && <AdminAttendancePage setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'admin-schedule' && <AdminSchedulePage />}
+                {activeScreen === 'admin-assignments' && <AdminAssignmentsPage />}
+                {activeScreen === 'admin-doubts' && <AdminDoubtsPage />}
+                {activeScreen === 'admin-enquiries' && <AdminEnquiryPage />}
+                {activeScreen === 'admin-fees' && <AdminFeesPage />}
+                {activeScreen === 'admin-expenses' && <AdminExpensesPage setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'admin-salary' && <AdminSalaryPage />}
+                {activeScreen === 'admin-daily-reports' && <AdminDailyReportPage />}
+                {activeScreen === 'admin-competition' && (
+                  <AdminCompetitionPage 
+                    setActiveScreen={setActiveScreen} 
+                    setSelectedCompIdForModules={setSelectedCompIdForModules} 
+                  />
+                )}
+                {activeScreen === 'admin-competition-modules' && (
+                  <AdminCompetitionModulesPage 
+                    competitionId={selectedCompIdForModules} 
+                    setActiveScreen={setActiveScreen} 
+                  />
+                )}
+                {activeScreen === 'admin-competition-registrations' && (
+                  <AdminCompetitionRegistrationsPage setActiveScreen={setActiveScreen} />
+                )}
+                {activeScreen === 'admin-reports' && <AdminReportsPage />}
+                {activeScreen === 'admin-settings' && <AdminSettingsPage />}
 
 
-              {/* Trainer Views (PDF Pages 1-10) */}
-              {activeScreen === 'trainer-dash' && <TrainerDashboard setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'trainer-courses' && <TrainerCoursesPage />}
-              {activeScreen === 'trainer-students' && <TrainerStudentsPage />}
-              {activeScreen === 'trainer-schedule' && <TrainerSchedulePage setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'trainer-sessions' && <TrainerSessionsPage />}
-              {activeScreen === 'trainer-assignments' && <TrainerAssignmentsPage />}
-              {activeScreen === 'trainer-submissions' && <TrainerSubmissionsPage />}
-              {activeScreen === 'trainer-doubts' && <TrainerDoubtsPage />}
-              {activeScreen === 'trainer-[#0F52BA]' && <TrainerAttendancePage />}
-              {activeScreen === 'trainer-attendance' && <TrainerAttendancePage />}
-              {activeScreen === 'trainer-notifications' && <TrainerNotificationsPage />}
-              {activeScreen === 'trainer-profile' && <TrainerProfilePage />}
+                {/* Trainer Views */}
+                {activeScreen === 'trainer-dash' && <TrainerDashboard setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'trainer-courses' && <TrainerCoursesPage />}
+                {activeScreen === 'trainer-students' && <TrainerStudentsPage />}
+                {activeScreen === 'trainer-schedule' && <TrainerSchedulePage setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'trainer-sessions' && <TrainerSessionsPage />}
+                {activeScreen === 'trainer-assignments' && <TrainerAssignmentsPage />}
+                {activeScreen === 'trainer-submissions' && <TrainerSubmissionsPage />}
+                {activeScreen === 'trainer-doubts' && <TrainerDoubtsPage />}
+                {activeScreen === 'trainer-attendance' && <TrainerAttendancePage />}
+                {activeScreen === 'trainer-notifications' && <TrainerNotificationsPage />}
+                {activeScreen === 'trainer-profile' && <TrainerProfilePage />}
 
-              {/* Student Views */}
-              {activeScreen === 'student-dash' && <StudentDashboard setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'student-course-learn' && (
-                <CourseLearningPage setActiveScreen={setActiveScreen} />
-              )}
-              {activeScreen === 'student-attendance' && <StudentAttendancePage setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'student-join' && <JoinSessionPage setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'student-assignment' && <AssignmentPage setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'student-doubt' && <DoubtPage setActiveScreen={setActiveScreen} />}
-              {activeScreen === 'student-profile' && <StudentProfilePage />}
+                {/* Student Views */}
+                {activeScreen === 'student-dash' && <StudentDashboard setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'student-course-learn' && (
+                  <CourseLearningPage setActiveScreen={setActiveScreen} />
+                )}
+                {activeScreen === 'student-attendance' && <StudentAttendancePage setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'student-join' && <JoinSessionPage setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'student-assignment' && <AssignmentPage setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'student-doubt' && <DoubtPage setActiveScreen={setActiveScreen} />}
+                {activeScreen === 'student-profile' && <StudentProfilePage />}
+              </Suspense>
             </main>
           </div>
         </div>

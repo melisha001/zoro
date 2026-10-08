@@ -23,11 +23,14 @@ export const getCompetitionRegistrations = async () => {
     }));
     return apiResponse(normalized);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch competition registrations');
 };
 
 export const checkDuplicateRegistration = async (studentEmail, competitionId) => {
-  const { data: regs } = await getCompetitionRegistrations();
+  if (!studentEmail || !competitionId) return false;
+  const res = await getCompetitionRegistrations();
+  if (!res.success) return false;
+  const regs = res.data;
   const lowerEmail = (studentEmail || '').toLowerCase().trim();
   return (regs || []).some(r => 
     r.competitionId === competitionId && 
@@ -37,21 +40,25 @@ export const checkDuplicateRegistration = async (studentEmail, competitionId) =>
 };
 
 export const createCompetitionRegistration = async (regData) => {
+  if (!regData?.competitionId) {
+    return apiResponse(null, false, 'Competition ID is required');
+  }
+
   const isDuplicate = await checkDuplicateRegistration(regData.studentEmail, regData.competitionId);
   if (isDuplicate) {
-    return { success: false, message: 'Already registered for this competition.' };
+    return apiResponse(null, false, 'Already registered for this competition.');
   }
 
   const payload = {
     studentId: regData.studentId || `std_${Date.now()}`,
-    studentName: regData.studentName,
+    studentName: regData.studentName || 'Student',
     studentEmail: regData.studentEmail,
     paymentStatus: regData.paymentStatus || 'Paid',
     score: null,
     rank: null
   };
 
-  const res = await apiPost(`/competitions/${regData.competitionId}/registrations`, payload);
+  const res = await apiPost(`/competitions/${encodeURIComponent(regData.competitionId)}/registrations`, payload);
   if (res && res.success) {
     await logActivity(
       'Competition Registration',
@@ -63,21 +70,24 @@ export const createCompetitionRegistration = async (regData) => {
   return apiResponse(null, false, res?.message || 'Failed to register for competition');
 };
 
-export const updateRegistrationStatus = async (id, regStatus, payStatus) => {
-  const res = await apiPut(`/competitions/registrations/${id}`, {
+export const updateRegistrationStatus = async (id, _regStatus, payStatus) => {
+  if (!id) {
+    return apiResponse(false, false, 'Registration ID is required');
+  }
+  const res = await apiPut(`/competitions/registrations/${encodeURIComponent(id)}`, {
     paymentStatus: payStatus || 'Paid'
   });
   if (res && res.success) {
-    return apiResponse(true);
+    return apiResponse(true, true, 'Registration updated successfully');
   }
   return apiResponse(false, false, res?.message || 'Failed to update registration');
 };
 
 // COMPETITION ATTENDANCE API
-export const getCompetitionAttendance = async (competitionId, batchName) => {
+export const getCompetitionAttendance = async (_competitionId, _batchName) => {
   return apiResponse([]);
 };
 
-export const saveCompetitionAttendance = async (attendanceRecords) => {
+export const saveCompetitionAttendance = async (_attendanceRecords) => {
   return apiResponse(true);
 };

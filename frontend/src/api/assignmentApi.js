@@ -9,34 +9,56 @@ import { apiGet, apiPost, apiPut, apiDelete, apiResponse } from './client';
 export const getAssignments = async (studentId) => {
   const endpoint = studentId ? `/assignments?studentId=${encodeURIComponent(studentId)}` : '/assignments';
   const res = await apiGet(endpoint);
-  if (res.success && Array.isArray(res.data)) {
+  if (res && res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
-  return apiResponse([]);
+  return {
+    success: false,
+    message: res?.message || 'Failed to fetch assignments',
+    data: []
+  };
 };
 
 export const createAssignment = async (assignmentData) => {
   const res = await apiPost('/assignments', assignmentData);
-  if (res.success && res.data) {
+  if (res && res.success && res.data) {
     return apiResponse(res.data, true, 'Assignment published successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to create assignment');
+  return {
+    success: false,
+    message: res?.message || 'Failed to create assignment',
+    data: null
+  };
 };
 
 export const updateAssignment = async (id, assignmentData) => {
+  if (!id) {
+    return { success: false, message: 'Assignment ID is required', data: null };
+  }
   const res = await apiPut(`/assignments/${id}`, assignmentData);
-  if (res.success && res.data) {
+  if (res && res.success && res.data) {
     return apiResponse(res.data, true, 'Assignment updated successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to update assignment');
+  return {
+    success: false,
+    message: res?.message || 'Failed to update assignment',
+    data: null
+  };
 };
 
 export const deleteAssignment = async (id) => {
+  if (!id) {
+    return { success: false, message: 'Assignment ID is required', data: null };
+  }
   const res = await apiDelete(`/assignments/${id}`);
-  if (res.success) {
+  if (res && res.success) {
     return apiResponse(true, true, 'Assignment deleted successfully');
   }
-  return apiResponse(false, false, res.message || 'Failed to delete assignment');
+  return {
+    success: false,
+    message: res?.message || 'Failed to delete assignment',
+    data: null
+  };
 };
 
 export const getSubmissions = async (filters = {}) => {
@@ -46,34 +68,56 @@ export const getSubmissions = async (filters = {}) => {
   const qs = params.toString() ? `?${params.toString()}` : '';
 
   const res = await apiGet(`/submissions${qs}`);
-  if (res.success && Array.isArray(res.data)) {
+  if (res && res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
-  return apiResponse([]);
+  return {
+    success: false,
+    message: res?.message || 'Failed to fetch submissions',
+    data: []
+  };
 };
 
 export const createSubmission = async (submissionData) => {
   const res = await apiPost('/submissions', submissionData);
-  if (res.success && res.data) {
+  if (res && res.success && res.data) {
     return apiResponse(res.data, true, 'Submission uploaded successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to upload submission');
+  return {
+    success: false,
+    message: res?.message || 'Failed to upload submission',
+    data: null
+  };
 };
 
 export const reviewSubmission = async (id, reviewData) => {
+  if (!id) {
+    return { success: false, message: 'Submission ID is required', data: null };
+  }
   const res = await apiPut(`/submissions/${id}/review`, reviewData);
-  if (res.success && res.data) {
+  if (res && res.success && res.data) {
     return apiResponse(res.data, true, 'Correction saved successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to save review');
+  return {
+    success: false,
+    message: res?.message || 'Failed to save review',
+    data: null
+  };
 };
 
 export const deleteSubmission = async (id) => {
+  if (!id) {
+    return { success: false, message: 'Submission ID is required', data: null };
+  }
   const res = await apiDelete(`/submissions/${id}`);
-  if (res.success) {
+  if (res && res.success) {
     return apiResponse(true, true, 'Submission deleted successfully');
   }
-  return apiResponse(false, false, res.message || 'Failed to delete submission');
+  return {
+    success: false,
+    message: res?.message || 'Failed to delete submission',
+    data: null
+  };
 };
 
 export const updateCorrection = async (id, correctionData) => {
@@ -82,7 +126,14 @@ export const updateCorrection = async (id, correctionData) => {
 
 export const assignRecordedSubmissionsToTrainer = async (batchName, courseTitle, trainerName) => {
   const res = await apiPost('/submissions/assign-batch', { batchName, courseTitle, trainerName });
-  return apiResponse(true);
+  if (res && res.success) {
+    return apiResponse(true);
+  }
+  return {
+    success: false,
+    message: res?.message || 'Failed to assign submissions',
+    data: null
+  };
 };
 
 export const getCreatedAssignments = getAssignments;

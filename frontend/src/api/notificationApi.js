@@ -17,15 +17,15 @@ export const getNotifications = async () => {
     }));
     return apiResponse(normalized);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch notifications');
 };
 
 export const createNotification = async (notifData) => {
   const payload = {
-    recipientRole: notifData.recipientRole || (notifData.trainerName ? 'TRAINER' : 'ALL'),
-    recipientId: notifData.trainerName || notifData.recipientId || null,
-    title: notifData.title || 'Notification',
-    message: notifData.desc || notifData.message || '',
+    recipientRole: notifData?.recipientRole || (notifData?.trainerName ? 'TRAINER' : 'ALL'),
+    recipientId: notifData?.trainerName || notifData?.recipientId || null,
+    title: notifData?.title || 'Notification',
+    message: notifData?.desc || notifData?.message || '',
     readStatus: false
   };
 
@@ -37,21 +37,27 @@ export const createNotification = async (notifData) => {
 };
 
 export const markNotificationRead = async (id) => {
-  const res = await apiPut(`/notifications/${id}/read`, {});
-  return apiResponse(res?.success || false);
+  if (!id) {
+    return apiResponse(false, false, 'Notification ID is required');
+  }
+  const res = await apiPut(`/notifications/${encodeURIComponent(id)}/read`, {});
+  return apiResponse(res?.success || false, res?.success || false, res?.message);
 };
 
 export const deleteNotification = async (id) => {
-  const res = await apiDelete(`/notifications/${id}`);
-  return apiResponse(res?.success || false);
+  if (!id) {
+    return apiResponse(false, false, 'Notification ID is required');
+  }
+  const res = await apiDelete(`/notifications/${encodeURIComponent(id)}`);
+  return apiResponse(res?.success || false, res?.success || false, res?.message);
 };
 
 export const notifyScheduleCreated = async (schedule) => {
-  const title = `New Session Scheduled: ${schedule.title || schedule.course}`;
-  const desc = `Class scheduled for batch ${schedule.batch} on ${schedule.date} (${schedule.time || '10:00 AM'}). Mode: ${schedule.mode || 'Online'}`;
+  const title = `New Session Scheduled: ${schedule?.title || schedule?.course || 'Session'}`;
+  const desc = `Class scheduled for batch ${schedule?.batch || 'General'} on ${schedule?.date || 'Upcoming'} (${schedule?.time || '10:00 AM'}). Mode: ${schedule?.mode || 'Online'}`;
 
   return await createNotification({
-    trainerName: schedule.trainer,
+    trainerName: schedule?.trainer,
     title,
     desc,
     type: 'schedule_created'
@@ -60,11 +66,11 @@ export const notifyScheduleCreated = async (schedule) => {
 
 export const notifyScheduleChange = async (schedule, actionType, originalDate, originalTime, newDate, newTime) => {
   const isReschedule = actionType === 'Rescheduled';
-  const title = `${schedule.course} (${schedule.batch}) ${isReschedule ? 'Rescheduled' : 'Postponed'}`;
-  const desc = `${schedule.batch} session has been ${isReschedule ? 'rescheduled' : 'postponed'}.\nOriginal: ${originalDate}, ${originalTime}\nNew: ${newDate}, ${newTime}`;
+  const title = `${schedule?.course || 'Course'} (${schedule?.batch || 'Batch'}) ${isReschedule ? 'Rescheduled' : 'Postponed'}`;
+  const desc = `${schedule?.batch || 'Batch'} session has been ${isReschedule ? 'rescheduled' : 'postponed'}.\nOriginal: ${originalDate}, ${originalTime}\nNew: ${newDate}, ${newTime}`;
 
   return await createNotification({
-    trainerName: schedule.trainer,
+    trainerName: schedule?.trainer,
     title,
     desc,
     type: isReschedule ? 'reschedule' : 'postpone'
@@ -72,10 +78,13 @@ export const notifyScheduleChange = async (schedule, actionType, originalDate, o
 };
 
 export const getTrainerNotifications = async (trainerNameOrEmail) => {
-  const { data: notifications } = await getNotifications();
+  const res = await getNotifications();
+  if (!res.success) {
+    return apiResponse([], false, res?.message || 'Failed to fetch trainer notifications');
+  }
   const lowerQuery = (trainerNameOrEmail || '').toLowerCase().trim();
 
-  const trainerNotifs = (notifications || []).filter(n => {
+  const trainerNotifs = (res.data || []).filter(n => {
     if (!n.trainerName) return true;
     const nLower = n.trainerName.toLowerCase();
     return nLower.includes(lowerQuery) || lowerQuery.includes(nLower);

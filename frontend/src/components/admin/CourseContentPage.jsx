@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Plus, Video, FileText, Layers, Trash2, Edit, X, 
-  ExternalLink, Upload, File, Image as ImageIcon, AlertCircle, CheckCircle2,
-  FileCode, Music, Download, Eye
+  ExternalLink, Image as ImageIcon, AlertCircle, CheckCircle2,
+  Music, Download
 } from 'lucide-react';
 import { getCourseById, addModule, updateModule, deleteModule } from '../../api/courseApi';
 import ConfirmModal from '../common/ConfirmModal';

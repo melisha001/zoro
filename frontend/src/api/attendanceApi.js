@@ -11,29 +11,36 @@ export const getAttendanceRecords = async () => {
   if (res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch attendance records');
 };
 
 export const getStudentAttendance = async (studentId) => {
-  if (!studentId) return apiResponse([]);
+  if (!studentId) {
+    return apiResponse([], false, 'Student ID is required');
+  }
   const res = await apiGet(`/attendance/student/${encodeURIComponent(studentId)}`);
   if (res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch student attendance');
 };
 
 export const recordAttendance = async (sessionData, studentName = 'Student', studentEmail = 'student@zoro.com', studentId = null) => {
+  const finalStudentId = studentId || sessionData?.studentId || studentEmail;
+  if (!finalStudentId) {
+    return apiResponse(null, false, 'Student identifier is required to record attendance');
+  }
+
   const payload = {
-    scheduleId: sessionData.id ? String(sessionData.id) : null,
-    studentId: studentId || sessionData.studentId || studentEmail,
-    studentName: studentName,
-    courseId: sessionData.courseId || sessionData.course,
-    batchId: sessionData.batchId || sessionData.batch,
-    date: sessionData.date || new Date().toISOString().split('T')[0],
+    scheduleId: sessionData?.id ? String(sessionData.id) : null,
+    studentId: finalStudentId,
+    studentName: studentName || 'Student',
+    courseId: sessionData?.courseId || sessionData?.course,
+    batchId: sessionData?.batchId || sessionData?.batch,
+    date: sessionData?.date || new Date().toISOString().split('T')[0],
     status: 'PRESENT',
     remarks: 'Portal Live Class Join',
-    recordedBy: studentName
+    recordedBy: studentName || 'Student'
   };
 
   const res = await apiPost('/attendance', payload);
@@ -44,6 +51,9 @@ export const recordAttendance = async (sessionData, studentName = 'Student', stu
 };
 
 export const recordBatchAttendance = async (records) => {
+  if (!Array.isArray(records) || records.length === 0) {
+    return apiResponse(null, false, 'No attendance records provided');
+  }
   const res = await apiPost('/attendance/batch', records);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Batch attendance recorded');
@@ -57,19 +67,24 @@ export const getAttendanceRemarks = async () => {
     const withRemarks = res.data.filter(r => r.remarks && r.remarks.trim().length > 0);
     return apiResponse(withRemarks);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch attendance remarks');
 };
 
 export const addAttendanceRemark = async (remarkData) => {
+  const finalStudentId = remarkData?.studentId || remarkData?.studentEmail || remarkData?.studentName;
+  if (!finalStudentId) {
+    return apiResponse(null, false, 'Student identifier is required for remark');
+  }
+
   const payload = {
-    studentId: remarkData.studentId || remarkData.studentEmail || remarkData.studentName,
-    studentName: remarkData.studentName,
-    courseId: remarkData.courseId || remarkData.course,
-    batchId: remarkData.batchId || remarkData.batch,
-    date: remarkData.date || new Date().toISOString().split('T')[0],
-    status: remarkData.status || 'PRESENT',
-    remarks: remarkData.remark || remarkData.remarks,
-    recordedBy: remarkData.addedByName || 'Trainer'
+    studentId: finalStudentId,
+    studentName: remarkData?.studentName,
+    courseId: remarkData?.courseId || remarkData?.course,
+    batchId: remarkData?.batchId || remarkData?.batch,
+    date: remarkData?.date || new Date().toISOString().split('T')[0],
+    status: remarkData?.status || 'PRESENT',
+    remarks: remarkData?.remark || remarkData?.remarks,
+    recordedBy: remarkData?.addedByName || 'Trainer'
   };
 
   const res = await apiPost('/attendance', payload);
@@ -82,11 +97,16 @@ export const addAttendanceRemark = async (remarkData) => {
 export const saveAttendanceRemark = addAttendanceRemark;
 
 export const updateAttendanceStatus = async (recordId, status) => {
+  if (!recordId) {
+    return apiResponse(null, false, 'Attendance record ID is required');
+  }
   const payload = {
     id: recordId,
     status: status
   };
   const res = await apiPost('/attendance', payload);
-  return apiResponse(res?.data || null, res?.success || false);
+  if (res.success && res.data) {
+    return apiResponse(res.data, true, 'Status updated');
+  }
+  return apiResponse(null, false, res?.message || 'Failed to update attendance status');
 };
-

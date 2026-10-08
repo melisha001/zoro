@@ -11,19 +11,24 @@ export const getEnrollments = async () => {
   if (res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch enrollments');
 };
 
 export const getStudentEnrollments = async (studentIdOrEmail) => {
-  if (!studentIdOrEmail) return apiResponse([]);
+  if (!studentIdOrEmail) {
+    return apiResponse([], false, 'Student identifier is required');
+  }
   const res = await apiGet(`/enrollments/student/${encodeURIComponent(studentIdOrEmail)}`);
   if (res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch student enrollments');
 };
 
 export const enrollStudentInCourse = async (studentIdOrEmail, courseId, batchName = '', batchId = null) => {
+  if (!studentIdOrEmail || !courseId) {
+    return apiResponse(null, false, 'Student identifier and Course ID are required to enroll');
+  }
   const payload = {
     studentId: studentIdOrEmail,
     studentEmail: studentIdOrEmail,

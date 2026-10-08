@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, BookOpen, AlertTriangle, X, Eye, Users, Layers, Check, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, BookOpen, AlertTriangle, X, Eye, Users, Layers, Check, Edit, Trash2, FileText } from 'lucide-react';
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 import { getCreatedAssignments, createExtraAssignment, updateAssignment, deleteAssignment } from '../../api/assignmentApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
@@ -16,7 +16,6 @@ export default function TrainerAssignmentsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('All');
   const [selectedBatch, setSelectedBatch] = useState('All');
-  const [selectedStatus, setSelectedStatus] = useState('All');
   const [allowCreation, setAllowCreation] = useState(true);
   const [editingAssignmentId, setEditingAssignmentId] = useState(null);
 

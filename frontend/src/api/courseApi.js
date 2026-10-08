@@ -12,71 +12,95 @@ export const getCourses = async (audience = null) => {
   if (res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch courses');
 };
 
 export const getCourseById = async (id) => {
-  const res = await apiGet(`/courses/${id}`);
+  if (!id) {
+    return apiResponse(null, false, 'Course ID is required');
+  }
+  const res = await apiGet(`/courses/${encodeURIComponent(id)}`);
   if (res.success && res.data) {
     return apiResponse(res.data);
   }
-  return apiResponse(null, false, res.message || 'Course not found');
+  return apiResponse(null, false, res?.message || 'Course not found');
 };
 
 export const createCourse = async (newCourseData) => {
+  if (!newCourseData?.title) {
+    return apiResponse(null, false, 'Course title is required');
+  }
   const res = await apiPost('/courses', newCourseData);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Course created successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to create course');
+  return apiResponse(null, false, res?.message || 'Failed to create course');
 };
 
 export const updateCourse = async (id, updatedData) => {
-  const res = await apiPut(`/courses/${id}`, updatedData);
+  if (!id) {
+    return apiResponse(null, false, 'Course ID is required');
+  }
+  const res = await apiPut(`/courses/${encodeURIComponent(id)}`, updatedData);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Course updated successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to update course');
+  return apiResponse(null, false, res?.message || 'Failed to update course');
 };
 
 export const deleteCourse = async (id) => {
-  const res = await apiDelete(`/courses/${id}`);
+  if (!id) {
+    return apiResponse(false, false, 'Course ID is required');
+  }
+  const res = await apiDelete(`/courses/${encodeURIComponent(id)}`);
   if (res.success) {
     return apiResponse(true, true, 'Course deleted successfully');
   }
-  return apiResponse(false, false, res.message || 'Failed to delete course');
+  return apiResponse(false, false, res?.message || 'Failed to delete course');
 };
 
 export const addModule = async (courseId, moduleData) => {
-  const res = await apiPost(`/courses/${courseId}/modules`, moduleData);
+  if (!courseId) {
+    return apiResponse(null, false, 'Course ID is required');
+  }
+  const res = await apiPost(`/courses/${encodeURIComponent(courseId)}/modules`, moduleData);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Module added successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to add module');
+  return apiResponse(null, false, res?.message || 'Failed to add module');
 };
 
 export const updateModule = async (courseId, moduleId, updatedModuleData) => {
-  const res = await apiPut(`/courses/${courseId}/modules/${moduleId}`, updatedModuleData);
+  if (!courseId || !moduleId) {
+    return apiResponse(null, false, 'Course ID and Module ID are required');
+  }
+  const res = await apiPut(`/courses/${encodeURIComponent(courseId)}/modules/${encodeURIComponent(moduleId)}`, updatedModuleData);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Module updated successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to update module');
+  return apiResponse(null, false, res?.message || 'Failed to update module');
 };
 
 export const deleteModule = async (courseId, moduleId) => {
-  const res = await apiDelete(`/courses/${courseId}/modules/${moduleId}`);
+  if (!courseId || !moduleId) {
+    return apiResponse(false, false, 'Course ID and Module ID are required');
+  }
+  const res = await apiDelete(`/courses/${encodeURIComponent(courseId)}/modules/${encodeURIComponent(moduleId)}`);
   if (res.success) {
     return apiResponse(true, true, 'Module deleted successfully');
   }
-  return apiResponse(false, false, res.message || 'Failed to delete module');
+  return apiResponse(false, false, res?.message || 'Failed to delete module');
 };
 
 export const addLesson = async (courseId, moduleId, lessonData) => {
-  const res = await apiPost(`/courses/${courseId}/modules/${moduleId}/lessons`, lessonData);
+  if (!courseId || !moduleId) {
+    return apiResponse(null, false, 'Course ID and Module ID are required');
+  }
+  const res = await apiPost(`/courses/${encodeURIComponent(courseId)}/modules/${encodeURIComponent(moduleId)}/lessons`, lessonData);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Lesson added successfully');
   }
-  return apiResponse(lessonData, true, 'Lesson updated');
+  return apiResponse(null, false, res?.message || 'Failed to add lesson');
 };
 
 // --- TRAINER COURSE REQUESTS API ---
@@ -96,10 +120,13 @@ export const getTrainerCourseRequests = async (trainerId = null) => {
     }));
     return apiResponse(normalized);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch trainer course requests');
 };
 
 export const createTrainerCourseRequest = async ({ trainerId, trainerName, trainerEmail, courseId, courseTitle }) => {
+  if (!courseId) {
+    return apiResponse(null, false, 'Course ID is required');
+  }
   const payload = {
     trainerId: trainerId || trainerEmail,
     trainerName,
@@ -113,13 +140,16 @@ export const createTrainerCourseRequest = async ({ trainerId, trainerName, train
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Course access requested successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to request course');
+  return apiResponse(null, false, res?.message || 'Failed to request course');
 };
 
 export const updateTrainerCourseRequestStatus = async (requestId, status) => {
-  const res = await apiPut(`/trainer-course-requests/${requestId}/status`, { status });
+  if (!requestId) {
+    return apiResponse(false, false, 'Request ID is required');
+  }
+  const res = await apiPut(`/trainer-course-requests/${encodeURIComponent(requestId)}/status`, { status });
   if (res.success) {
     return apiResponse(true, true, 'Status updated');
   }
-  return apiResponse(false, false, res.message || 'Failed to update status');
+  return apiResponse(false, false, res?.message || 'Failed to update status');
 };

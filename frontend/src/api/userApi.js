@@ -12,7 +12,7 @@ export const getStudents = async () => {
   if (res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res.message || 'Failed to fetch students');
 };
 
 export const createStudent = async (data) => {
@@ -24,7 +24,10 @@ export const createStudent = async (data) => {
 };
 
 export const updateStudent = async (id, data) => {
-  const res = await apiPut(`/users/students/${id}`, data);
+  if (!id) {
+    return apiResponse(null, false, 'Student ID is required');
+  }
+  const res = await apiPut(`/users/students/${encodeURIComponent(id)}`, data);
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Student updated successfully');
   }
@@ -44,7 +47,10 @@ export const updateStudentPassword = async (studentIdOrEmail, currentPassword, n
 };
 
 export const deleteStudent = async (id) => {
-  const res = await apiDelete(`/users/${id}`);
+  if (!id) {
+    return apiResponse(false, false, 'Student ID is required');
+  }
+  const res = await apiDelete(`/users/${encodeURIComponent(id)}`);
   if (res.success) {
     return apiResponse(true, true, 'Student deleted successfully');
   }
@@ -60,7 +66,7 @@ export const getTrainers = async () => {
   if (res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res.message || 'Failed to fetch trainers');
 };
 
 export const createTrainer = async (data) => {
@@ -75,9 +81,12 @@ export const createTrainer = async (data) => {
 };
 
 export const updateTrainer = async (id, data) => {
-  let res = await apiPut(`/trainers/${id}`, data);
+  if (!id) {
+    return apiResponse(null, false, 'Trainer ID is required');
+  }
+  let res = await apiPut(`/trainers/${encodeURIComponent(id)}`, data);
   if (!res.success) {
-    res = await apiPut(`/users/trainers/${id}`, data);
+    res = await apiPut(`/users/trainers/${encodeURIComponent(id)}`, data);
   }
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Trainer updated successfully');
@@ -89,9 +98,12 @@ export const updateTrainerProfile = updateTrainer;
 export const updateStudentProfile = updateStudent;
 
 export const deleteTrainer = async (id) => {
-  let res = await apiDelete(`/trainers/${id}`);
+  if (!id) {
+    return apiResponse(false, false, 'Trainer ID is required');
+  }
+  let res = await apiDelete(`/trainers/${encodeURIComponent(id)}`);
   if (!res.success) {
-    res = await apiDelete(`/users/${id}`);
+    res = await apiDelete(`/users/${encodeURIComponent(id)}`);
   }
   if (res.success) {
     return apiResponse(true, true, 'Trainer deleted successfully');
@@ -100,15 +112,21 @@ export const deleteTrainer = async (id) => {
 };
 
 export const getTrainerDependencies = async (id) => {
-  const res = await apiGet(`/trainers/${id}/dependencies`);
+  if (!id) {
+    return apiResponse(null, false, 'Trainer ID is required');
+  }
+  const res = await apiGet(`/trainers/${encodeURIComponent(id)}/dependencies`);
   if (res.success && res.data) {
     return apiResponse(res.data);
   }
-  return apiResponse({ hasDependencies: false, courseCount: 0, batchCount: 0, scheduleCount: 0, courses: [], batches: [], schedules: [] });
+  return apiResponse({ hasDependencies: false, courseCount: 0, batchCount: 0, scheduleCount: 0, courses: [], batches: [], schedules: [] }, false, res.message || 'Failed to fetch dependencies');
 };
 
 export const replaceTrainer = async (id, payload) => {
-  const res = await apiPost(`/trainers/${id}/replace`, payload);
+  if (!id) {
+    return apiResponse(false, false, 'Trainer ID is required');
+  }
+  const res = await apiPost(`/trainers/${encodeURIComponent(id)}/replace`, payload);
   if (res.success) {
     return apiResponse(true, true, 'Trainer replaced successfully');
   }
@@ -161,6 +179,5 @@ export const findUserByEmail = async (email) => {
     return { ...foundTrainer, role: 'TRAINER' };
   }
 
-  return { name: email ? email.split('@')[0] : 'User', email: lowerEmail, role: 'STUDENT' };
+  return null;
 };
-

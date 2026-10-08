@@ -19,12 +19,15 @@ export const getSalaryPayments = async () => {
     }));
     return apiResponse(normalized);
   }
-  return apiResponse([]);
+  return apiResponse([], false, res?.message || 'Failed to fetch salary records');
 };
 
 export const getSalaries = getSalaryPayments;
 
 export const createSalaryPayment = async (data) => {
+  if (data?.amount === undefined || data?.amount === null) {
+    return apiResponse(null, false, 'Salary amount is required');
+  }
   const payload = {
     trainerId: data.trainerId || `trn-${Date.now()}`,
     trainerName: data.trainerName || 'Trainer',
@@ -51,15 +54,18 @@ export const createSalaryPayment = async (data) => {
 };
 
 export const updateSalaryPayment = async (id, data) => {
+  if (!id) {
+    return apiResponse(null, false, 'Salary record ID is required');
+  }
   const payload = {
-    month: data.month,
-    amount: parseFloat(data.amount || 0),
-    paymentDate: data.date || data.paymentDate,
-    notes: data.notes,
-    status: data.status
+    month: data?.month,
+    amount: parseFloat(data?.amount || 0),
+    paymentDate: data?.date || data?.paymentDate,
+    notes: data?.notes,
+    status: data?.status
   };
 
-  const res = await apiPut(`/salary-records/${id}`, payload);
+  const res = await apiPut(`/salary-records/${encodeURIComponent(id)}`, payload);
   if (res && res.success) {
     return apiResponse(res.data);
   }
@@ -67,7 +73,10 @@ export const updateSalaryPayment = async (id, data) => {
 };
 
 export const deleteSalaryPayment = async (id) => {
-  const res = await apiDelete(`/salary-records/${id}`);
+  if (!id) {
+    return apiResponse(false, false, 'Salary record ID is required');
+  }
+  const res = await apiDelete(`/salary-records/${encodeURIComponent(id)}`);
   if (res && res.success) {
     return apiResponse(true);
   }
@@ -75,8 +84,16 @@ export const deleteSalaryPayment = async (id) => {
 };
 
 export const getSalaryStats = async () => {
-  const { data: salaries } = await getSalaryPayments();
-  const list = salaries || [];
+  const salRes = await getSalaryPayments();
+  if (!salRes.success) {
+    return apiResponse({
+      totalPaid: 0,
+      currentMonthPaid: 0,
+      uniqueTrainersPaid: 0,
+      totalRecords: 0
+    }, false, salRes?.message || 'Failed to fetch salary stats');
+  }
+  const list = salRes.data || [];
   const totalPaid = list.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
   const currentMonthStr = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });

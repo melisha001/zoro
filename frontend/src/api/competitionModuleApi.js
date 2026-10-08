@@ -3,7 +3,7 @@ import { logActivity } from './activityLogApi';
 
 export const getCompetitionModules = async (competitionId = null) => {
   if (competitionId) {
-    const res = await apiGet(`/competitions/${competitionId}/modules`);
+    const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/modules`);
     if (res && res.success && Array.isArray(res.data)) {
       const normalized = res.data.map(m => ({
         id: m.id,
@@ -20,7 +20,7 @@ export const getCompetitionModules = async (competitionId = null) => {
       }));
       return apiResponse(normalized);
     }
-    return apiResponse([]);
+    return apiResponse([], false, res?.message || 'Failed to fetch competition modules');
   }
 
   // If no competitionId provided, get all competitions and flatten their modules
@@ -48,17 +48,20 @@ export const getCompetitionModules = async (competitionId = null) => {
     });
     return apiResponse(allModules);
   }
-  return apiResponse([]);
+  return apiResponse([], false, compRes?.message || 'Failed to fetch competition modules');
 };
 
 export const addCompetitionModule = async (competitionId, moduleData) => {
+  if (!competitionId) {
+    return apiResponse(null, false, 'Competition ID is required');
+  }
   const payload = {
-    title: moduleData.title || 'Untitled Module',
-    description: moduleData.description || '',
-    roundNumber: moduleData.roundNumber || 1
+    title: moduleData?.title || 'Untitled Module',
+    description: moduleData?.description || '',
+    roundNumber: moduleData?.roundNumber || 1
   };
 
-  const res = await apiPost(`/competitions/${competitionId}/modules`, payload);
+  const res = await apiPost(`/competitions/${encodeURIComponent(competitionId)}/modules`, payload);
   if (res && res.success) {
     await logActivity('Competitions', 'Module Added', `Added module "${payload.title}" to competition ${competitionId}`);
     return apiResponse(res.data);
@@ -67,13 +70,16 @@ export const addCompetitionModule = async (competitionId, moduleData) => {
 };
 
 export const updateCompetitionModule = async (moduleId, updatedData) => {
+  if (!moduleId) {
+    return apiResponse(null, false, 'Module ID is required');
+  }
   const payload = {
-    title: updatedData.title,
-    description: updatedData.description,
-    roundNumber: updatedData.roundNumber
+    title: updatedData?.title,
+    description: updatedData?.description,
+    roundNumber: updatedData?.roundNumber
   };
 
-  const res = await apiPut(`/competitions/modules/${moduleId}`, payload);
+  const res = await apiPut(`/competitions/modules/${encodeURIComponent(moduleId)}`, payload);
   if (res && res.success) {
     await logActivity('Competitions', 'Module Updated', `Updated competition module ${moduleId}`);
     return apiResponse(res.data);
@@ -82,7 +88,10 @@ export const updateCompetitionModule = async (moduleId, updatedData) => {
 };
 
 export const deleteCompetitionModule = async (moduleId) => {
-  const res = await apiDelete(`/competitions/modules/${moduleId}`);
+  if (!moduleId) {
+    return apiResponse(false, false, 'Module ID is required');
+  }
+  const res = await apiDelete(`/competitions/modules/${encodeURIComponent(moduleId)}`);
   if (res && res.success) {
     await logActivity('Competitions', 'Module Deleted', `Deleted competition module "${moduleId}"`);
     return apiResponse(true);

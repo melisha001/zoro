@@ -24,6 +24,12 @@ export const createVideoUploadSession = async ({ title, courseId, moduleId, coll
 };
 
 export const getVideoPlayback = async (videoId, _studentId, courseId) => {
+  if (!videoId) {
+    return {
+      success: false,
+      message: 'Video ID is required'
+    };
+  }
   const params = new URLSearchParams();
   if (courseId) params.append('courseId', courseId);
 

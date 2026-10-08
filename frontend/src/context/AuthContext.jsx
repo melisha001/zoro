@@ -1,18 +1,73 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getItem, setItem, setAuthToken, clearAuthSession } from '../api/client';
+import { getItem, setItem, setAuthToken, clearAuthSession, getAuthToken, apiGet } from '../api/client';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => getItem('user', null));
   const [role, setRole] = useState(() => getItem('role', null));
+  const [loading, setLoading] = useState(true);
+
+  // Restore session via /api/auth/me on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    const restoreSession = async () => {
+      const token = getAuthToken();
+      if (!token) {
+        if (isMounted) setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await apiGet('/auth/me');
+        if (isMounted) {
+          if (res.success && res.data) {
+            const u = res.data;
+            const roleUpper = (u.role || 'STUDENT').toUpperCase();
+            const formattedUser = {
+              ...u,
+              role: roleUpper,
+              avatar: u.avatar || (roleUpper === 'ADMIN'
+                ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120'
+                : roleUpper === 'TRAINER'
+                ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200'
+                : 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=200')
+            };
+            setUser(formattedUser);
+            setRole(roleUpper);
+            setItem('user', formattedUser);
+            setItem('role', roleUpper);
+          } else {
+            setUser(null);
+            setRole(null);
+            clearAuthSession();
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setUser(null);
+          setRole(null);
+          clearAuthSession();
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    restoreSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (user) {
       setItem('user', user);
       setItem('role', user.role || role);
-    } else {
-      clearAuthSession();
     }
   }, [user, role]);
 
@@ -58,6 +113,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{ 
       user, 
       role, 
+      loading,
       isAuthenticated: !!user, 
       login, 
       updateUserInContext,
