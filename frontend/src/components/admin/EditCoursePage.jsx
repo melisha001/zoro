@@ -1,0 +1,366 @@
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Save, Video, Layers, CheckCircle2 } from 'lucide-react';
+import { getCourseById, updateCourse } from '../../api/courseApi';
+import { getTrainers } from '../../api/userApi';
+import FileUploader from '../common/FileUploader';
+
+const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+export default function EditCoursePage({ courseId, setActiveScreen }) {
+  const [formData, setFormData] = useState(null);
+  const [trainersList, setTrainersList] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (courseId) {
+      Promise.all([
+        getCourseById(courseId),
+        getTrainers()
+      ]).then(([cRes, tRes]) => {
+        const trainers = tRes.data || [];
+        setTrainersList(trainers);
+
+        if (cRes.data) {
+          const c = cRes.data;
+          const matchedTrainer = trainers.find(t => t.id === c.trainerId || (c.assignedTrainer && t.name?.toLowerCase().trim() === c.assignedTrainer?.toLowerCase().trim()));
+          setFormData({
+            title: '',
+            subtitle: '',
+            description: '',
+            duration: '3 Months',
+            fee: '15000',
+            fees: '15000',
+            mode: 'Online',
+            ageGroup: '7-12 Years',
+            certificate: 'Yes',
+            trainerId: c.trainerId || matchedTrainer?.id || '',
+            assignedTrainer: c.assignedTrainer || matchedTrainer?.name || '',
+            googleMeetUrl: '',
+            classDays: ['Monday', 'Wednesday', 'Friday'],
+            startTime: '05:00 PM',
+            endTime: '06:00 PM',
+            youtubeUrl: '',
+            overview: '',
+            thumbnail: '',
+            ...c
+          });
+        }
+      }).catch(err => {
+        console.error('Failed to load course or trainers:', err);
+      });
+    }
+  }, [courseId]);
+
+  if (!formData) {
+    return <div className="p-8 text-center text-xs font-bold text-slate-400">Loading course details...</div>;
+  }
+
+  const handleToggleDay = (dayName) => {
+    const current = formData.classDays || [];
+    let updated;
+    if (current.includes(dayName)) {
+      updated = current.filter(d => d !== dayName);
+    } else {
+      updated = [...current, dayName];
+    }
+    setFormData({ ...formData, classDays: updated });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (formData.mode !== 'Recorded' && (!formData.trainerId || !formData.assignedTrainer)) {
+      setErrorMsg(`A real trainer is required for ${formData.mode} courses. Please select a trainer.`);
+      return;
+    }
+    setErrorMsg('');
+    setSaving(true);
+    await updateCourse(courseId, {
+      ...formData,
+      trainerId: formData.trainerId || null,
+      assignedTrainer: formData.assignedTrainer || (formData.mode === 'Recorded' ? 'None (Self-Paced)' : ''),
+      fee: Number(formData.fee || formData.fees || 15000),
+      fees: Number(formData.fee || formData.fees || 15000)
+    });
+    setSaving(false);
+    setActiveScreen('admin-manage-courses');
+  };
+
+  const isOnlineOrHybrid = formData.mode === 'Online' || formData.mode === 'Hybrid';
+  const isRecordedOrHybrid = formData.mode === 'Recorded' || formData.mode === 'Hybrid';
+
+  return (
+    <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
+      <button
+        onClick={() => setActiveScreen('admin-manage-courses')}
+        className="inline-flex items-center space-x-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span>Back to Courses</span>
+      </button>
+
+      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Edit Course: {formData.title}</h1>
+          <p className="text-xs text-slate-500 font-medium">Update course info, delivery mode (Online, Recorded, Hybrid), and live class settings.</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-md max-w-4xl">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Course Title *</label>
+              <input
+                type="text"
+                required
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Subtitle / Tagline</label>
+              <input
+                type="text"
+                value={formData.subtitle || ''}
+                onChange={(e) => setFormData({ ...formData, subtitle: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Course Description *</label>
+            <textarea
+              rows={3}
+              required
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Duration Value *</label>
+              <input
+                type="number"
+                min="1"
+                required
+                placeholder="3"
+                value={formData.durationValue || (formData.duration ? formData.duration.split(' ')[0] : '3')}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const unit = formData.durationUnit || (formData.duration ? formData.duration.split(' ')[1] : 'Months');
+                  setFormData({ ...formData, durationValue: val, durationUnit: unit, duration: `${val} ${unit}` });
+                }}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Duration Unit *</label>
+              <select
+                value={formData.durationUnit || (formData.duration && formData.duration.includes('Year') ? (formData.duration.includes('Years') ? 'Years' : 'Year') : (formData.duration && formData.duration.includes('Month') && !formData.duration.includes('Months') ? 'Month' : 'Months'))}
+                onChange={(e) => {
+                  const unit = e.target.value;
+                  const val = formData.durationValue || (formData.duration ? formData.duration.split(' ')[0] : '3');
+                  setFormData({ ...formData, durationUnit: unit, durationValue: val, duration: `${val} ${unit}` });
+                }}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white cursor-pointer"
+              >
+                <option value="Months">Months</option>
+                <option value="Month">Month</option>
+                <option value="Years">Years</option>
+                <option value="Year">Year</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Course Fee (₹)</label>
+              <input
+                type="number"
+                value={formData.fee || formData.fees || ''}
+                onChange={(e) => setFormData({ ...formData, fee: e.target.value, fees: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Course Mode *</label>
+              <select
+                value={formData.mode || 'Online'}
+                onChange={(e) => {
+                  const newMode = e.target.value;
+                  setFormData({ 
+                    ...formData, 
+                    mode: newMode,
+                    trainerId: newMode === 'Recorded' ? '' : formData.trainerId,
+                    assignedTrainer: newMode === 'Recorded' ? 'None (Self-Paced)' : (formData.assignedTrainer === 'None (Self-Paced)' ? '' : formData.assignedTrainer)
+                  });
+                }}
+                className="w-full px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs font-black text-blue-900 focus:bg-white focus:border-blue-600"
+              >
+                <option value="Online">Online (Live Sessions)</option>
+                <option value="Recorded">Recorded (Modules & Videos)</option>
+                <option value="Hybrid">Hybrid (Live + Recorded)</option>
+              </select>
+            </div>
+
+            {/* REQUIREMENT: EDIT COURSE FOR (AUDIENCE) SELECTION */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Course For *</label>
+              <select
+                required
+                value={formData.audience || 'student'}
+                onChange={(e) => setFormData({ ...formData, audience: e.target.value })}
+                className="w-full px-4 py-2.5 bg-purple-50 border border-purple-200 rounded-xl text-xs font-black text-purple-900 focus:bg-white focus:border-purple-600"
+              >
+                <option value="student">Student (Public & LMS)</option>
+                <option value="trainer">Trainer (Trainer's Courses Only)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Assign Trainer {formData.mode === 'Recorded' ? '(Optional)' : '*'}
+              </label>
+              <select
+                required={formData.mode !== 'Recorded'}
+                value={formData.trainerId || ''}
+                onChange={(e) => {
+                  const selId = e.target.value;
+                  const matched = trainersList.find(t => t.id === selId);
+                  setFormData({
+                    ...formData,
+                    trainerId: selId,
+                    assignedTrainer: matched ? matched.name : (formData.mode === 'Recorded' ? 'None (Self-Paced)' : '')
+                  });
+                }}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
+              >
+                {formData.mode === 'Recorded' && <option value="">None (Self-Paced)</option>}
+                {trainersList.length === 0 ? (
+                  <option value="" disabled={formData.mode !== 'Recorded'}>No trainers available</option>
+                ) : (
+                  <>
+                    <option value="">-- Select Trainer --</option>
+                    {trainersList.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} {t.specialty ? `(${t.specialty})` : ''}
+                      </option>
+                    ))}
+                  </>
+                )}
+              </select>
+            </div>
+          </div>
+
+          {isOnlineOrHybrid && (
+            <div className="p-5 bg-blue-50/50 rounded-2xl border border-blue-200 space-y-4">
+              <h3 className="text-xs font-black text-blue-900 flex items-center gap-2 uppercase tracking-wider">
+                <Video className="w-4 h-4 text-blue-600" />
+                Live Session Configuration ({formData.mode} Mode)
+              </h3>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Google Meet Link *</label>
+                <input
+                  type="url"
+                  placeholder="https://meet.google.com/abc-defg-hij"
+                  value={formData.googleMeetUrl || ''}
+                  onChange={(e) => setFormData({ ...formData, googleMeetUrl: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Start Time</label>
+                  <input
+                    type="text"
+                    value={formData.startTime || '05:00 PM'}
+                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">End Time</label>
+                  <input
+                    type="text"
+                    value={formData.endTime || '06:00 PM'}
+                    onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Class Schedule Days</label>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {ALL_DAYS.map((dayName) => {
+                    const isSel = (formData.classDays || []).includes(dayName);
+                    return (
+                      <button
+                        key={dayName}
+                        type="button"
+                        onClick={() => handleToggleDay(dayName)}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                          isSel ? 'bg-blue-600 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200'
+                        }`}
+                      >
+                        <span>{dayName}</span>
+                        {isSel && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isRecordedOrHybrid && (
+            <div className="p-4 bg-purple-50 rounded-2xl border border-purple-200 text-xs font-medium text-purple-900 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Layers className="w-5 h-5 text-purple-600 shrink-0" />
+                <span>Recorded modules & private video uploads can be managed via <strong>"Course Modules"</strong> after saving.</span>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Course Thumbnail Image</label>
+            {formData.thumbnail && (
+              <div className="mb-2 w-32 h-20 rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                <img src={formData.thumbnail} alt="Thumbnail preview" className="w-full h-full object-cover" />
+              </div>
+            )}
+            <FileUploader 
+              label="Click to change course thumbnail image" 
+              accept=".png,.jpg,.jpeg,.webp"
+              onFileSelect={(file) => {
+                if (file) {
+                  const fakeUrl = URL.createObjectURL(file);
+                  setFormData({ ...formData, thumbnail: fakeUrl });
+                }
+              }}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl shadow-lg transition-transform transform active:scale-95 flex items-center justify-center space-x-2 text-sm cursor-pointer"
+          >
+            <Save className="w-4 h-4" />
+            <span>{saving ? 'Saving...' : 'Update Course'}</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+

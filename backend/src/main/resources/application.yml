@@ -1,0 +1,43 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: zoro-academy-backend
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:zoro_academy}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+    open-in-view: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+bunny:
+  stream:
+    library-id: ${BUNNY_LIBRARY_ID:770045}
+    api-key: ${BUNNY_API_KEY:0726be56-9703-46cd-a987ac2f79f2-558e-4b2c4}
+    cdn-host: ${BUNNY_CDN_HOST:vz-251d06e3-32f.b-cdn.net}
+    token-auth-key: ${BUNNY_TOKEN_AUTH_KEY:0726be56-9703-46cd-a987ac2f79f2-558e-4b2c4}
+    token-expiration-seconds: 7200
+
+jwt:
+  secret: ${JWT_SECRET:4a6f726f41636164656d795365637572654a57545365637265744b657932303236}
+  expiration: 86400000
+
+cors:
+  allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
