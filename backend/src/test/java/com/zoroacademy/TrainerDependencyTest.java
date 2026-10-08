@@ -56,16 +56,16 @@ public class TrainerDependencyTest {
         c.setId("c_1");
         c.setTitle("Phonics Basic");
         c.setTrainerId("trn_1");
-        when(courseRepository.findAll()).thenReturn(List.of(c));
+        when(courseRepository.findByTrainerIdOrAssignedTrainerIgnoreCase(eq("trn_1"), anyString())).thenReturn(List.of(c));
 
         Batch b = new Batch();
         b.setId("b_1");
         b.setName("Batch Morning");
         b.setCourseName("Phonics Basic");
         b.setTrainerId("trn_1");
-        when(batchRepository.findAll()).thenReturn(List.of(b));
+        when(batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(eq("trn_1"), anyString())).thenReturn(List.of(b));
 
-        when(scheduleRepository.findAll()).thenReturn(Collections.emptyList());
+        when(scheduleRepository.findByTrainerIdOrTrainerIgnoreCaseOrderByDateAsc(anyString(), anyString())).thenReturn(Collections.emptyList());
 
         TrainerDependencyDto dto = userService.getTrainerDependencies("trn_1");
 
@@ -88,15 +88,15 @@ public class TrainerDependencyTest {
         c.setId("c_1");
         c.setTrainerId("trn_1");
         c.setAssignedTrainer("Old Trainer");
-        when(courseRepository.findAll()).thenReturn(List.of(c));
+        when(courseRepository.findByTrainerIdOrAssignedTrainerIgnoreCase(eq("trn_1"), anyString())).thenReturn(List.of(c));
 
         Batch b = new Batch();
         b.setId("b_1");
         b.setTrainerId("trn_1");
         b.setTrainerName("Old Trainer");
-        when(batchRepository.findAll()).thenReturn(List.of(b));
+        when(batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(eq("trn_1"), anyString())).thenReturn(List.of(b));
 
-        when(scheduleRepository.findAll()).thenReturn(Collections.emptyList());
+        when(scheduleRepository.findByTrainerIdOrTrainerIgnoreCaseOrderByDateAsc(anyString(), anyString())).thenReturn(Collections.emptyList());
 
         TrainerReplacementRequest req = new TrainerReplacementRequest("trn_2", "INACTIVATE");
         boolean result = userService.replaceTrainer("trn_1", req);

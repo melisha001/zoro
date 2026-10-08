@@ -32,6 +32,9 @@ public class Assignment {
     @Column(length = 255)
     private String trainer;
 
+    @Column(name = "trainer_id", length = 64)
+    private String trainerId;
+
     @Column(name = "due_date", length = 50)
     private String dueDate;
 
@@ -48,7 +51,7 @@ public class Assignment {
 
     public Assignment() {}
 
-    public Assignment(String id, String title, String course, String courseId, String batch, String batchId, String trainer, String dueDate, String description, String attachment, LocalDateTime createdAt) {
+    public Assignment(String id, String title, String course, String courseId, String batch, String batchId, String trainer, String trainerId, String dueDate, String description, String attachment, LocalDateTime createdAt) {
         this.id = id;
         this.title = title;
         this.course = course;
@@ -56,6 +59,7 @@ public class Assignment {
         this.batch = batch;
         this.batchId = batchId;
         this.trainer = trainer;
+        this.trainerId = trainerId;
         this.dueDate = dueDate;
         this.description = description;
         this.attachment = attachment;
@@ -118,6 +122,14 @@ public class Assignment {
         this.trainer = trainer;
     }
 
+    public String getTrainerId() {
+        return trainerId;
+    }
+
+    public void setTrainerId(String trainerId) {
+        this.trainerId = trainerId;
+    }
+
     public String getDueDate() {
         return dueDate;
     }
@@ -162,6 +174,7 @@ public class Assignment {
         private String batch;
         private String batchId;
         private String trainer;
+        private String trainerId;
         private String dueDate;
         private String description;
         private String attachment;
@@ -195,6 +208,10 @@ public class Assignment {
             this.trainer = trainer;
             return this;
         }
+        public Builder trainerId(String trainerId) {
+            this.trainerId = trainerId;
+            return this;
+        }
         public Builder dueDate(String dueDate) {
             this.dueDate = dueDate;
             return this;
@@ -213,7 +230,7 @@ public class Assignment {
         }
 
         public Assignment build() {
-            return new Assignment(id, title, course, courseId, batch, batchId, trainer, dueDate, description, attachment, createdAt);
+            return new Assignment(id, title, course, courseId, batch, batchId, trainer, trainerId, dueDate, description, attachment, createdAt);
         }
     }
 

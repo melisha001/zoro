@@ -17,12 +17,17 @@ public class CompetitionService {
     private final CompetitionRepository competitionRepository;
     private final CompetitionModuleRepository moduleRepository;
     private final CompetitionRegistrationRepository registrationRepository;
-    public CompetitionService(CompetitionRepository competitionRepository, CompetitionModuleRepository moduleRepository, CompetitionRegistrationRepository registrationRepository) {
+    private final com.zoroacademy.repository.UserRepository userRepository;
+
+    public CompetitionService(CompetitionRepository competitionRepository,
+                              CompetitionModuleRepository moduleRepository,
+                              CompetitionRegistrationRepository registrationRepository,
+                              com.zoroacademy.repository.UserRepository userRepository) {
         this.competitionRepository = competitionRepository;
         this.moduleRepository = moduleRepository;
         this.registrationRepository = registrationRepository;
+        this.userRepository = userRepository;
     }
-
 
     @Transactional(readOnly = true)
     public List<Competition> getAllCompetitions() {
@@ -38,7 +43,7 @@ public class CompetitionService {
     @Transactional
     public Competition createCompetition(Competition competition) {
         if (competition.getId() == null || competition.getId().isBlank()) {
-            competition.setId("comp_" + System.currentTimeMillis());
+            competition.setId("comp_" + java.util.UUID.randomUUID());
         }
         return competitionRepository.save(competition);
     }
@@ -47,7 +52,7 @@ public class CompetitionService {
     public CompetitionModule addModule(String compId, CompetitionModule module) {
         Competition comp = getCompetitionById(compId);
         if (module.getId() == null || module.getId().isBlank()) {
-            module.setId("comp_mod_" + System.currentTimeMillis());
+            module.setId("comp_mod_" + java.util.UUID.randomUUID());
         }
         module.setCompetition(comp);
         return moduleRepository.save(module);
@@ -72,11 +77,29 @@ public class CompetitionService {
     public CompetitionRegistration registerStudent(String compId, CompetitionRegistration reg) {
         Competition comp = getCompetitionById(compId);
         if (reg.getId() == null || reg.getId().isBlank()) {
-            reg.setId("reg_" + System.currentTimeMillis());
+            reg.setId("reg_" + java.util.UUID.randomUUID());
         }
         if (reg.getStudentPhone() != null && !reg.getStudentPhone().isBlank()) {
             reg.setStudentPhone(com.zoroacademy.util.PhoneValidator.sanitize(reg.getStudentPhone()));
         }
+        if (reg.getPaymentStatus() == null || reg.getPaymentStatus().isBlank()) {
+            reg.setPaymentStatus("Pending");
+        }
+
+        // Relational student resolution
+        if (reg.getStudentId() != null && reg.getStudentId().contains("@")) {
+            userRepository.findByEmailIgnoreCase(reg.getStudentId()).ifPresent(u -> {
+                reg.setStudentId(u.getId());
+                if (reg.getStudentEmail() == null) reg.setStudentEmail(u.getEmail());
+                if (reg.getStudentName() == null) reg.setStudentName(u.getName());
+            });
+        } else if (reg.getStudentEmail() != null && !reg.getStudentEmail().isBlank()) {
+            userRepository.findByEmailIgnoreCase(reg.getStudentEmail()).ifPresent(u -> {
+                if (reg.getStudentId() == null || reg.getStudentId().isBlank()) reg.setStudentId(u.getId());
+                if (reg.getStudentName() == null) reg.setStudentName(u.getName());
+            });
+        }
+
         reg.setCompetition(comp);
         return registrationRepository.save(reg);
     }

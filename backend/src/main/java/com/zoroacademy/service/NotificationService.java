@@ -27,7 +27,7 @@ public class NotificationService {
     @Transactional
     public Notification createNotification(Notification notification) {
         if (notification.getId() == null || notification.getId().isBlank()) {
-            notification.setId("notif_" + System.currentTimeMillis());
+            notification.setId("notif_" + java.util.UUID.randomUUID());
         }
         return notificationRepository.save(notification);
     }

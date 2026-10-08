@@ -19,12 +19,17 @@ public class EnrollmentService {
     private final EnrollmentRepository enrollmentRepository;
     private final EnrollmentRequestRepository requestRepository;
     private final CourseRepository courseRepository;
-    public EnrollmentService(EnrollmentRepository enrollmentRepository, EnrollmentRequestRepository requestRepository, CourseRepository courseRepository) {
+    private final com.zoroacademy.repository.UserRepository userRepository;
+
+    public EnrollmentService(EnrollmentRepository enrollmentRepository,
+                             EnrollmentRequestRepository requestRepository,
+                             CourseRepository courseRepository,
+                             com.zoroacademy.repository.UserRepository userRepository) {
         this.enrollmentRepository = enrollmentRepository;
         this.requestRepository = requestRepository;
         this.courseRepository = courseRepository;
+        this.userRepository = userRepository;
     }
-
 
     @Transactional(readOnly = true)
     public List<Enrollment> getAllEnrollments() {
@@ -42,9 +47,26 @@ public class EnrollmentService {
 
     @Transactional
     public Enrollment enrollStudent(String studentId, String studentEmail, String courseId, String batchName) {
-        String effectiveEmail = (studentEmail != null && !studentEmail.isBlank()) ? studentEmail : studentId;
-        boolean exists = enrollmentRepository.existsByStudentIdAndCourseId(studentId, courseId)
-                || enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(effectiveEmail, courseId);
+        String effectiveStudentId = studentId;
+        String effectiveEmail = studentEmail;
+
+        if (effectiveStudentId != null && effectiveStudentId.contains("@")) {
+            effectiveEmail = effectiveStudentId;
+            effectiveStudentId = userRepository.findByEmailIgnoreCase(effectiveEmail)
+                    .map(com.zoroacademy.entity.User::getId)
+                    .orElse(effectiveStudentId);
+        } else if (effectiveEmail != null && (effectiveStudentId == null || effectiveStudentId.isBlank())) {
+            effectiveStudentId = userRepository.findByEmailIgnoreCase(effectiveEmail)
+                    .map(com.zoroacademy.entity.User::getId)
+                    .orElse(effectiveEmail);
+        } else if (effectiveStudentId != null && (effectiveEmail == null || effectiveEmail.isBlank())) {
+            effectiveEmail = userRepository.findById(effectiveStudentId)
+                    .map(com.zoroacademy.entity.User::getEmail)
+                    .orElse(effectiveStudentId);
+        }
+
+        boolean exists = enrollmentRepository.existsByStudentIdAndCourseId(effectiveStudentId, courseId)
+                || (effectiveEmail != null && enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(effectiveEmail, courseId));
 
         if (exists) {
             throw new IllegalArgumentException("Student is already enrolled in this course.");
@@ -54,9 +76,9 @@ public class EnrollmentService {
         String courseTitle = courseOpt.map(Course::getTitle).orElse(courseId);
 
         Enrollment enrollment = Enrollment.builder()
-                .id("enr_" + System.currentTimeMillis())
-                .studentId(studentId)
-                .studentEmail(effectiveEmail)
+                .id("enr_" + java.util.UUID.randomUUID())
+                .studentId(effectiveStudentId)
+                .studentEmail(effectiveEmail != null ? effectiveEmail : "")
                 .courseId(courseId)
                 .courseTitle(courseTitle)
                 .batchName(batchName)
@@ -102,7 +124,7 @@ public class EnrollmentService {
         }
 
         if (req.getId() == null || req.getId().isBlank()) {
-            req.setId("enr_req_" + System.currentTimeMillis());
+            req.setId("enr_req_" + java.util.UUID.randomUUID());
         }
         if (req.getStatus() == null || req.getStatus().isBlank()) {
             req.setStatus("Pending");

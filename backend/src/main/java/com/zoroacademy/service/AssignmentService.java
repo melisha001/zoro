@@ -16,11 +16,21 @@ public class AssignmentService {
 
     private final AssignmentRepository assignmentRepository;
     private final AssignmentSubmissionRepository submissionRepository;
-    public AssignmentService(AssignmentRepository assignmentRepository, AssignmentSubmissionRepository submissionRepository) {
+    private final com.zoroacademy.repository.CourseRepository courseRepository;
+    private final com.zoroacademy.repository.BatchRepository batchRepository;
+    private final com.zoroacademy.repository.UserRepository userRepository;
+
+    public AssignmentService(AssignmentRepository assignmentRepository,
+                             AssignmentSubmissionRepository submissionRepository,
+                             com.zoroacademy.repository.CourseRepository courseRepository,
+                             com.zoroacademy.repository.BatchRepository batchRepository,
+                             com.zoroacademy.repository.UserRepository userRepository) {
         this.assignmentRepository = assignmentRepository;
         this.submissionRepository = submissionRepository;
+        this.courseRepository = courseRepository;
+        this.batchRepository = batchRepository;
+        this.userRepository = userRepository;
     }
-
 
     @Transactional(readOnly = true)
     public List<Assignment> getAllAssignments() {
@@ -30,8 +40,35 @@ public class AssignmentService {
     @Transactional
     public Assignment createAssignment(Assignment assignment) {
         if (assignment.getId() == null || assignment.getId().isBlank()) {
-            assignment.setId("asg_" + System.currentTimeMillis());
+            assignment.setId("asg_" + java.util.UUID.randomUUID());
         }
+
+        // Relational course resolution
+        if (assignment.getCourseId() != null && !assignment.getCourseId().isBlank()) {
+            courseRepository.findById(assignment.getCourseId()).ifPresent(c -> assignment.setCourse(c.getTitle()));
+        } else if (assignment.getCourse() != null && !assignment.getCourse().isBlank()) {
+            courseRepository.findByTitleIgnoreCase(assignment.getCourse()).ifPresent(c -> assignment.setCourseId(c.getId()));
+        }
+
+        // Relational batch resolution
+        if (assignment.getBatchId() != null && !assignment.getBatchId().isBlank()) {
+            batchRepository.findById(assignment.getBatchId()).ifPresent(b -> assignment.setBatch(b.getName()));
+        } else if (assignment.getBatch() != null && !assignment.getBatch().isBlank()) {
+            batchRepository.findByNameIgnoreCaseAndCourseId(assignment.getBatch(), assignment.getCourseId())
+                    .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(assignment.getBatch(), assignment.getCourse()))
+                    .ifPresent(b -> assignment.setBatchId(b.getId()));
+        }
+
+        // Relational trainer resolution
+        if (assignment.getTrainerId() != null && !assignment.getTrainerId().isBlank()) {
+            userRepository.findById(assignment.getTrainerId()).ifPresent(u -> assignment.setTrainer(u.getName()));
+        } else if (assignment.getTrainer() != null && !assignment.getTrainer().isBlank()) {
+            userRepository.findByNameIgnoreCase(assignment.getTrainer()).stream()
+                    .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
+                    .findFirst()
+                    .ifPresent(u -> assignment.setTrainerId(u.getId()));
+        }
+
         return assignmentRepository.save(assignment);
     }
 
@@ -41,19 +78,19 @@ public class AssignmentService {
     }
 
     @Transactional(readOnly = true)
-    public List<AssignmentSubmission> getSubmissionsByStudent(String email) {
-        return submissionRepository.findByStudentEmailIgnoreCase(email);
+    public List<AssignmentSubmission> getSubmissionsByStudent(String studentIdOrEmail) {
+        return submissionRepository.findByStudentIdOrStudentEmailIgnoreCase(studentIdOrEmail, studentIdOrEmail);
     }
 
     @Transactional(readOnly = true)
-    public List<AssignmentSubmission> getSubmissionsByTrainer(String trainer) {
-        return submissionRepository.findByAssignedTrainerIgnoreCase(trainer);
+    public List<AssignmentSubmission> getSubmissionsByTrainer(String trainerIdOrName) {
+        return submissionRepository.findByTrainerIdOrAssignedTrainerIgnoreCase(trainerIdOrName, trainerIdOrName);
     }
 
     @Transactional
     public AssignmentSubmission createSubmission(AssignmentSubmission submission) {
         if (submission.getId() == null || submission.getId().isBlank()) {
-            submission.setId("sub_" + System.currentTimeMillis());
+            submission.setId("sub_" + java.util.UUID.randomUUID());
         }
         if (submission.getSubmittedAt() == null || submission.getSubmittedAt().isBlank()) {
             submission.setSubmittedAt(LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy hh:mm a")));
@@ -61,6 +98,33 @@ public class AssignmentService {
         if (submission.getStatus() == null || submission.getStatus().isBlank()) {
             submission.setStatus("Pending Correction");
         }
+
+        // Relational student resolution
+        if (submission.getStudentId() != null && !submission.getStudentId().isBlank()) {
+            userRepository.findById(submission.getStudentId()).ifPresent(u -> {
+                submission.setStudentName(u.getName());
+                submission.setStudentEmail(u.getEmail());
+            });
+        } else if (submission.getStudentEmail() != null && !submission.getStudentEmail().isBlank()) {
+            userRepository.findByEmailIgnoreCase(submission.getStudentEmail()).ifPresent(u -> {
+                submission.setStudentId(u.getId());
+                submission.setStudentName(u.getName());
+            });
+        }
+
+        // Relational assignment resolution
+        if (submission.getAssignmentId() != null && !submission.getAssignmentId().isBlank()) {
+            assignmentRepository.findById(submission.getAssignmentId()).ifPresent(a -> {
+                submission.setAssignmentTitle(a.getTitle());
+                if (submission.getCourseId() == null) submission.setCourseId(a.getCourseId());
+                if (submission.getCourseTitle() == null) submission.setCourseTitle(a.getCourse());
+                if (submission.getBatchId() == null) submission.setBatchId(a.getBatchId());
+                if (submission.getBatchName() == null) submission.setBatchName(a.getBatch());
+                if (submission.getTrainerId() == null) submission.setTrainerId(a.getTrainerId());
+                if (submission.getAssignedTrainer() == null) submission.setAssignedTrainer(a.getTrainer());
+            });
+        }
+
         return submissionRepository.save(submission);
     }
 

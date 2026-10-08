@@ -113,7 +113,7 @@ public class UserService {
 
         final String userId = (dto.getId() != null && !dto.getId().isBlank()) 
                 ? dto.getId() 
-                : "std_" + System.currentTimeMillis();
+                : "std_" + UUID.randomUUID().toString();
 
         // Prevent duplicate email with another account
         userRepository.findByEmailIgnoreCase(cleanEmail).ifPresent(existing -> {
@@ -183,11 +183,14 @@ public class UserService {
 
                 if ((resolvedBId == null || resolvedBId.isBlank()) && !resolvedBName.isBlank()) {
                     final String matchBName = resolvedBName;
-                    resolvedBId = batchRepository.findAll().stream()
-                            .filter(b -> b.getName().equalsIgnoreCase(matchBName) &&
-                                    (finalCId == null || finalCId.equals(b.getCourseId()) || (finalCName != null && finalCName.equalsIgnoreCase(b.getCourseName()))))
-                            .map(Batch::getId)
-                            .findFirst().orElse(null);
+                    if (finalCId != null) {
+                        resolvedBId = batchRepository.findByNameIgnoreCaseAndCourseId(matchBName, finalCId)
+                                .map(Batch::getId).orElse(null);
+                    }
+                    if (resolvedBId == null && finalCName != null) {
+                        resolvedBId = batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(matchBName, finalCName)
+                                .map(Batch::getId).orElse(null);
+                    }
                 } else if (resolvedBId != null && !resolvedBId.isBlank() && resolvedBName.isBlank()) {
                     resolvedBName = batchRepository.findById(resolvedBId).map(Batch::getName).orElse(resolvedBId);
                 }
@@ -212,7 +215,7 @@ public class UserService {
 
                         Enrollment enrollment = enrollmentRepository.findByStudentIdAndCourseId(userId, enrCourseId)
                                 .orElseGet(() -> Enrollment.builder()
-                                        .id("enr_" + System.currentTimeMillis() + "_" + Math.abs(enrCourseId.hashCode()))
+                                        .id("enr_" + UUID.randomUUID().toString())
                                         .studentId(userId)
                                         .studentEmail(dto.getEmail())
                                         .courseId(enrCourseId)
@@ -254,7 +257,7 @@ public class UserService {
 
         final String userId = (dto.getId() != null && !dto.getId().isBlank()) 
                 ? dto.getId() 
-                : "trn_" + System.currentTimeMillis();
+                : "trn_" + UUID.randomUUID().toString();
 
         // Prevent duplicate email with another account
         userRepository.findByEmailIgnoreCase(cleanEmail).ifPresent(existing -> {
@@ -314,20 +317,9 @@ public class UserService {
         String tName = trainer != null ? trainer.getName() : null;
         String tId = trainer != null ? trainer.getId() : trainerId;
 
-        List<Course> courses = courseRepository.findAll().stream()
-                .filter(c -> (c.getTrainerId() != null && c.getTrainerId().equals(tId)) ||
-                        (tName != null && c.getAssignedTrainer() != null && c.getAssignedTrainer().equalsIgnoreCase(tName)))
-                .toList();
-
-        List<Batch> batches = batchRepository.findAll().stream()
-                .filter(b -> (b.getTrainerId() != null && b.getTrainerId().equals(tId)) ||
-                        (tName != null && b.getTrainerName() != null && b.getTrainerName().equalsIgnoreCase(tName)))
-                .toList();
-
-        List<Schedule> schedules = scheduleRepository.findAll().stream()
-                .filter(s -> (s.getTrainerId() != null && s.getTrainerId().equals(tId)) ||
-                        (tName != null && s.getTrainer() != null && s.getTrainer().equalsIgnoreCase(tName)))
-                .toList();
+        List<Course> courses = courseRepository.findByTrainerIdOrAssignedTrainerIgnoreCase(tId, tName != null ? tName : "");
+        List<Batch> batches = batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(tId, tName != null ? tName : "");
+        List<Schedule> schedules = scheduleRepository.findByTrainerIdOrTrainerIgnoreCaseOrderByDateAsc(tId, tName != null ? tName : "");
 
         List<Map<String, String>> courseMaps = courses.stream().map(c -> {
             Map<String, String> m = new HashMap<>();
@@ -381,10 +373,7 @@ public class UserService {
         String newName = newTrainer.getName();
 
         // 1. Reassign Courses
-        List<Course> courses = courseRepository.findAll().stream()
-                .filter(c -> (c.getTrainerId() != null && c.getTrainerId().equals(oldId)) ||
-                        (oldName != null && c.getAssignedTrainer() != null && c.getAssignedTrainer().equalsIgnoreCase(oldName)))
-                .toList();
+        List<Course> courses = courseRepository.findByTrainerIdOrAssignedTrainerIgnoreCase(oldId, oldName != null ? oldName : "");
         for (Course c : courses) {
             c.setTrainerId(newId);
             c.setAssignedTrainer(newName);
@@ -392,10 +381,7 @@ public class UserService {
         }
 
         // 2. Reassign Batches
-        List<Batch> batches = batchRepository.findAll().stream()
-                .filter(b -> (b.getTrainerId() != null && b.getTrainerId().equals(oldId)) ||
-                        (oldName != null && b.getTrainerName() != null && b.getTrainerName().equalsIgnoreCase(oldName)))
-                .toList();
+        List<Batch> batches = batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(oldId, oldName != null ? oldName : "");
         for (Batch b : batches) {
             b.setTrainerId(newId);
             b.setTrainerName(newName);
@@ -403,10 +389,7 @@ public class UserService {
         }
 
         // 3. Reassign Schedules
-        List<Schedule> schedules = scheduleRepository.findAll().stream()
-                .filter(s -> (s.getTrainerId() != null && s.getTrainerId().equals(oldId)) ||
-                        (oldName != null && s.getTrainer() != null && s.getTrainer().equalsIgnoreCase(oldName)))
-                .toList();
+        List<Schedule> schedules = scheduleRepository.findByTrainerIdOrTrainerIgnoreCaseOrderByDateAsc(oldId, oldName != null ? oldName : "");
         for (Schedule s : schedules) {
             s.setTrainerId(newId);
             s.setTrainer(newName);

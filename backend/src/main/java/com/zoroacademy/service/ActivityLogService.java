@@ -24,7 +24,7 @@ public class ActivityLogService {
     @Transactional
     public ActivityLog logAction(String userId, String userName, String action, String details, String ipAddress) {
         ActivityLog log = ActivityLog.builder()
-                .id("log_" + System.currentTimeMillis())
+                .id("log_" + java.util.UUID.randomUUID())
                 .userId(userId)
                 .userName(userName)
                 .action(action)

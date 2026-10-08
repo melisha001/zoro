@@ -46,11 +46,7 @@ public class BatchService {
         if (trainerIdOrName == null || trainerIdOrName.isBlank()) {
             return getAllBatches();
         }
-        List<Batch> byId = batchRepository.findByTrainerId(trainerIdOrName);
-        if (!byId.isEmpty()) {
-            return byId;
-        }
-        return batchRepository.findByTrainerNameIgnoreCase(trainerIdOrName);
+        return batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(trainerIdOrName, trainerIdOrName);
     }
 
     @Transactional(readOnly = true)
@@ -62,7 +58,7 @@ public class BatchService {
     @Transactional
     public Batch createBatch(Batch batch) {
         if (batch.getId() == null || batch.getId().isBlank()) {
-            batch.setId("btc_" + System.currentTimeMillis());
+            batch.setId("btc_" + java.util.UUID.randomUUID());
         }
 
         // Resolve Course

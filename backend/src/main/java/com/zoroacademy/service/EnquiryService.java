@@ -24,7 +24,7 @@ public class EnquiryService {
     @Transactional
     public Enquiry createEnquiry(Enquiry enquiry) {
         if (enquiry.getId() == null || enquiry.getId().isBlank()) {
-            enquiry.setId("enq_" + System.currentTimeMillis());
+            enquiry.setId("enq_" + java.util.UUID.randomUUID());
         }
         if (enquiry.getStatus() == null || enquiry.getStatus().isBlank()) {
             enquiry.setStatus("New");

@@ -3,13 +3,14 @@ import { Calendar, CheckCircle2, Save, BookOpen, Layers } from 'lucide-react';
 import { getBatches } from '../../api/batchApi';
 import { getStudents } from '../../api/userApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
-import { getAttendanceRemarks, saveAttendanceRemark, updateAttendanceStatus, recordAttendance } from '../../api/attendanceApi';
+import { getAttendanceRemarks, saveAttendanceRemark, recordBatchAttendance } from '../../api/attendanceApi';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerAllocatedCourses, getTrainerAllocatedBatches, filterStudentsByCourseAndBatch } from '../../utils/trainerFilterHelper';
 
 export default function TrainerAttendancePage() {
   const { user } = useAuth();
   const trainerName = user?.name || '';
+  const trainerId = user?.id || '';
 
   const [coursesList, setCoursesList] = useState([]);
   const [batchesList, setBatchesList] = useState([]);
@@ -77,9 +78,9 @@ export default function TrainerAttendancePage() {
     students.forEach(s => {
       const foundRem = allRemarks.find(
         r => (r.studentName || '').toLowerCase().trim() === (s.name || '').toLowerCase().trim() &&
-             (selectedBatchName === 'All' || r.batch === selectedBatchName)
+             (selectedBatchName === 'All' || r.batch === selectedBatchName || r.batchId === selectedBatchName)
       );
-      rMap[s.name] = foundRem ? foundRem.remark : '';
+      rMap[s.name] = foundRem ? (foundRem.remark || foundRem.remarks || '') : '';
       aMap[s.name] = 'Present';
     });
 
@@ -97,29 +98,68 @@ export default function TrainerAttendancePage() {
     }));
   };
 
+  const handleRemarkChange = (sName, value) => {
+    setRemarksMap(prev => ({
+      ...prev,
+      [sName]: value
+    }));
+  };
+
   const handleSaveSingleRemark = async (studentObj) => {
     const sName = studentObj.name;
     const remarkText = remarksMap[sName] || '';
     const courseTitle = selectedCourseName !== 'All' ? selectedCourseName : (studentObj.course || (studentObj.courseBatches?.[0]?.course) || '');
+    const courseId = studentObj.courseId || (studentObj.courseBatches?.[0]?.courseId) || '';
     const batchName = selectedBatchName !== 'All' ? selectedBatchName : (studentObj.batch || (studentObj.courseBatches?.[0]?.batch) || 'Unassigned');
+    const batchId = studentObj.batchId || (studentObj.courseBatches?.[0]?.batchId) || '';
 
-    await saveAttendanceRemark(sName, courseTitle, batchName, remarkText, trainerName, 'trainer', trainerName);
-    setSaveToast(`Attendance remark saved for ${sName}`);
+    const res = await saveAttendanceRemark({
+      studentId: studentObj.id || studentObj.email,
+      studentName: sName,
+      course: courseTitle,
+      courseId: courseId,
+      batch: batchName,
+      batchId: batchId,
+      date: selectedDate,
+      remark: remarkText,
+      addedByName: trainerName || trainerId
+    });
+
+    if (res?.success) {
+      setSaveToast(`Attendance remark saved for ${sName}`);
+    } else {
+      setSaveToast(res?.message || `Failed to save remark for ${sName}`);
+    }
     setTimeout(() => setSaveToast(''), 3000);
   };
 
   const handleSaveAllAttendance = async () => {
-    for (const std of displayList) {
+    const recordsToSave = displayList.map(std => {
       const status = attendanceMap[std.name] || 'Present';
       const rText = remarksMap[std.name] || '';
       const courseTitle = selectedCourseName !== 'All' ? selectedCourseName : (std.course || (std.courseBatches?.[0]?.course) || '');
+      const courseId = std.courseId || (std.courseBatches?.[0]?.courseId) || '';
       const batchName = selectedBatchName !== 'All' ? selectedBatchName : (std.batch || (std.courseBatches?.[0]?.batch) || 'Unassigned');
+      const batchId = std.batchId || (std.courseBatches?.[0]?.batchId) || '';
 
-      await recordAttendance({ course: courseTitle, batch: batchName, date: selectedDate }, std.name, std.email);
-      await updateAttendanceStatus(std.email || std.name, status);
-      await saveAttendanceRemark(std.name, courseTitle, batchName, rText, trainerName, 'trainer', trainerName);
+      return {
+        studentId: std.id || std.email,
+        studentName: std.name,
+        courseId: courseId,
+        batchId: batchId,
+        date: selectedDate,
+        status: status.toUpperCase(),
+        remarks: rText,
+        recordedBy: trainerName || trainerId
+      };
+    });
+
+    const res = await recordBatchAttendance(recordsToSave);
+    if (res?.success) {
+      setSaveToast('Attendance & remarks saved successfully!');
+    } else {
+      setSaveToast(res?.message || 'Failed to save attendance');
     }
-    setSaveToast(`Attendance & remarks saved successfully!`);
     setTimeout(() => setSaveToast(''), 3000);
   };
 

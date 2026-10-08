@@ -33,13 +33,17 @@ public class AssignmentController {
     // --- SUBMISSIONS ---
 
     @GetMapping("/api/submissions")
-    public ApiResponse<List<AssignmentSubmission>> getSubmissions(@RequestParam(required = false) String studentEmail,
+    public ApiResponse<List<AssignmentSubmission>> getSubmissions(@RequestParam(required = false) String studentId,
+                                                                 @RequestParam(required = false) String studentEmail,
+                                                                 @RequestParam(required = false) String trainerId,
                                                                  @RequestParam(required = false) String trainer) {
-        if (studentEmail != null && !studentEmail.isBlank()) {
-            return ApiResponse.ok(assignmentService.getSubmissionsByStudent(studentEmail));
+        String effectiveStudent = (studentId != null && !studentId.isBlank()) ? studentId : studentEmail;
+        if (effectiveStudent != null && !effectiveStudent.isBlank()) {
+            return ApiResponse.ok(assignmentService.getSubmissionsByStudent(effectiveStudent));
         }
-        if (trainer != null && !trainer.isBlank()) {
-            return ApiResponse.ok(assignmentService.getSubmissionsByTrainer(trainer));
+        String effectiveTrainer = (trainerId != null && !trainerId.isBlank()) ? trainerId : trainer;
+        if (effectiveTrainer != null && !effectiveTrainer.isBlank()) {
+            return ApiResponse.ok(assignmentService.getSubmissionsByTrainer(effectiveTrainer));
         }
         return ApiResponse.ok(assignmentService.getAllSubmissions());
     }

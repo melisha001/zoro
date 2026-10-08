@@ -13,6 +13,9 @@ public interface BatchRepository extends JpaRepository<Batch, String> {
     List<Batch> findByStatusIgnoreCase(String status);
     List<Batch> findByCourseId(String courseId);
     List<Batch> findByTrainerId(String trainerId);
+    List<Batch> findByTrainerIdOrTrainerNameIgnoreCase(String trainerId, String trainerName);
     List<Batch> findByCourseIdAndStatusIgnoreCase(String courseId, String status);
     List<Batch> findByTrainerIdAndStatusIgnoreCase(String trainerId, String status);
+    java.util.Optional<Batch> findByNameIgnoreCaseAndCourseId(String name, String courseId);
+    java.util.Optional<Batch> findByNameIgnoreCaseAndCourseNameIgnoreCase(String name, String courseName);
 }

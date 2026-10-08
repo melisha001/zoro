@@ -37,6 +37,9 @@ public class Doubt {
     @Column(name = "trainer_name")
     private String trainerName;
 
+    @Column(name = "trainer_id", length = 64)
+    private String trainerId;
+
     @Column(columnDefinition = "TEXT")
     private String reply;
 
@@ -52,7 +55,7 @@ public class Doubt {
 
     public Doubt() {}
 
-    public Doubt(String id, String studentId, String studentName, String courseId, String courseTitle, String moduleId, String moduleTitle, String question, String trainerName, String reply, String replyDate, String status, LocalDateTime createdAt) {
+    public Doubt(String id, String studentId, String studentName, String courseId, String courseTitle, String moduleId, String moduleTitle, String question, String trainerName, String trainerId, String reply, String replyDate, String status, LocalDateTime createdAt) {
         this.id = id;
         this.studentId = studentId;
         this.studentName = studentName;
@@ -62,6 +65,7 @@ public class Doubt {
         this.moduleTitle = moduleTitle;
         this.question = question;
         this.trainerName = trainerName;
+        this.trainerId = trainerId;
         this.reply = reply;
         this.replyDate = replyDate;
         this.status = status;
@@ -140,6 +144,14 @@ public class Doubt {
         this.trainerName = trainerName;
     }
 
+    public String getTrainerId() {
+        return trainerId;
+    }
+
+    public void setTrainerId(String trainerId) {
+        this.trainerId = trainerId;
+    }
+
     public String getReply() {
         return reply;
     }
@@ -186,6 +198,7 @@ public class Doubt {
         private String moduleTitle;
         private String question;
         private String trainerName;
+        private String trainerId;
         private String reply;
         private String replyDate;
         private String status = "Pending";
@@ -227,6 +240,10 @@ public class Doubt {
             this.trainerName = trainerName;
             return this;
         }
+        public Builder trainerId(String trainerId) {
+            this.trainerId = trainerId;
+            return this;
+        }
         public Builder reply(String reply) {
             this.reply = reply;
             return this;
@@ -245,7 +262,7 @@ public class Doubt {
         }
 
         public Doubt build() {
-            return new Doubt(id, studentId, studentName, courseId, courseTitle, moduleId, moduleTitle, question, trainerName, reply, replyDate, status, createdAt);
+            return new Doubt(id, studentId, studentName, courseId, courseTitle, moduleId, moduleTitle, question, trainerName, trainerId, reply, replyDate, status, createdAt);
         }
     }
 

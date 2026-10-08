@@ -12,10 +12,12 @@ import java.util.List;
 public class DoubtService {
 
     private final DoubtRepository doubtRepository;
-    public DoubtService(DoubtRepository doubtRepository) {
-        this.doubtRepository = doubtRepository;
-    }
+    private final com.zoroacademy.repository.UserRepository userRepository;
 
+    public DoubtService(DoubtRepository doubtRepository, com.zoroacademy.repository.UserRepository userRepository) {
+        this.doubtRepository = doubtRepository;
+        this.userRepository = userRepository;
+    }
 
     @Transactional(readOnly = true)
     public List<Doubt> getAllDoubts() {
@@ -23,18 +25,41 @@ public class DoubtService {
     }
 
     @Transactional(readOnly = true)
-    public List<Doubt> getDoubtsByTrainer(String trainer) {
-        return doubtRepository.findByTrainerNameIgnoreCase(trainer);
+    public List<Doubt> getDoubtsByTrainer(String trainerIdOrName) {
+        return doubtRepository.findByTrainerIdOrTrainerNameIgnoreCase(trainerIdOrName, trainerIdOrName);
     }
 
     @Transactional
     public Doubt createDoubt(Doubt doubt) {
         if (doubt.getId() == null || doubt.getId().isBlank()) {
-            doubt.setId("dbt_" + System.currentTimeMillis());
+            doubt.setId("dbt_" + java.util.UUID.randomUUID());
         }
         if (doubt.getStatus() == null || doubt.getStatus().isBlank()) {
             doubt.setStatus("Pending");
         }
+
+        // Relational student resolution
+        if (doubt.getStudentId() != null && doubt.getStudentId().contains("@")) {
+            userRepository.findByEmailIgnoreCase(doubt.getStudentId()).ifPresent(u -> {
+                doubt.setStudentId(u.getId());
+                if (doubt.getStudentName() == null) doubt.setStudentName(u.getName());
+            });
+        } else if (doubt.getStudentId() != null && !doubt.getStudentId().isBlank()) {
+            userRepository.findById(doubt.getStudentId()).ifPresent(u -> {
+                if (doubt.getStudentName() == null) doubt.setStudentName(u.getName());
+            });
+        }
+
+        // Relational trainer resolution
+        if (doubt.getTrainerId() != null && !doubt.getTrainerId().isBlank()) {
+            userRepository.findById(doubt.getTrainerId()).ifPresent(u -> doubt.setTrainerName(u.getName()));
+        } else if (doubt.getTrainerName() != null && !doubt.getTrainerName().isBlank()) {
+            userRepository.findByNameIgnoreCase(doubt.getTrainerName()).stream()
+                    .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
+                    .findFirst()
+                    .ifPresent(u -> doubt.setTrainerId(u.getId()));
+        }
+
         return doubtRepository.save(doubt);
     }
 

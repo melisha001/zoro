@@ -115,7 +115,7 @@ public class CourseService {
     public CourseModule addModule(String courseId, CourseModule module) {
         Course course = getCourseById(courseId);
         if (module.getId() == null || module.getId().isBlank()) {
-            module.setId("mod_" + System.currentTimeMillis());
+            module.setId("mod_" + java.util.UUID.randomUUID());
         }
         module.setCourse(course);
         return moduleRepository.save(module);
@@ -144,7 +144,7 @@ public class CourseService {
     public CourseResource addResource(String courseId, CourseResource resource) {
         Course course = getCourseById(courseId);
         if (resource.getId() == null || resource.getId().isBlank()) {
-            resource.setId("res_" + System.currentTimeMillis());
+            resource.setId("res_" + java.util.UUID.randomUUID());
         }
         resource.setCourse(course);
         return resourceRepository.save(resource);

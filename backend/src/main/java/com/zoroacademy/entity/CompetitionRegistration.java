@@ -33,7 +33,7 @@ public class CompetitionRegistration {
     private String studentPhone;
 
     @Column(name = "payment_status", length = 50)
-    private String paymentStatus = "Paid";
+    private String paymentStatus = "Pending";
 
     @Column(precision = 6, scale = 2)
     private BigDecimal score;
@@ -49,12 +49,13 @@ public class CompetitionRegistration {
 
     public CompetitionRegistration() {}
 
-    public CompetitionRegistration(String id, Competition competition, String studentId, String studentName, String studentEmail, String paymentStatus, BigDecimal score, Integer rank, String certificateUrl, LocalDateTime createdAt) {
+    public CompetitionRegistration(String id, Competition competition, String studentId, String studentName, String studentEmail, String studentPhone, String paymentStatus, BigDecimal score, Integer rank, String certificateUrl, LocalDateTime createdAt) {
         this.id = id;
         this.competition = competition;
         this.studentId = studentId;
         this.studentName = studentName;
         this.studentEmail = studentEmail;
+        this.studentPhone = studentPhone;
         this.paymentStatus = paymentStatus;
         this.score = score;
         this.rank = rank;
@@ -160,7 +161,8 @@ public class CompetitionRegistration {
         private String studentId;
         private String studentName;
         private String studentEmail;
-        private String paymentStatus = "Paid";
+        private String studentPhone;
+        private String paymentStatus = "Pending";
         private BigDecimal score;
         private Integer rank;
         private String certificateUrl;
@@ -186,6 +188,10 @@ public class CompetitionRegistration {
             this.studentEmail = studentEmail;
             return this;
         }
+        public Builder studentPhone(String studentPhone) {
+            this.studentPhone = studentPhone;
+            return this;
+        }
         public Builder paymentStatus(String paymentStatus) {
             this.paymentStatus = paymentStatus;
             return this;
@@ -208,7 +214,7 @@ public class CompetitionRegistration {
         }
 
         public CompetitionRegistration build() {
-            return new CompetitionRegistration(id, competition, studentId, studentName, studentEmail, paymentStatus, score, rank, certificateUrl, createdAt);
+            return new CompetitionRegistration(id, competition, studentId, studentName, studentEmail, studentPhone, paymentStatus, score, rank, certificateUrl, createdAt);
         }
     }
 

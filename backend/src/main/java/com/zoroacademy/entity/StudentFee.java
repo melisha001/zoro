@@ -27,8 +27,14 @@ public class StudentFee {
     @Column(nullable = false)
     private String course;
 
+    @Column(name = "course_id", length = 128)
+    private String courseId;
+
     @Column(length = 255)
     private String batch;
+
+    @Column(name = "batch_id", length = 128)
+    private String batchId;
 
     @Column(name = "total_fee", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalFee = BigDecimal.ZERO;
@@ -59,12 +65,14 @@ public class StudentFee {
 
     public StudentFee() {}
 
-    public StudentFee(String id, String studentId, String studentName, String course, String batch, BigDecimal totalFee, BigDecimal paidAmount, BigDecimal dueAmount, String status, String date, List<FeePayment> payments, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public StudentFee(String id, String studentId, String studentName, String course, String courseId, String batch, String batchId, BigDecimal totalFee, BigDecimal paidAmount, BigDecimal dueAmount, String status, String date, List<FeePayment> payments, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.studentId = studentId;
         this.studentName = studentName;
         this.course = course;
+        this.courseId = courseId;
         this.batch = batch;
+        this.batchId = batchId;
         this.totalFee = totalFee;
         this.paidAmount = paidAmount;
         this.dueAmount = dueAmount;
@@ -107,12 +115,28 @@ public class StudentFee {
         this.course = course;
     }
 
+    public String getCourseId() {
+        return courseId;
+    }
+
+    public void setCourseId(String courseId) {
+        this.courseId = courseId;
+    }
+
     public String getBatch() {
         return batch;
     }
 
     public void setBatch(String batch) {
         this.batch = batch;
+    }
+
+    public String getBatchId() {
+        return batchId;
+    }
+
+    public void setBatchId(String batchId) {
+        this.batchId = batchId;
     }
 
     public BigDecimal getTotalFee() {
@@ -188,7 +212,9 @@ public class StudentFee {
         private String studentId;
         private String studentName;
         private String course;
+        private String courseId;
         private String batch;
+        private String batchId;
         private BigDecimal totalFee = BigDecimal.ZERO;
         private BigDecimal paidAmount = BigDecimal.ZERO;
         private BigDecimal dueAmount = BigDecimal.ZERO;
@@ -214,8 +240,16 @@ public class StudentFee {
             this.course = course;
             return this;
         }
+        public Builder courseId(String courseId) {
+            this.courseId = courseId;
+            return this;
+        }
         public Builder batch(String batch) {
             this.batch = batch;
+            return this;
+        }
+        public Builder batchId(String batchId) {
+            this.batchId = batchId;
             return this;
         }
         public Builder totalFee(BigDecimal totalFee) {
@@ -252,7 +286,7 @@ public class StudentFee {
         }
 
         public StudentFee build() {
-            return new StudentFee(id, studentId, studentName, course, batch, totalFee, paidAmount, dueAmount, status, date, payments, createdAt, updatedAt);
+            return new StudentFee(id, studentId, studentName, course, courseId, batch, batchId, totalFee, paidAmount, dueAmount, status, date, payments, createdAt, updatedAt);
         }
     }
 

@@ -12,10 +12,19 @@ import java.util.stream.Collectors;
 public class ScheduleService {
 
     private final ScheduleRepository scheduleRepository;
-    public ScheduleService(ScheduleRepository scheduleRepository) {
-        this.scheduleRepository = scheduleRepository;
-    }
+    private final com.zoroacademy.repository.CourseRepository courseRepository;
+    private final com.zoroacademy.repository.BatchRepository batchRepository;
+    private final com.zoroacademy.repository.UserRepository userRepository;
 
+    public ScheduleService(ScheduleRepository scheduleRepository,
+                           com.zoroacademy.repository.CourseRepository courseRepository,
+                           com.zoroacademy.repository.BatchRepository batchRepository,
+                           com.zoroacademy.repository.UserRepository userRepository) {
+        this.scheduleRepository = scheduleRepository;
+        this.courseRepository = courseRepository;
+        this.batchRepository = batchRepository;
+        this.userRepository = userRepository;
+    }
 
     @Transactional(readOnly = true)
     public List<Schedule> getAllSchedules() {
@@ -23,21 +32,45 @@ public class ScheduleService {
     }
 
     @Transactional(readOnly = true)
-    public List<Schedule> getTrainerSchedules(String trainer) {
-        String lower = trainer.toLowerCase().trim();
-        return scheduleRepository.findAllByOrderByDateAsc().stream()
-                .filter(s -> s.getTrainer() != null && s.getTrainer().toLowerCase().contains(lower))
-                .collect(Collectors.toList());
+    public List<Schedule> getTrainerSchedules(String trainerIdOrName) {
+        return scheduleRepository.findByTrainerIdOrTrainerIgnoreCaseOrderByDateAsc(trainerIdOrName, trainerIdOrName);
     }
 
     @Transactional
     public Schedule createSchedule(Schedule schedule) {
         if (schedule.getId() == null || schedule.getId().isBlank()) {
-            schedule.setId("sch_" + System.currentTimeMillis());
+            schedule.setId("sch_" + java.util.UUID.randomUUID());
         }
         if (schedule.getStatus() == null || schedule.getStatus().isBlank()) {
             schedule.setStatus("Upcoming");
         }
+
+        // Relational course resolution
+        if (schedule.getCourseId() != null && !schedule.getCourseId().isBlank()) {
+            courseRepository.findById(schedule.getCourseId()).ifPresent(c -> schedule.setCourse(c.getTitle()));
+        } else if (schedule.getCourse() != null && !schedule.getCourse().isBlank()) {
+            courseRepository.findByTitleIgnoreCase(schedule.getCourse()).ifPresent(c -> schedule.setCourseId(c.getId()));
+        }
+
+        // Relational batch resolution
+        if (schedule.getBatchId() != null && !schedule.getBatchId().isBlank()) {
+            batchRepository.findById(schedule.getBatchId()).ifPresent(b -> schedule.setBatch(b.getName()));
+        } else if (schedule.getBatch() != null && !schedule.getBatch().isBlank()) {
+            batchRepository.findByNameIgnoreCaseAndCourseId(schedule.getBatch(), schedule.getCourseId())
+                    .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(schedule.getBatch(), schedule.getCourse()))
+                    .ifPresent(b -> schedule.setBatchId(b.getId()));
+        }
+
+        // Relational trainer resolution
+        if (schedule.getTrainerId() != null && !schedule.getTrainerId().isBlank()) {
+            userRepository.findById(schedule.getTrainerId()).ifPresent(u -> schedule.setTrainer(u.getName()));
+        } else if (schedule.getTrainer() != null && !schedule.getTrainer().isBlank()) {
+            userRepository.findByNameIgnoreCase(schedule.getTrainer()).stream()
+                    .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
+                    .findFirst()
+                    .ifPresent(u -> schedule.setTrainerId(u.getId()));
+        }
+
         return scheduleRepository.save(schedule);
     }
 

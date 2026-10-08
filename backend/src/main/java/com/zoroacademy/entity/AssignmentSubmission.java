@@ -27,6 +27,18 @@ public class AssignmentSubmission {
     @Column(name = "batch_name")
     private String batchName;
 
+    @Column(name = "student_id", length = 64)
+    private String studentId;
+
+    @Column(name = "trainer_id", length = 64)
+    private String trainerId;
+
+    @Column(name = "assignment_id", length = 128)
+    private String assignmentId;
+
+    @Column(name = "batch_id", length = 128)
+    private String batchId;
+
     @Column(name = "student_name")
     private String studentName;
 
@@ -84,8 +96,12 @@ public class AssignmentSubmission {
 
     public AssignmentSubmission() {}
 
-    public AssignmentSubmission(String id, String mode, String courseTitle, String courseId, String batchName, String studentName, String studentEmail, String assignmentTitle, String sourceType, String sourceId, String submittedAt, String answerText, String attachment, String status, String assignedTrainer, String correctedBy, String correctedAt, String remarks, String score, String correctionAttachment, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public AssignmentSubmission(String id, String studentId, String trainerId, String assignmentId, String batchId, String mode, String courseTitle, String courseId, String batchName, String studentName, String studentEmail, String assignmentTitle, String sourceType, String sourceId, String submittedAt, String answerText, String attachment, String status, String assignedTrainer, String correctedBy, String correctedAt, String remarks, String score, String correctionAttachment, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
+        this.studentId = studentId;
+        this.trainerId = trainerId;
+        this.assignmentId = assignmentId;
+        this.batchId = batchId;
         this.mode = mode;
         this.courseTitle = courseTitle;
         this.courseId = courseId;
@@ -115,6 +131,38 @@ public class AssignmentSubmission {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getStudentId() {
+        return studentId;
+    }
+
+    public void setStudentId(String studentId) {
+        this.studentId = studentId;
+    }
+
+    public String getTrainerId() {
+        return trainerId;
+    }
+
+    public void setTrainerId(String trainerId) {
+        this.trainerId = trainerId;
+    }
+
+    public String getAssignmentId() {
+        return assignmentId;
+    }
+
+    public void setAssignmentId(String assignmentId) {
+        this.assignmentId = assignmentId;
+    }
+
+    public String getBatchId() {
+        return batchId;
+    }
+
+    public void setBatchId(String batchId) {
+        this.batchId = batchId;
     }
 
     public String getMode() {
@@ -291,6 +339,10 @@ public class AssignmentSubmission {
 
     public static class Builder {
         private String id;
+        private String studentId;
+        private String trainerId;
+        private String assignmentId;
+        private String batchId;
         private String mode;
         private String courseTitle;
         private String courseId;
@@ -315,6 +367,22 @@ public class AssignmentSubmission {
 
         public Builder id(String id) {
             this.id = id;
+            return this;
+        }
+        public Builder studentId(String studentId) {
+            this.studentId = studentId;
+            return this;
+        }
+        public Builder trainerId(String trainerId) {
+            this.trainerId = trainerId;
+            return this;
+        }
+        public Builder assignmentId(String assignmentId) {
+            this.assignmentId = assignmentId;
+            return this;
+        }
+        public Builder batchId(String batchId) {
+            this.batchId = batchId;
             return this;
         }
         public Builder mode(String mode) {
@@ -403,7 +471,7 @@ public class AssignmentSubmission {
         }
 
         public AssignmentSubmission build() {
-            return new AssignmentSubmission(id, mode, courseTitle, courseId, batchName, studentName, studentEmail, assignmentTitle, sourceType, sourceId, submittedAt, answerText, attachment, status, assignedTrainer, correctedBy, correctedAt, remarks, score, correctionAttachment, createdAt, updatedAt);
+            return new AssignmentSubmission(id, studentId, trainerId, assignmentId, batchId, mode, courseTitle, courseId, batchName, studentName, studentEmail, assignmentTitle, sourceType, sourceId, submittedAt, answerText, attachment, status, assignedTrainer, correctedBy, correctedAt, remarks, score, correctionAttachment, createdAt, updatedAt);
         }
     }
 

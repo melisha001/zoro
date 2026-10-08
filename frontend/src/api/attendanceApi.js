@@ -23,14 +23,13 @@ export const getStudentAttendance = async (studentId) => {
   return apiResponse([]);
 };
 
-export const recordAttendance = async (sessionData, studentName = 'Student', studentEmail = 'student@zoro.com') => {
+export const recordAttendance = async (sessionData, studentName = 'Student', studentEmail = 'student@zoro.com', studentId = null) => {
   const payload = {
-    id: `att_${Date.now()}`,
     scheduleId: sessionData.id ? String(sessionData.id) : null,
-    studentId: studentEmail,
+    studentId: studentId || sessionData.studentId || studentEmail,
     studentName: studentName,
-    courseId: sessionData.course,
-    batchId: sessionData.batch,
+    courseId: sessionData.courseId || sessionData.course,
+    batchId: sessionData.batchId || sessionData.batch,
     date: sessionData.date || new Date().toISOString().split('T')[0],
     status: 'PRESENT',
     remarks: 'Portal Live Class Join',
@@ -41,7 +40,15 @@ export const recordAttendance = async (sessionData, studentName = 'Student', stu
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Attendance recorded');
   }
-  return apiResponse(payload, true, 'Attendance recorded');
+  return apiResponse(null, false, res?.message || 'Failed to record attendance');
+};
+
+export const recordBatchAttendance = async (records) => {
+  const res = await apiPost('/attendance/batch', records);
+  if (res.success && res.data) {
+    return apiResponse(res.data, true, 'Batch attendance recorded');
+  }
+  return apiResponse(null, false, res?.message || 'Failed to record batch attendance');
 };
 
 export const getAttendanceRemarks = async () => {
@@ -55,13 +62,13 @@ export const getAttendanceRemarks = async () => {
 
 export const addAttendanceRemark = async (remarkData) => {
   const payload = {
-    studentId: remarkData.studentName,
+    studentId: remarkData.studentId || remarkData.studentEmail || remarkData.studentName,
     studentName: remarkData.studentName,
-    courseId: remarkData.course,
-    batchId: remarkData.batch,
+    courseId: remarkData.courseId || remarkData.course,
+    batchId: remarkData.batchId || remarkData.batch,
     date: remarkData.date || new Date().toISOString().split('T')[0],
-    status: 'PRESENT',
-    remarks: remarkData.remark,
+    status: remarkData.status || 'PRESENT',
+    remarks: remarkData.remark || remarkData.remarks,
     recordedBy: remarkData.addedByName || 'Trainer'
   };
 
@@ -69,7 +76,7 @@ export const addAttendanceRemark = async (remarkData) => {
   if (res.success && res.data) {
     return apiResponse(res.data, true, 'Remark added');
   }
-  return apiResponse(null, false, res.message || 'Failed to add remark');
+  return apiResponse(null, false, res?.message || 'Failed to add remark');
 };
 
 export const saveAttendanceRemark = addAttendanceRemark;
@@ -82,3 +89,4 @@ export const updateAttendanceStatus = async (recordId, status) => {
   const res = await apiPost('/attendance', payload);
   return apiResponse(res?.data || null, res?.success || false);
 };
+

@@ -6,7 +6,9 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "student_course_batches")
+@Table(name = "student_course_batches", uniqueConstraints = {
+    @UniqueConstraint(name = "uk_scb_student_course", columnNames = {"student_id", "course_id"})
+})
 public class StudentCourseBatch {
 
     @Id
@@ -34,10 +36,11 @@ public class StudentCourseBatch {
 
     public StudentCourseBatch() {}
 
-    public StudentCourseBatch(Long id, String studentId, String courseName, String batchName, String batchId, LocalDateTime createdAt) {
+    public StudentCourseBatch(Long id, String studentId, String courseName, String courseId, String batchName, String batchId, LocalDateTime createdAt) {
         this.id = id;
         this.studentId = studentId;
         this.courseName = courseName;
+        this.courseId = courseId;
         this.batchName = batchName;
         this.batchId = batchId;
         this.createdAt = createdAt;
@@ -107,6 +110,7 @@ public class StudentCourseBatch {
         private Long id;
         private String studentId;
         private String courseName;
+        private String courseId;
         private String batchName;
         private String batchId;
         private LocalDateTime createdAt;
@@ -123,6 +127,10 @@ public class StudentCourseBatch {
             this.courseName = courseName;
             return this;
         }
+        public Builder courseId(String courseId) {
+            this.courseId = courseId;
+            return this;
+        }
         public Builder batchName(String batchName) {
             this.batchName = batchName;
             return this;
@@ -137,7 +145,7 @@ public class StudentCourseBatch {
         }
 
         public StudentCourseBatch build() {
-            return new StudentCourseBatch(id, studentId, courseName, batchName, batchId, createdAt);
+            return new StudentCourseBatch(id, studentId, courseName, courseId, batchName, batchId, createdAt);
         }
     }
 

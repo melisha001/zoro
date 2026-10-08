@@ -18,11 +18,21 @@ public class FeeService {
 
     private final StudentFeeRepository feeRepository;
     private final FeePaymentRepository paymentRepository;
-    public FeeService(StudentFeeRepository feeRepository, FeePaymentRepository paymentRepository) {
+    private final com.zoroacademy.repository.UserRepository userRepository;
+    private final com.zoroacademy.repository.CourseRepository courseRepository;
+    private final com.zoroacademy.repository.BatchRepository batchRepository;
+
+    public FeeService(StudentFeeRepository feeRepository,
+                      FeePaymentRepository paymentRepository,
+                      com.zoroacademy.repository.UserRepository userRepository,
+                      com.zoroacademy.repository.CourseRepository courseRepository,
+                      com.zoroacademy.repository.BatchRepository batchRepository) {
         this.feeRepository = feeRepository;
         this.paymentRepository = paymentRepository;
+        this.userRepository = userRepository;
+        this.courseRepository = courseRepository;
+        this.batchRepository = batchRepository;
     }
-
 
     @Transactional(readOnly = true)
     public List<StudentFee> getAllFeeRecords() {
@@ -57,16 +67,42 @@ public class FeeService {
     @Transactional
     public StudentFee createFeeRecord(StudentFee fee) {
         if (fee.getId() == null || fee.getId().isBlank()) {
-            fee.setId("fee_" + System.currentTimeMillis());
+            fee.setId("fee_" + java.util.UUID.randomUUID());
         }
-        if (fee.getStudentId() == null || fee.getStudentId().isBlank()) {
-            fee.setStudentId(fee.getStudentName() != null 
-                ? "std_" + fee.getStudentName().replaceAll("\\s+", "").toLowerCase() 
-                : "std_" + System.currentTimeMillis());
+
+        // Relational student resolution
+        if (fee.getStudentId() != null && fee.getStudentId().contains("@")) {
+            userRepository.findByEmailIgnoreCase(fee.getStudentId()).ifPresent(u -> {
+                fee.setStudentId(u.getId());
+                if (fee.getStudentName() == null) fee.setStudentName(u.getName());
+            });
+        } else if (fee.getStudentId() != null && !fee.getStudentId().isBlank()) {
+            userRepository.findById(fee.getStudentId()).ifPresent(u -> {
+                if (fee.getStudentName() == null) fee.setStudentName(u.getName());
+            });
+        } else if (fee.getStudentName() != null && !fee.getStudentName().isBlank()) {
+            userRepository.findByNameIgnoreCase(fee.getStudentName()).stream().findFirst().ifPresent(u -> {
+                fee.setStudentId(u.getId());
+                fee.setStudentName(u.getName());
+            });
         }
-        if (fee.getCourse() == null || fee.getCourse().isBlank()) {
-            fee.setCourse("English Communication");
+
+        // Relational course resolution
+        if (fee.getCourseId() != null && !fee.getCourseId().isBlank()) {
+            courseRepository.findById(fee.getCourseId()).ifPresent(c -> fee.setCourse(c.getTitle()));
+        } else if (fee.getCourse() != null && !fee.getCourse().isBlank()) {
+            courseRepository.findByTitleIgnoreCase(fee.getCourse()).ifPresent(c -> fee.setCourseId(c.getId()));
         }
+
+        // Relational batch resolution
+        if (fee.getBatchId() != null && !fee.getBatchId().isBlank()) {
+            batchRepository.findById(fee.getBatchId()).ifPresent(b -> fee.setBatch(b.getName()));
+        } else if (fee.getBatch() != null && !fee.getBatch().isBlank()) {
+            batchRepository.findByNameIgnoreCaseAndCourseId(fee.getBatch(), fee.getCourseId())
+                    .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(fee.getBatch(), fee.getCourse()))
+                    .ifPresent(b -> fee.setBatchId(b.getId()));
+        }
+
         if (fee.getDate() == null || fee.getDate().isBlank()) {
             fee.setDate(LocalDate.now().toString());
         }
@@ -100,7 +136,7 @@ public class FeeService {
         fee = feeRepository.save(fee);
 
         FeePayment payment = FeePayment.builder()
-                .id("pay_" + System.currentTimeMillis())
+                .id("pay_" + java.util.UUID.randomUUID())
                 .fee(fee)
                 .amount(amount)
                 .paymentMethod(method != null ? method : "Online")

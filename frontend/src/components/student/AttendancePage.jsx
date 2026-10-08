@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Clock, CheckCircle2, Calendar, Users, XCircle, TrendingUp, AlertTriangle } from 'lucide-react';
-import { getAttendanceRecords } from '../../api/attendanceApi';
+import { ArrowLeft, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { getStudentAttendance } from '../../api/attendanceApi';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { useAuth } from '../../context/AuthContext';
 
@@ -9,10 +9,13 @@ export default function StudentAttendancePage({ setActiveScreen }) {
   const [records, setRecords] = useState([]);
   const [isRecordedOnly, setIsRecordedOnly] = useState(false);
 
-  const studentIdentifier = user?.email || user?.id || 'arjun@student.com';
+  const studentIdentifier = user?.id || user?.email;
 
   useEffect(() => {
-    getAttendanceRecords().then(res => setRecords(res.data));
+    if (!studentIdentifier) return;
+    getStudentAttendance(studentIdentifier).then(res => {
+      setRecords(Array.isArray(res.data) ? res.data : []);
+    });
     getStudentEnrolledCourses(studentIdentifier).then(enrolled => {
       if (enrolled && enrolled.length > 0 && enrolled.every(c => c.mode === 'Recorded')) {
         setIsRecordedOnly(true);
@@ -20,10 +23,10 @@ export default function StudentAttendancePage({ setActiveScreen }) {
     });
   }, [studentIdentifier]);
 
-  const totalSessions = Math.max(records.length, 5);
-  const presentCount = records.filter(r => r.status === 'PRESENT' || r.status === 'Present').length || 4;
+  const totalSessions = records.length;
+  const presentCount = records.filter(r => r.status === 'PRESENT' || r.status === 'Present').length;
   const absentCount = Math.max(0, totalSessions - presentCount);
-  const attendanceRate = Math.round((presentCount / totalSessions) * 100);
+  const attendanceRate = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
 
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
@@ -38,7 +41,7 @@ export default function StudentAttendancePage({ setActiveScreen }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">My Attendance History</h1>
-          <p className="text-xs text-slate-500 font-medium">Recorded live class session attendance for Arjun.</p>
+          <p className="text-xs text-slate-500 font-medium">Recorded live class session attendance for {user?.name || 'Student'}.</p>
         </div>
 
         <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-2 rounded-2xl text-xs font-black inline-flex items-center space-x-2">
@@ -92,28 +95,40 @@ export default function StudentAttendancePage({ setActiveScreen }) {
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider font-bold">
                 <th className="py-3 px-4">Course</th>
-                <th className="py-3 px-4">Topic</th>
+                <th className="py-3 px-4">Remarks / Session</th>
                 <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Joined Time</th>
+                <th className="py-3 px-4">Recorded At</th>
                 <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Source</th>
+                <th className="py-3 px-4">Recorded By</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {records.map((rec) => (
-                <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-4 px-4 font-bold text-blue-900">{rec.course}</td>
-                  <td className="py-4 px-4 text-slate-600">{rec.topic}</td>
-                  <td className="py-4 px-4 text-slate-500">{rec.date}</td>
-                  <td className="py-4 px-4 font-bold text-slate-800">{rec.joinedAt}</td>
-                  <td className="py-4 px-4">
-                    <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border border-emerald-200">
-                      {rec.status}
-                    </span>
+              {records.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center text-slate-400 font-medium">
+                    No attendance records found.
                   </td>
-                  <td className="py-4 px-4 text-slate-400 font-mono text-[10px]">{rec.source}</td>
                 </tr>
-              ))}
+              ) : (
+                records.map((rec) => (
+                  <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-4 px-4 font-bold text-blue-900">{rec.courseName || rec.courseId || rec.course || '-'}</td>
+                    <td className="py-4 px-4 text-slate-600">{rec.remarks || rec.topic || 'Live Session'}</td>
+                    <td className="py-4 px-4 text-slate-500">{rec.date || '-'}</td>
+                    <td className="py-4 px-4 font-bold text-slate-800">{rec.createdAt ? new Date(rec.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (rec.joinedAt || '-')}</td>
+                    <td className="py-4 px-4">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${
+                        (rec.status === 'PRESENT' || rec.status === 'Present')
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                          : 'bg-rose-100 text-rose-800 border-rose-200'
+                      }`}>
+                        {rec.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-slate-400 font-mono text-[10px]">{rec.recordedBy || rec.source || 'Portal'}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

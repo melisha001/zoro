@@ -29,7 +29,7 @@ public class SalaryService {
     @Transactional
     public SalaryRecord createSalaryRecord(SalaryRecord record) {
         if (record.getId() == null || record.getId().isBlank()) {
-            record.setId("sal_" + System.currentTimeMillis());
+            record.setId("sal_" + java.util.UUID.randomUUID());
         }
         if (record.getStatus() == null || record.getStatus().isBlank()) {
             record.setStatus("Paid");

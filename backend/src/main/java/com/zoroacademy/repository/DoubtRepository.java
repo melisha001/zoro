@@ -10,6 +10,8 @@ import java.util.List;
 public interface DoubtRepository extends JpaRepository<Doubt, String> {
     List<Doubt> findByStudentId(String studentId);
     List<Doubt> findByCourseId(String courseId);
+    List<Doubt> findByTrainerId(String trainerId);
     List<Doubt> findByTrainerNameIgnoreCase(String trainerName);
+    List<Doubt> findByTrainerIdOrTrainerNameIgnoreCase(String trainerId, String trainerName);
     List<Doubt> findByStatusIgnoreCase(String status);
 }

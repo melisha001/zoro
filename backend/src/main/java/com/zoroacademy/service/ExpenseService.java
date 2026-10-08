@@ -24,7 +24,7 @@ public class ExpenseService {
     @Transactional
     public Expense createExpense(Expense expense) {
         if (expense.getId() == null || expense.getId().isBlank()) {
-            expense.setId("exp_" + System.currentTimeMillis());
+            expense.setId("exp_" + java.util.UUID.randomUUID());
         }
         return expenseRepository.save(expense);
     }
