@@ -72,9 +72,16 @@ CREATE DATABASE zoro_academy;
    ```
 
 5. Start the backend application:
+   You can run directly via Maven:
    ```bash
    mvn spring-boot:run
    ```
+   Or use the PowerShell local runner script (sets environment variables and executes `mvn spring-boot:run`):
+   ```powershell
+   cp backend/run-local.example.ps1 backend/run-local.ps1
+   .\backend\run-local.ps1
+   ```
+   The script enforces fail-fast checking for required environment variables (`DB_PASSWORD`, `JWT_SECRET`, `BUNNY_API_KEY`, `BUNNY_TOKEN_AUTH_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`).
    The backend runs on `http://localhost:8080`. Swagger documentation is available at `http://localhost:8080/swagger-ui.html`.
 
 ---
