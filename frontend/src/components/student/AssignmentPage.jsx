@@ -4,6 +4,7 @@ import {
   CheckCircle2, Clock, AlertCircle, File, Eye, Award, MessageSquare, BookOpen, Layers, Check, Plus
 } from 'lucide-react';
 import { getSubmissions, getCreatedAssignments, createSubmission } from '../../api/assignmentApi';
+import { uploadFile as uploadFileApi } from '../../api/fileApi';
 import { useAuth } from '../../context/AuthContext';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 
@@ -61,19 +62,23 @@ export default function AssignmentPage({ setActiveScreen }) {
     }
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     const sizeMb = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
-    const objectUrl = URL.createObjectURL(file);
 
-    setUploadFile({
-      name: file.name,
-      fileUrl: objectUrl,
-      type: ext,
-      size: sizeMb
-    });
+    try {
+      const res = await uploadFileApi(file, 'submission');
+      setUploadFile({
+        name: file.name,
+        fileUrl: res.url,
+        type: ext,
+        size: sizeMb
+      });
+    } catch (err) {
+      alert(err.message || 'Submission file upload failed');
+    }
   };
 
   const handleSubmitExtraAssignment = async (e, asg) => {

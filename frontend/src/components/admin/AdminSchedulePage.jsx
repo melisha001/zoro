@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Calendar, Clock, Video, Users, User, Search, Filter, CheckCircle2, Edit2, Trash2, X, AlertTriangle, RefreshCw, Send, Check, FileText, Download, AlertCircle, Eye, Upload } from 'lucide-react';
 import { getSchedules, createSchedule, updateSchedule, deleteSchedule } from '../../api/scheduleApi';
+import { uploadFile } from '../../api/fileApi';
 import { getTrainers } from '../../api/userApi';
 import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
@@ -134,7 +135,7 @@ export default function AdminSchedulePage() {
     }));
   };
 
-  const handleFileUpload = (e, fieldName) => {
+  const handleFileUpload = async (e, fieldName) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -156,20 +157,25 @@ export default function AdminSchedulePage() {
     }
 
     setFileErrors(prev => ({ ...prev, [fieldName]: '' }));
-    const objectUrl = URL.createObjectURL(file);
-    const category = fieldName === 'notesFile' ? 'Notes' : fieldName === 'worksheetFile' ? 'Worksheet' : 'Assignment';
+    const catName = fieldName === 'notesFile' ? 'notes' : fieldName === 'worksheetFile' ? 'worksheet' : 'assignment';
 
-    setFormData(prev => ({
-      ...prev,
-      [fieldName]: {
-        name: file.name,
-        size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-        type: ext,
-        uploadedAt: new Date().toLocaleDateString('en-GB'),
-        fileUrl: objectUrl,
-        category
-      }
-    }));
+    try {
+      const res = await uploadFile(file, catName);
+      const category = fieldName === 'notesFile' ? 'Notes' : fieldName === 'worksheetFile' ? 'Worksheet' : 'Assignment';
+      setFormData(prev => ({
+        ...prev,
+        [fieldName]: {
+          name: file.name,
+          size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
+          type: ext,
+          uploadedAt: new Date().toLocaleDateString('en-GB'),
+          fileUrl: res.url,
+          category
+        }
+      }));
+    } catch (err) {
+      setFileErrors(prev => ({ ...prev, [fieldName]: err.message || 'Upload failed' }));
+    }
   };
 
   const handleReuploadScheduleFile = async (scheduleItem, fieldName, file) => {
@@ -185,30 +191,33 @@ export default function AdminSchedulePage() {
       return;
     }
 
-    const objectUrl = URL.createObjectURL(file);
-    const category = fieldName === 'notesFile' ? 'Notes' : fieldName === 'worksheetFile' ? 'Worksheet' : 'Assignment';
+    const catName = fieldName === 'notesFile' ? 'notes' : fieldName === 'worksheetFile' ? 'worksheet' : 'assignment';
+    try {
+      const res = await uploadFile(file, catName);
+      const category = fieldName === 'notesFile' ? 'Notes' : fieldName === 'worksheetFile' ? 'Worksheet' : 'Assignment';
+      const newFileObj = {
+        name: file.name,
+        size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
+        type: ext,
+        uploadedAt: new Date().toLocaleDateString('en-GB'),
+        fileUrl: res.url,
+        category
+      };
 
-    const newFileObj = {
-      name: file.name,
-      size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-      type: ext,
-      uploadedAt: new Date().toLocaleDateString('en-GB'),
-      fileUrl: objectUrl,
-      category
-    };
-
-    const updatedItem = {
-      ...scheduleItem,
-      [fieldName]: newFileObj
-    };
-
-    await updateSchedule(scheduleItem.id, updatedItem);
-    logActivity('Schedule Attachment Re-uploaded', `Re-uploaded ${category} file "${file.name}" for schedule session "${scheduleItem.title}"`, 'Schedule');
-    setNotifToast({
-      title: 'Attachment Re-uploaded',
-      message: `${category} file updated for session "${scheduleItem.title}".`
-    });
-    await loadSchedules();
+      const updatedItem = {
+        ...scheduleItem,
+        [fieldName]: newFileObj
+      };
+      await updateSchedule(scheduleItem.id, updatedItem);
+      logActivity('Schedule Attachment Re-uploaded', `Re-uploaded ${category} file "${file.name}" for schedule session "${scheduleItem.title}"`, 'Schedule');
+      setNotifToast({
+        title: 'Attachment Re-uploaded',
+        message: `${category} file updated for session "${scheduleItem.title}".`
+      });
+      await loadSchedules();
+    } catch (err) {
+      alert(err.message || 'Re-upload failed');
+    }
   };
 
   const handleOpenEditModal = (item) => {

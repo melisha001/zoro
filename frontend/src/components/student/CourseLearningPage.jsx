@@ -6,6 +6,7 @@ import { createEnquiry, getEnquiries } from '../../api/enquiryApi';
 import { getStudentProgress, updateModuleProgress, authorizeVideoPlayback } from '../../api/progressApi';
 import { getSchedules } from '../../api/scheduleApi';
 import { getSubmissions, createSubmission } from '../../api/assignmentApi';
+import { uploadFile } from '../../api/fileApi';
 import { recordAttendance } from '../../api/attendanceApi';
 import { useAuth } from '../../context/AuthContext';
 import SecureVideoPlayer from '../common/SecureVideoPlayer';
@@ -88,19 +89,23 @@ export default function CourseLearningPage({ courseId: initialCourseId, setActiv
     }
   };
 
-  const handleStudentAssessmentUpload = (e) => {
+  const handleStudentAssessmentUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     const sizeMb = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
-    const objectUrl = URL.createObjectURL(file);
 
-    setAssessmentFile({
-      name: file.name,
-      fileUrl: objectUrl,
-      type: ext,
-      size: sizeMb
-    });
+    try {
+      const res = await uploadFile(file, 'submission');
+      setAssessmentFile({
+        name: file.name,
+        fileUrl: res.url,
+        type: ext,
+        size: sizeMb
+      });
+    } catch (err) {
+      alert(err.message || 'Assessment file upload failed');
+    }
   };
 
   const handleSubmitStudentAssessment = async (e) => {

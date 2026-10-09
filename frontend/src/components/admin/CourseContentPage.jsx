@@ -6,6 +6,7 @@ import {
   Music, Download
 } from 'lucide-react';
 import { getCourseById, addModule, updateModule, deleteModule } from '../../api/courseApi';
+import { uploadFile } from '../../api/fileApi';
 import ConfirmModal from '../common/ConfirmModal';
 
 const ALLOWED_EXTENSIONS = [
@@ -24,6 +25,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
   const [editingModule, setEditingModule] = useState(null);
   const [deleteModalData, setDeleteModalData] = useState(null);
   const [fileErrors, setFileErrors] = useState({});
+  const [uploadingFiles, setUploadingFiles] = useState({});
 
   const [formData, setFormData] = useState({
     title: '',
@@ -89,7 +91,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     return 'Resource';
   };
 
-  const handleFileUpload = (e, fieldName) => {
+  const handleFileUpload = async (e, fieldName) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -111,20 +113,28 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     }
 
     setFileErrors(prev => ({ ...prev, [fieldName]: '' }));
-    const objectUrl = URL.createObjectURL(file);
-    const category = getFileCategoryLabel(fieldName);
+    setUploadingFiles(prev => ({ ...prev, [fieldName]: true }));
 
-    setFormData(prev => ({
-      ...prev,
-      [fieldName]: {
-        name: file.name,
-        size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-        type: ext,
-        uploadedAt: new Date().toLocaleDateString('en-GB'),
-        fileUrl: objectUrl,
-        category
-      }
-    }));
+    const category = getFileCategoryLabel(fieldName).toLowerCase();
+    try {
+      const res = await uploadFile(file, category);
+      setUploadingFiles(prev => ({ ...prev, [fieldName]: false }));
+
+      setFormData(prev => ({
+        ...prev,
+        [fieldName]: {
+          name: file.name,
+          size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
+          type: ext,
+          uploadedAt: new Date().toLocaleDateString('en-GB'),
+          fileUrl: res.url,
+          category: getFileCategoryLabel(fieldName)
+        }
+      }));
+    } catch (err) {
+      setUploadingFiles(prev => ({ ...prev, [fieldName]: false }));
+      setFileErrors(prev => ({ ...prev, [fieldName]: err.message || 'Upload failed' }));
+    }
   };
 
   const handleVideoSelect = (e) => {
@@ -135,13 +145,11 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     setFormData(prev => ({
       ...prev,
       videoFileName: file.name,
-      videoFileSize: `${sizeMb} MB`,
-      videoStorageKey: `cloud_storage_vids/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`,
-      videoDuration: prev.videoDuration || '15:30'
+      videoFileSize: `${sizeMb} MB`
     }));
   };
 
-  const handleThumbnailUpload = (e) => {
+  const handleThumbnailUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -155,11 +163,19 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     }
 
     setFileErrors(prev => ({ ...prev, thumbnail: '' }));
-    const previewUrl = URL.createObjectURL(file);
-    setFormData(prev => ({
-      ...prev,
-      thumbnail: previewUrl
-    }));
+    setUploadingFiles(prev => ({ ...prev, thumbnail: true }));
+
+    try {
+      const res = await uploadFile(file, 'thumbnail');
+      setUploadingFiles(prev => ({ ...prev, thumbnail: false }));
+      setFormData(prev => ({
+        ...prev,
+        thumbnail: res.url
+      }));
+    } catch (err) {
+      setUploadingFiles(prev => ({ ...prev, thumbnail: false }));
+      setFileErrors(prev => ({ ...prev, thumbnail: err.message || 'Image upload failed' }));
+    }
   };
 
   const handleSaveModule = async (e) => {

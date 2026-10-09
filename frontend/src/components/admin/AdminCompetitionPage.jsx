@@ -6,6 +6,7 @@ import {
   Image, FileCheck, Users, Upload, Layers
 } from 'lucide-react';
 import { getCompetitions, createCompetition, updateCompetition, deleteCompetition } from '../../api/competitionApi';
+import { uploadFile } from '../../api/fileApi';
 import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import ConfirmModal from '../common/ConfirmModal';
@@ -116,49 +117,60 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     }));
   };
 
-  const handleBannerUpload = (e) => {
+  const handleBannerUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
         alert('Banner image size must be under 5MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setBannerPreview(reader.result);
-        setFormData(prev => ({ ...prev, banner: reader.result }));
-      };
-      reader.readAsDataURL(file);
+      try {
+        const res = await uploadFile(file, 'banner');
+        setBannerPreview(res.url);
+        setFormData(prev => ({ ...prev, banner: res.url }));
+      } catch (err) {
+        alert(err.message || 'Banner upload failed');
+      }
     }
   };
 
-  const handleRulesPdfUpload = (e) => {
+  const handleRulesPdfUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
       if (!file.name.endsWith('.pdf')) {
         alert('Rules document must be a PDF file.');
         return;
       }
-      setRulesFileName(file.name);
-      setFormData(prev => ({
-        ...prev,
-        rulesPdf: { name: file.name, size: `${(file.size / (1024 * 1024)).toFixed(1)} MB` }
-      }));
+      try {
+        const res = await uploadFile(file, 'document');
+        setRulesFileName(file.name);
+        setFormData(prev => ({
+          ...prev,
+          rulesPdf: { name: file.name, size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`, url: res.url }
+        }));
+      } catch (err) {
+        alert(err.message || 'Rules document upload failed');
+      }
     }
   };
 
-  const handleRegDocPdfUpload = (e) => {
+  const handleRegDocPdfUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
       if (!file.name.endsWith('.pdf')) {
         alert('Registration form document must be a PDF file.');
         return;
       }
-      setRegDocFileName(file.name);
-      setFormData(prev => ({
-        ...prev,
-        registrationDocPdf: { name: file.name, size: `${(file.size / (1024 * 1024)).toFixed(1)} MB` }
-      }));
+      try {
+        const res = await uploadFile(file, 'document');
+        setRegDocFileName(file.name);
+        setFormData(prev => ({
+          ...prev,
+          registrationDocPdf: { name: file.name, size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`, url: res.url }
+        }));
+      } catch (err) {
+        alert(err.message || 'Registration form upload failed');
+      }
     }
   };
 

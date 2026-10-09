@@ -3,6 +3,7 @@ import { User, Mail, Phone, MapPin, BookOpen, Check, Edit3, Camera } from 'lucid
 import { useAuth } from '../../context/AuthContext';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { updateStudent } from '../../api/userApi';
+import { uploadFile } from '../../api/fileApi';
 import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
 
 export default function StudentProfilePage() {
@@ -39,7 +40,7 @@ export default function StudentProfilePage() {
     }
   }, [user]);
 
-  const handlePhotoUpload = (e) => {
+  const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -49,12 +50,13 @@ export default function StudentProfilePage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setSelectedPhoto(reader.result);
-      setProfileData(prev => ({ ...prev, avatar: reader.result }));
-    };
-    reader.readAsDataURL(file);
+    try {
+      const res = await uploadFile(file, 'avatar');
+      setSelectedPhoto(res.url);
+      setProfileData(prev => ({ ...prev, avatar: res.url }));
+    } catch (err) {
+      alert(err.message || 'Avatar upload failed');
+    }
   };
 
   const handleSaveProfile = async () => {

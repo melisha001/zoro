@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Mail, Phone, Calendar, Edit3, Check, Upload, Camera } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { updateTrainerProfile } from '../../api/userApi';
+import { uploadFile } from '../../api/fileApi';
 import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
 
 export default function TrainerProfilePage() {
@@ -32,7 +33,7 @@ export default function TrainerProfilePage() {
     }
   }, [user]);
 
-  const handlePhotoUpload = (e) => {
+  const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -42,12 +43,13 @@ export default function TrainerProfilePage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setSelectedPhoto(reader.result);
-      setProfileData(prev => ({ ...prev, avatar: reader.result }));
-    };
-    reader.readAsDataURL(file);
+    try {
+      const res = await uploadFile(file, 'avatar');
+      setSelectedPhoto(res.url);
+      setProfileData(prev => ({ ...prev, avatar: res.url }));
+    } catch (err) {
+      alert(err.message || 'Avatar upload failed');
+    }
   };
 
   const handleSave = async () => {

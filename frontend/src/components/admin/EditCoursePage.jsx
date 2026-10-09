@@ -349,11 +349,12 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
             <FileUploader 
               label="Click to change course thumbnail image" 
               accept=".png,.jpg,.jpeg,.webp"
-              onFileSelect={(file) => {
-                if (file) {
-                  const fakeUrl = URL.createObjectURL(file);
-                  setFormData({ ...formData, thumbnail: fakeUrl });
-                }
+              category="thumbnail"
+              onUploadComplete={(result) => {
+                setFormData(prev => ({ ...prev, thumbnail: result.url }));
+              }}
+              onUploadingStateChange={(isUploading) => {
+                setSaving(isUploading);
               }}
             />
           </div>
