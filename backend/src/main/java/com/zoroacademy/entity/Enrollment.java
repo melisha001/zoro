@@ -45,13 +45,14 @@ public class Enrollment {
 
     public Enrollment() {}
 
-    public Enrollment(String id, String studentId, String studentEmail, String courseId, String courseTitle, String batchName, String enrolledDate, String status, LocalDateTime createdAt) {
+    public Enrollment(String id, String studentId, String studentEmail, String courseId, String courseTitle, String batchName, String batchId, String enrolledDate, String status, LocalDateTime createdAt) {
         this.id = id;
         this.studentId = studentId;
         this.studentEmail = studentEmail;
         this.courseId = courseId;
         this.courseTitle = courseTitle;
         this.batchName = batchName;
+        this.batchId = batchId;
         this.enrolledDate = enrolledDate;
         this.status = status;
         this.createdAt = createdAt;
@@ -148,6 +149,7 @@ public class Enrollment {
         private String courseId;
         private String courseTitle;
         private String batchName;
+        private String batchId;
         private String enrolledDate;
         private String status = "Active";
         private LocalDateTime createdAt;
@@ -176,6 +178,10 @@ public class Enrollment {
             this.batchName = batchName;
             return this;
         }
+        public Builder batchId(String batchId) {
+            this.batchId = batchId;
+            return this;
+        }
         public Builder enrolledDate(String enrolledDate) {
             this.enrolledDate = enrolledDate;
             return this;
@@ -190,7 +196,7 @@ public class Enrollment {
         }
 
         public Enrollment build() {
-            return new Enrollment(id, studentId, studentEmail, courseId, courseTitle, batchName, enrolledDate, status, createdAt);
+            return new Enrollment(id, studentId, studentEmail, courseId, courseTitle, batchName, batchId, enrolledDate, status, createdAt);
         }
     }
 

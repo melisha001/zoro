@@ -581,8 +581,6 @@ export default function AdminAttendancePage({ setActiveScreen }) {
                               </table>
                             </div>
                           )}
-                        </div>
-                      );
                       })}
                     </div>
 

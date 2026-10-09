@@ -44,6 +44,11 @@ public class BatchController {
         return ApiResponse.ok(batchService.getBatchById(id));
     }
 
+    @GetMapping("/{id}/students")
+    public ApiResponse<List<com.zoroacademy.dto.UserDto>> getStudentsInBatch(@PathVariable String id) {
+        return ApiResponse.ok(batchService.getStudentsInBatch(id));
+    }
+
     @PostMapping
     public ApiResponse<Batch> createBatch(@RequestBody Batch batch) {
         return ApiResponse.ok(batchService.createBatch(batch), "Batch created successfully");

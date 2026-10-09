@@ -70,6 +70,52 @@ public class BatchService {
                 .orElseThrow(() -> new IllegalArgumentException("Batch not found: " + id));
     }
 
+    @Transactional(readOnly = true)
+    public List<com.zoroacademy.dto.UserDto> getStudentsInBatch(String batchIdOrName) {
+        if (batchIdOrName == null || batchIdOrName.isBlank()) {
+            return List.of();
+        }
+
+        String targetBatchId = batchIdOrName;
+        String targetBatchName = batchIdOrName;
+
+        java.util.Optional<Batch> bOpt = batchRepository.findById(batchIdOrName);
+        if (bOpt.isPresent()) {
+            targetBatchName = bOpt.get().getName();
+        } else {
+            List<Batch> byName = batchRepository.findByNameIgnoreCase(batchIdOrName);
+            if (!byName.isEmpty()) {
+                targetBatchId = byName.get(0).getId();
+            }
+        }
+
+        java.util.Set<String> studentIdentifiers = new java.util.HashSet<>();
+
+        studentCourseBatchRepository.findByBatchId(targetBatchId).forEach(scb -> {
+            if (scb.getStudentId() != null) studentIdentifiers.add(scb.getStudentId());
+        });
+
+        enrollmentRepository.findByBatchId(targetBatchId).forEach(e -> {
+            if (e.getStudentId() != null) studentIdentifiers.add(e.getStudentId());
+            if (e.getStudentEmail() != null) studentIdentifiers.add(e.getStudentEmail());
+        });
+        enrollmentRepository.findByBatchNameIgnoreCase(targetBatchName).forEach(e -> {
+            if (e.getStudentId() != null) studentIdentifiers.add(e.getStudentId());
+            if (e.getStudentEmail() != null) studentIdentifiers.add(e.getStudentEmail());
+        });
+
+        if (studentIdentifiers.isEmpty()) {
+            return List.of();
+        }
+
+        List<User> students = userRepository.findAll().stream()
+                .filter(u -> "STUDENT".equalsIgnoreCase(u.getRole()))
+                .filter(u -> studentIdentifiers.contains(u.getId()) || studentIdentifiers.contains(u.getEmail()))
+                .toList();
+
+        return students.stream().map(com.zoroacademy.dto.UserDto::fromEntity).toList();
+    }
+
     @Transactional
     public Batch createBatch(Batch batch) {
         if (batch.getId() == null || batch.getId().isBlank()) {
