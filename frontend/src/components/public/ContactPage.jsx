@@ -1,21 +1,44 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Phone, MapPin, Clock, Send, CheckCircle, Sparkles, MessageSquare } from 'lucide-react';
+import { Mail, Phone, MapPin, Clock, Send, CheckCircle, Sparkles, MessageSquare, RefreshCw } from 'lucide-react';
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 import { createEnquiry } from '../../api/enquiryApi';
+import { getCourses } from '../../api/courseApi';
 import { sanitizePhone, validatePhone } from '../../utils/phoneValidator';
 
 export default function ContactPage({ onOpenEnquire }) {
   const [siteSettings, setSiteSettings] = useState(null);
+  const [courses, setCourses] = useState([]);
+  const [loadingCourses, setLoadingCourses] = useState(false);
+  const [coursesError, setCoursesError] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
-    course: 'General Enquiry',
+    courseId: '',
+    course: '',
     message: ''
   });
   const [phoneError, setPhoneError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const loadActiveCourses = async () => {
+    setLoadingCourses(true);
+    setCoursesError(false);
+    try {
+      const res = await getCourses();
+      if (res && res.success && Array.isArray(res.data)) {
+        const active = res.data.filter(c => !c.status || c.status.toLowerCase() === 'active');
+        setCourses(active);
+      } else {
+        setCoursesError(true);
+      }
+    } catch (err) {
+      setCoursesError(true);
+    } finally {
+      setLoadingCourses(false);
+    }
+  };
 
   useEffect(() => {
     async function loadSettings() {
@@ -29,6 +52,7 @@ export default function ContactPage({ onOpenEnquire }) {
       }
     }
     loadSettings();
+    loadActiveCourses();
   }, []);
 
   const contactContent = siteSettings?.contactPageContent || {
@@ -241,17 +265,41 @@ export default function ContactPage({ onOpenEnquire }) {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Course of Interest</label>
-                    <select
-                      value={formData.course}
-                      onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none"
-                    >
-                      <option value="General Enquiry">General Enquiry</option>
-                      <option value="English Communication">English Communication</option>
-                      <option value="Phonics Level 1 & Level 2">Phonics Level 1 & Level 2</option>
-                      <option value="Creative Writing & Public Speaking">Creative Writing & Public Speaking</option>
-                      <option value="Spelling Bee Championship">Spelling Bee Championship</option>
-                    </select>
+                    {coursesError ? (
+                      <div className="flex items-center justify-between p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs">
+                        <span className="text-rose-700 font-bold">Failed to load courses</span>
+                        <button
+                          type="button"
+                          onClick={loadActiveCourses}
+                          className="flex items-center gap-1 font-extrabold text-blue-600 hover:underline text-[11px]"
+                        >
+                          <RefreshCw className="w-3 h-3" /> Retry
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        value={formData.courseId || (formData.course === 'General Enquiry' ? 'general' : '')}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) {
+                            setFormData(prev => ({ ...prev, courseId: '', course: '' }));
+                          } else if (val === 'general') {
+                            setFormData(prev => ({ ...prev, courseId: '', course: 'General Enquiry' }));
+                          } else {
+                            const sel = courses.find(c => c.id === val);
+                            setFormData(prev => ({ ...prev, courseId: val, course: sel ? sel.title : val }));
+                          }
+                        }}
+                        disabled={loadingCourses}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none"
+                      >
+                        <option value="">Select a course</option>
+                        <option value="general">General Enquiry</option>
+                        {courses.map(c => (
+                          <option key={c.id} value={c.id}>{c.title}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
 

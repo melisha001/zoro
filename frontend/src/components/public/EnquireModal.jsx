@@ -1,14 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { createEnquiry } from '../../api/enquiryApi';
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
+import { getCourses } from '../../api/courseApi';
 import { sanitizePhone, validatePhone } from '../../utils/phoneValidator';
 
 export default function EnquireModal({ isOpen, onClose }) {
   const [submitted, setSubmitted] = useState(false);
-  const [formData, setFormData] = useState({ name: '', phone: '', email: '', course: 'Phonics Level 1 & Level 2', message: '' });
+  const [formData, setFormData] = useState({ name: '', phone: '', email: '', courseId: '', course: '', message: '' });
   const [phoneError, setPhoneError] = useState('');
   const [isEnabled, setIsEnabled] = useState(true);
+  const [courses, setCourses] = useState([]);
+  const [loadingCourses, setLoadingCourses] = useState(false);
+  const [coursesError, setCoursesError] = useState(false);
+
+  const loadActiveCourses = async () => {
+    setLoadingCourses(true);
+    setCoursesError(false);
+    try {
+      const res = await getCourses();
+      if (res && res.success && Array.isArray(res.data)) {
+        const active = res.data.filter(c => !c.status || c.status.toLowerCase() === 'active');
+        setCourses(active);
+      } else {
+        setCoursesError(true);
+      }
+    } catch (err) {
+      setCoursesError(true);
+    } finally {
+      setLoadingCourses(false);
+    }
+  };
 
   useEffect(() => {
     async function checkSettings() {
@@ -19,10 +41,27 @@ export default function EnquireModal({ isOpen, onClose }) {
     }
     if (isOpen) {
       checkSettings();
+      loadActiveCourses();
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handleCourseChange = (e) => {
+    const val = e.target.value;
+    if (!val) {
+      setFormData(prev => ({ ...prev, courseId: '', course: '' }));
+    } else if (val === 'general') {
+      setFormData(prev => ({ ...prev, courseId: '', course: 'General enquiry' }));
+    } else {
+      const selected = courses.find(c => c.id === val);
+      setFormData(prev => ({
+        ...prev,
+        courseId: val,
+        course: selected ? selected.title : val
+      }));
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -33,10 +72,12 @@ export default function EnquireModal({ isOpen, onClose }) {
     }
     setPhoneError('');
     await createEnquiry({
-      ...formData,
       name: formData.name.trim(),
       phone: formData.phone.trim(),
-      email: (formData.email || '').trim()
+      email: (formData.email || '').trim(),
+      courseId: formData.courseId || null,
+      courseInterest: formData.course || 'General enquiry',
+      message: (formData.message || '').trim()
     });
     setSubmitted(true);
     setTimeout(() => {
@@ -122,19 +163,31 @@ export default function EnquireModal({ isOpen, onClose }) {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Select Course / Interest</label>
-                <select
-                  value={formData.course}
-                  onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
-                >
-                  <option value="Phonics Level 1 & Level 2">Phonics Level 1 & Level 2</option>
-                  <option value="Grammar + Phonics + Spoken English">Grammar + Phonics + Spoken English</option>
-                  <option value="Hybrid English Programme (Live + Recorded)">Hybrid English Programme (Live + Recorded)</option>
-                  <option value="Self-Paced Recorded Phonics Course">Self-Paced Recorded Phonics Course</option>
-                  <option value="Train the Trainer Special Course">Train the Trainer Special Course</option>
-                  <option value="Zoro Phonics Franchise Model">Zoro Phonics Franchise Model</option>
-                  <option value="National Competitions 2026">National Competitions 2026</option>
-                </select>
+                {coursesError ? (
+                  <div className="flex items-center justify-between p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs">
+                    <span className="text-rose-700 font-bold">Failed to load courses</span>
+                    <button
+                      type="button"
+                      onClick={loadActiveCourses}
+                      className="flex items-center gap-1 font-extrabold text-blue-600 hover:underline text-[11px]"
+                    >
+                      <RefreshCw className="w-3 h-3" /> Retry
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={formData.courseId || (formData.course === 'General enquiry' ? 'general' : '')}
+                    onChange={handleCourseChange}
+                    disabled={loadingCourses}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
+                  >
+                    <option value="">Select a course</option>
+                    <option value="general">General enquiry</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.id}>{c.title}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>
@@ -151,7 +204,7 @@ export default function EnquireModal({ isOpen, onClose }) {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 rounded-xl shadow-lg transition-transform transform active:scale-95 text-sm mt-4"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 rounded-xl shadow-lg transition-transform transform active:scale-95 text-sm mt-4 cursor-pointer"
             >
               Submit Request
             </button>
