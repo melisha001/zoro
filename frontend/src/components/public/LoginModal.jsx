@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { X, LogIn, Lock, Mail, Eye, EyeOff } from 'lucide-react';
+import { X, LogIn, Lock, Mail, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { authenticateUser } from '../../api/userApi';
 
 export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
-  const { login } = useAuth();
+  const { login, authNotice, clearAuthNotice } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -22,6 +22,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
 
     setLoading(true);
     setError('');
+    clearAuthNotice();
 
     // Validate credentials against database
     const authResult = await authenticateUser(email, password);
@@ -66,6 +67,32 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
             Zoro English Academy Portal
           </p>
         </div>
+
+        {authNotice && (
+          <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start justify-between space-x-3 text-xs font-bold text-amber-900 animate-in fade-in">
+            <div className="space-y-1">
+              <div className="flex items-center space-x-1.5 font-extrabold uppercase text-[10px] tracking-wider text-amber-800">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                <span>
+                  {authNotice.code === 'ACCOUNT_REMOVED'
+                    ? 'Account Removed'
+                    : authNotice.code === 'ACCOUNT_DISABLED'
+                    ? 'Account Deactivated'
+                    : 'Session Expired'}
+                </span>
+              </div>
+              <div>{authNotice.message}</div>
+            </div>
+            <button
+              type="button"
+              onClick={clearAuthNotice}
+              className="text-amber-500 hover:text-amber-700 font-black p-1 text-sm cursor-pointer"
+              title="Dismiss Notice"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700">

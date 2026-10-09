@@ -7,6 +7,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authNotice, setAuthNotice] = useState(null);
 
   // Restore session via /api/auth/me on mount
   useEffect(() => {
@@ -68,16 +69,22 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const handleUnauthorized = () => {
+    const handleUnauthorized = (e) => {
+      const detail = e.detail;
+      const code = detail?.code || 'UNAUTHORIZED';
+      const message = detail?.message || 'Session expired or unauthorized. Please log in.';
+
       setUser(null);
       setRole(null);
       clearAuthSession();
+      setAuthNotice({ code, message });
     };
     window.addEventListener('auth:unauthorized', handleUnauthorized);
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, []);
 
   const login = (userData) => {
+    setAuthNotice(null);
     const formattedRole = (userData.role || 'STUDENT').toUpperCase();
     const newUser = {
       ...userData,
@@ -87,6 +94,8 @@ export function AuthProvider({ children }) {
     setRole(formattedRole);
     return newUser;
   };
+
+  const clearAuthNotice = () => setAuthNotice(null);
 
   const updateUserInContext = (updatedFields) => {
     setUser(prev => {
@@ -100,6 +109,7 @@ export function AuthProvider({ children }) {
     setRole(null);
     setAuthToken(null);
     clearAuthSession();
+    setAuthNotice(null);
   };
 
   return (
@@ -108,6 +118,8 @@ export function AuthProvider({ children }) {
       role, 
       loading,
       isAuthenticated: !!user, 
+      authNotice,
+      clearAuthNotice,
       login, 
       updateUserInContext,
       logout 

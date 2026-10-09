@@ -88,13 +88,16 @@ export const apiFetch = async (endpoint, options = {}) => {
     if (res.status === 401) {
       // Clear token and user session on 401 Unauthorized
       clearAuthSession();
+      const code = json?.code || 'UNAUTHORIZED';
+      const message = json?.message || 'Session expired or unauthorized. Please log in.';
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code, message } }));
       }
       return {
         success: false,
         status: 401,
-        message: json?.message || 'Session expired or unauthorized. Please log in.',
+        code,
+        message,
         data: null
       };
     }

@@ -448,8 +448,7 @@ export default function AdminAttendancePage({ setActiveScreen }) {
                         <div className="p-4 text-center text-xs font-bold text-slate-400 italic bg-slate-50/50 rounded-2xl border border-slate-200/60">
                           No active batches created for this course yet.
                         </div>
-                      ) : (
-                        courseBatches.map((batchObj) => {
+                      ) : courseBatches.map((batchObj) => {
                           const batchName = batchObj.name;
                           const trainerName = batchObj.trainerName || 'Unassigned';
 
@@ -580,10 +579,11 @@ export default function AdminAttendancePage({ setActiveScreen }) {
                                 </tbody>
                               </table>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
 
                   </div>
                 );

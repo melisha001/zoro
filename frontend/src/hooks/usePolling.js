@@ -20,10 +20,20 @@ export function usePolling(callback, intervalMs = 5000, enabled = true) {
 
     let timerId = null;
 
-    const tick = () => {
+    const stopTimer = () => {
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+    };
+
+    const tick = async () => {
       if (document.visibilityState === 'visible' && savedCallback.current) {
         try {
-          savedCallback.current();
+          const res = await savedCallback.current();
+          if (res && res.status === 401) {
+            stopTimer();
+          }
         } catch (err) {
           console.error('Error during polling tick:', err);
         }
@@ -33,13 +43,6 @@ export function usePolling(callback, intervalMs = 5000, enabled = true) {
     const startTimer = () => {
       if (!timerId && document.visibilityState === 'visible') {
         timerId = setInterval(tick, intervalMs);
-      }
-    };
-
-    const stopTimer = () => {
-      if (timerId) {
-        clearInterval(timerId);
-        timerId = null;
       }
     };
 
@@ -53,12 +56,18 @@ export function usePolling(callback, intervalMs = 5000, enabled = true) {
       }
     };
 
+    const handleUnauthorized = () => {
+      stopTimer();
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
     startTimer();
 
     return () => {
       stopTimer();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
     };
   }, [intervalMs, enabled]);
 }
