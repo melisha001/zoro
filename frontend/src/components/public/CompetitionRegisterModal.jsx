@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Trophy, CheckCircle2, AlertCircle, CreditCard, ShieldCheck, User, Mail, Phone, Layers } from 'lucide-react';
+import { X, Trophy, CheckCircle2, AlertCircle, CreditCard, ShieldCheck, User, Mail, Phone, Building2, MapPin } from 'lucide-react';
 import { createCompetitionRegistration, checkDuplicateRegistration } from '../../api/competitionRegistrationApi';
 import { initiateRazorpayPayment } from '../../utils/razorpay';
 import { createNotification } from '../../api/notificationApi';
-import { getBatches } from '../../api/batchApi';
 import { sanitizePhone, validatePhone } from '../../utils/phoneValidator';
 
 export default function CompetitionRegisterModal({ competition, isOpen, onClose, currentUser, onSuccess }) {
-  const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -16,30 +14,22 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
     studentName: currentUser?.name || currentUser?.studentName || '',
     studentEmail: currentUser?.email || '',
     studentPhone: currentUser?.phone || currentUser?.mobile || '',
-    studentId: currentUser?.studentId || currentUser?.id || '',
-    batchName: currentUser?.batchName || currentUser?.batch || ''
+    studentId: currentUser?.studentId || currentUser?.id || null,
+    age: '',
+    school: '',
+    city: ''
   });
 
   useEffect(() => {
     if (currentUser) {
-      setFormData({
+      setFormData(prev => ({
+        ...prev,
         studentName: currentUser.name || currentUser.studentName || '',
         studentEmail: currentUser.email || '',
         studentPhone: currentUser.phone || currentUser.mobile || '',
-        studentId: currentUser.studentId || currentUser.id || '',
-        batchName: currentUser.batchName || currentUser.batch || ''
-      });
+        studentId: currentUser.studentId || currentUser.id || null
+      }));
     }
-
-    async function loadBatches() {
-      try {
-        const res = await getBatches();
-        if (res.data) setBatches(res.data);
-      } catch (err) {
-        console.error('Error loading batches for registration modal:', err);
-      }
-    }
-    loadBatches();
   }, [currentUser, competition]);
 
   // Window Focus Failsafe: If user returns to tab while payment is processing, reset loading if payment didn't resolve
@@ -47,7 +37,6 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
     if (!loading) return;
 
     const handleWindowFocus = () => {
-      // Small delay to allow Razorpay handler callback to execute first if payment succeeded
       setTimeout(() => {
         setLoading(false);
       }, 1200);
@@ -81,8 +70,13 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
     setLoading(true);
 
     try {
-      // 1. Check duplicate registration
-      const isDup = await checkDuplicateRegistration(formData.studentEmail, competition.id);
+      // 1. Check duplicate registration by phone, email, or studentId
+      const isDup = await checkDuplicateRegistration(
+        formData.studentEmail,
+        competition.id,
+        formData.studentPhone,
+        formData.studentId
+      );
       if (isDup) {
         setErrorMsg('Already registered for this competition.');
         setLoading(false);
@@ -118,13 +112,15 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
       const regPayload = {
         competitionId: competition.id,
         competitionName: competition.name,
-        studentId: formData.studentId || `std_pub_${Date.now()}`,
+        studentId: formData.studentId || null,
         studentName: formData.studentName,
         studentEmail: formData.studentEmail,
         studentPhone: formData.studentPhone,
-        batchName: formData.batchName || 'Public Participant',
+        age: formData.age ? Number(formData.age) : null,
+        school: formData.school || null,
+        city: formData.city || null,
         registrationFee: regFee,
-        paymentStatus: regFee > 0 ? (paymentResult?.razorpayPaymentId ? 'Paid' : 'Failed') : 'Not Required',
+        paymentStatus: regFee > 0 ? (paymentResult?.razorpayPaymentId ? 'Paid' : 'Failed') : 'Pending',
         registrationStatus: 'Registered',
         razorpayPaymentId: paymentResult?.razorpayPaymentId || null,
         razorpayOrderId: paymentResult?.razorpayOrderId || null,
@@ -139,14 +135,16 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
         return;
       }
 
-      // 4. Send In-App Notification
-      await createNotification({
-        trainerName: '', // General student notification
-        title: `Registration Confirmed: ${competition.name}`,
-        desc: `Your registration for ${competition.name} is confirmed. Date: ${competition.date || competition.startDate}. Venue: ${competition.venue || 'Online'}`,
-        studentEmail: formData.studentEmail,
-        type: 'competition_reg'
-      });
+      // 4. Send In-App Notification if user is registered student
+      if (formData.studentEmail) {
+        await createNotification({
+          trainerName: '',
+          title: `Registration Confirmed: ${competition.name}`,
+          desc: `Your registration for ${competition.name} is confirmed. Date: ${competition.date || competition.startDate}. Venue: ${competition.venue || 'Online'}`,
+          studentEmail: formData.studentEmail,
+          type: 'competition_reg'
+        });
+      }
 
       setSuccessMsg(`Registration Confirmed for ${competition.name}!`);
       setTimeout(() => {
@@ -220,7 +218,7 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block font-bold text-slate-700 mb-1">Participant Name *</label>
+            <label className="block font-bold text-slate-700 mb-1">Participant Full Name *</label>
             <div className="relative">
               <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -242,7 +240,7 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
                 <input
                   type="email"
                   required
-                  placeholder="student@example.com"
+                  placeholder="participant@example.com"
                   value={formData.studentEmail}
                   onChange={(e) => setFormData({ ...formData, studentEmail: e.target.value })}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
@@ -268,20 +266,46 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
             </div>
           </div>
 
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">Batch / Class</label>
-            <div className="relative">
-              <Layers className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <select
-                value={formData.batchName}
-                onChange={(e) => setFormData({ ...formData, batchName: e.target.value })}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-600"
-              >
-                <option value="">Select Batch (Optional)</option>
-                {batches.map(b => (
-                  <option key={b.id} value={b.name}>{b.name} ({b.courseName})</option>
-                ))}
-              </select>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Age (Optional)</label>
+              <input
+                type="number"
+                min="5"
+                max="100"
+                placeholder="e.g. 14"
+                value={formData.age}
+                onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">School / Institution</label>
+              <div className="relative">
+                <Building2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="School Name"
+                  value={formData.school}
+                  onChange={(e) => setFormData({ ...formData, school: e.target.value })}
+                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">City</label>
+              <div className="relative">
+                <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="City"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
+                />
+              </div>
             </div>
           </div>
 

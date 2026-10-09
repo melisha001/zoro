@@ -16,11 +16,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
   const todayStr = new Date().toISOString().split('T')[0];
 
   const [competitions, setCompetitions] = useState([]);
-  const [coursesList, setCoursesList] = useState([]);
-  const [batchesList, setBatchesList] = useState([]);
-
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCourseFilter, setSelectedCourseFilter] = useState('All');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('All');
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -35,14 +31,13 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    category: 'Academic',
     date: todayStr,
     startTime: '10:00 AM',
     endTime: '01:00 PM',
     regStartDate: todayStr,
     regEndDate: todayStr,
     deadline: todayStr,
-    courseName: 'English Communication',
-    eligibleBatch: 'Batch A',
     venue: 'Online (Google Meet & Zoro Portal)',
     status: 'Active',
     registrationFee: 500,
@@ -58,14 +53,6 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     try {
       const compRes = await getCompetitions();
       setCompetitions(compRes.data || []);
-
-      const crsRes = await getCourses();
-      const loadedCourses = crsRes.data || [];
-      setCoursesList(loadedCourses);
-
-      const bRes = await getBatches();
-      const loadedBatches = bRes.data || [];
-      setBatchesList(loadedBatches);
     } catch (err) {
       console.error('Failed loading competition data:', err);
     }
@@ -76,21 +63,16 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
   }, []);
 
   const resetForm = () => {
-    const defaultCourse = coursesList[0]?.title || 'English Communication';
-    const courseBatches = batchesList.filter(b => b.courseName === defaultCourse && b.status === 'Active');
-    const defaultBatch = courseBatches[0]?.name || 'Batch A';
-
     setFormData({
       name: '',
       description: '',
+      category: 'Academic',
       date: todayStr,
       startTime: '10:00 AM',
       endTime: '01:00 PM',
       regStartDate: todayStr,
       regEndDate: todayStr,
       deadline: todayStr,
-      courseName: defaultCourse,
-      eligibleBatch: defaultBatch,
       venue: 'Online (Google Meet & Zoro Portal)',
       status: 'Active',
       registrationFee: 500,
@@ -104,17 +86,6 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     setBannerPreview('');
     setRulesFileName('');
     setRegDocFileName('');
-  };
-
-  const handleCourseChangeInForm = (newCourseName) => {
-    const matchingBatches = batchesList.filter(b => b.courseName === newCourseName && b.status === 'Active');
-    const firstBatch = matchingBatches[0]?.name || 'Batch A';
-
-    setFormData(prev => ({
-      ...prev,
-      courseName: newCourseName,
-      eligibleBatch: firstBatch
-    }));
   };
 
   const handleBannerUpload = async (e) => {
@@ -207,6 +178,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     setFormData({
       name: comp.name || '',
       description: comp.description || '',
+      category: comp.category || 'Academic',
       startDate: comp.startDate || comp.date || todayStr,
       endDate: comp.endDate || comp.startDate || comp.date || todayStr,
       date: comp.date || comp.startDate || todayStr,
@@ -215,8 +187,6 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
       regStartDate: comp.regStartDate || todayStr,
       regEndDate: comp.regEndDate || todayStr,
       deadline: comp.deadline || comp.regEndDate || todayStr,
-      courseName: comp.courseName || 'English Communication',
-      eligibleBatch: comp.eligibleBatch || 'Batch A',
       venue: comp.venue || 'Online',
       status: comp.status === 'Registration Open' ? 'Active' : (comp.status || 'Active'),
       registrationFee: comp.registrationFee ?? comp.fee ?? 500,
@@ -236,22 +206,18 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     const matchesSearch = !searchTerm || (
       comp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       comp.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      comp.courseName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      comp.eligibleBatch?.toLowerCase().includes(searchTerm.toLowerCase())
+      comp.category?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const matchesCourse = selectedCourseFilter === 'All' || comp.courseName === selectedCourseFilter;
     const matchesStatus = selectedStatusFilter === 'All' || comp.status === selectedStatusFilter;
 
-    return matchesSearch && matchesCourse && matchesStatus;
+    return matchesSearch && matchesStatus;
   });
 
   const totalCount = competitions.length;
   const activeCount = competitions.filter(c => c.status === 'Registration Open' || c.status === 'Active').length;
   const upcomingCount = competitions.filter(c => c.status === 'Upcoming').length;
   const completedCount = competitions.filter(c => c.status === 'Completed').length;
-
-  const availableBatchesForSelectedCourse = batchesList.filter(b => b.courseName === formData.courseName && b.status === 'Active');
 
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
@@ -306,7 +272,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search competitions by title, course, eligible batch, description..."
+            placeholder="Search competitions by title, category, description..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
@@ -314,19 +280,6 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div>
-            <select
-              value={selectedCourseFilter}
-              onChange={(e) => setSelectedCourseFilter(e.target.value)}
-              className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
-            >
-              <option value="All">All Courses</option>
-              {coursesList.map((c) => (
-                <option key={c.id} value={c.title}>{c.title}</option>
-              ))}
-            </select>
-          </div>
-
           <div>
             <select
               value={selectedStatusFilter}
@@ -379,7 +332,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                   {/* Body Content */}
                   <div className="p-5 space-y-3 text-xs">
                     <div>
-                      <div className="text-[10px] font-bold uppercase text-[#0F52BA] tracking-wider">{comp.courseName} • {comp.eligibleBatch}</div>
+                      <div className="text-[10px] font-bold uppercase text-[#0F52BA] tracking-wider">{comp.category || 'Academic Competition'}</div>
                       <h3 className="text-base font-black text-slate-900 mt-0.5 line-clamp-1">{comp.name}</h3>
                       <p className="text-slate-500 text-xs mt-1 line-clamp-2">{comp.description}</p>
                     </div>
@@ -480,7 +433,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
 
             <form onSubmit={editingComp ? handleUpdateSubmit : handleCreateSubmit} className="space-y-4">
               
-              {/* Competition Name & Course Row */}
+              {/* Competition Name & Category Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Competition Title *</label>
@@ -495,35 +448,19 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Course *</label>
-                  <select
-                    value={formData.courseName}
-                    onChange={(e) => handleCourseChangeInForm(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
-                  >
-                    {coursesList.map((c) => (
-                      <option key={c.id} value={c.title}>{c.title}</option>
-                    ))}
-                  </select>
+                  <label className="block font-bold text-slate-700 mb-1">Category / Topic</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Academic, Oratory, Spelling"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none"
+                  />
                 </div>
               </div>
 
-              {/* Eligible Batch, Status & Registration Fee */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Eligible Batch *</label>
-                  <select
-                    value={formData.eligibleBatch}
-                    onChange={(e) => setFormData({ ...formData, eligibleBatch: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
-                  >
-                    <option value="All Batches">All Batches</option>
-                    {availableBatchesForSelectedCourse.map((b) => (
-                      <option key={b.id} value={b.name}>{b.name} ({b.courseName})</option>
-                    ))}
-                  </select>
-                </div>
-
+              {/* Status & Registration Fee Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Status *</label>
                   <select

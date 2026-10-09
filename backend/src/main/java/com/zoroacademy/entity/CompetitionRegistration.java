@@ -34,6 +34,14 @@ public class CompetitionRegistration {
     @Column(name = "student_phone", length = 32)
     private String studentPhone;
 
+    private Integer age;
+
+    @Column(length = 255)
+    private String school;
+
+    @Column(length = 255)
+    private String city;
+
     @Column(name = "payment_status", length = 50)
     private String paymentStatus = "Pending";
 
@@ -51,18 +59,20 @@ public class CompetitionRegistration {
 
     public CompetitionRegistration() {}
 
-    public CompetitionRegistration(String id, Competition competition, String studentId, String studentName, String studentEmail, String studentPhone, String paymentStatus, BigDecimal score, Integer rank, String certificateUrl, LocalDateTime createdAt) {
+    public CompetitionRegistration(String id, Competition competition, String studentId, String studentName, String studentEmail, String studentPhone, Integer age, String school, String city, String paymentStatus, BigDecimal score, Integer rank, String certificateUrl, LocalDateTime createdAt) {
         this.id = id;
         this.competition = competition;
         this.studentId = studentId;
         this.studentName = studentName;
         this.studentEmail = studentEmail;
         this.studentPhone = studentPhone;
+        this.age = age;
+        this.school = school;
+        this.city = city;
         this.paymentStatus = paymentStatus;
         this.score = score;
         this.rank = rank;
         this.certificateUrl = certificateUrl;
-        this.createdAt = createdAt;
     }
 
     public String getId() {
@@ -111,6 +121,30 @@ public class CompetitionRegistration {
 
     public void setStudentPhone(String studentPhone) {
         this.studentPhone = studentPhone;
+    }
+
+    public Integer getAge() {
+        return age;
+    }
+
+    public void setAge(Integer age) {
+        this.age = age;
+    }
+
+    public String getSchool() {
+        return school;
+    }
+
+    public void setSchool(String school) {
+        this.school = school;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
     }
 
     public String getPaymentStatus() {
@@ -164,6 +198,9 @@ public class CompetitionRegistration {
         private String studentName;
         private String studentEmail;
         private String studentPhone;
+        private Integer age;
+        private String school;
+        private String city;
         private String paymentStatus = "Pending";
         private BigDecimal score;
         private Integer rank;
@@ -194,6 +231,18 @@ public class CompetitionRegistration {
             this.studentPhone = studentPhone;
             return this;
         }
+        public Builder age(Integer age) {
+            this.age = age;
+            return this;
+        }
+        public Builder school(String school) {
+            this.school = school;
+            return this;
+        }
+        public Builder city(String city) {
+            this.city = city;
+            return this;
+        }
         public Builder paymentStatus(String paymentStatus) {
             this.paymentStatus = paymentStatus;
             return this;
@@ -216,7 +265,7 @@ public class CompetitionRegistration {
         }
 
         public CompetitionRegistration build() {
-            return new CompetitionRegistration(id, competition, studentId, studentName, studentEmail, studentPhone, paymentStatus, score, rank, certificateUrl, createdAt);
+            return new CompetitionRegistration(id, competition, studentId, studentName, studentEmail, studentPhone, age, school, city, paymentStatus, score, rank, certificateUrl, createdAt);
         }
     }
 

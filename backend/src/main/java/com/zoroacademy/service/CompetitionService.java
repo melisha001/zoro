@@ -86,7 +86,7 @@ public class CompetitionService {
             reg.setPaymentStatus("Pending");
         }
 
-        // Relational student resolution
+        // Relational student resolution (if registered student)
         if (reg.getStudentId() != null && reg.getStudentId().contains("@")) {
             userRepository.findByEmailIgnoreCase(reg.getStudentId()).ifPresent(u -> {
                 reg.setStudentId(u.getId());
@@ -100,10 +100,15 @@ public class CompetitionService {
             });
         }
 
-        // Idempotency check: 409 Conflict if already registered
+        // Idempotency check: 409 Conflict if already registered (by phone for outsiders, student_id or email for students)
+        if (reg.getStudentPhone() != null && !reg.getStudentPhone().isBlank()) {
+            if (registrationRepository.findByCompetitionIdAndStudentPhone(compId, reg.getStudentPhone()).isPresent()) {
+                throw new com.zoroacademy.exception.ConflictException("Participant with phone " + reg.getStudentPhone() + " is already registered for this competition");
+            }
+        }
         if (reg.getStudentEmail() != null && !reg.getStudentEmail().isBlank()) {
             if (registrationRepository.findByCompetitionIdAndStudentEmailIgnoreCase(compId, reg.getStudentEmail()).isPresent()) {
-                throw new com.zoroacademy.exception.ConflictException("Student with email " + reg.getStudentEmail() + " is already registered for this competition");
+                throw new com.zoroacademy.exception.ConflictException("Participant with email " + reg.getStudentEmail() + " is already registered for this competition");
             }
         }
         if (reg.getStudentId() != null && !reg.getStudentId().isBlank()) {

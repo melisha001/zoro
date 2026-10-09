@@ -8,14 +8,16 @@ export const getCompetitionRegistrations = async () => {
       id: r.id,
       competitionId: r.competition?.id || r.competitionId,
       competitionName: r.competition?.title || r.competitionName || 'Competition',
-      studentId: r.studentId,
-      studentName: r.studentName || 'Student',
+      studentId: r.studentId || null,
+      studentName: r.studentName || 'Participant',
       studentEmail: r.studentEmail || '',
-      studentPhone: '',
-      batchName: 'All Batches',
+      studentPhone: r.studentPhone || '',
+      age: r.age || null,
+      school: r.school || '',
+      city: r.city || '',
       registrationDate: r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : '',
       registrationFee: r.competition?.registrationFee || 0,
-      paymentStatus: r.paymentStatus || 'Paid',
+      paymentStatus: r.paymentStatus || 'Pending',
       registrationStatus: 'Registered',
       score: r.score,
       rank: r.rank,
@@ -26,17 +28,23 @@ export const getCompetitionRegistrations = async () => {
   return apiResponse([], false, res?.message || 'Failed to fetch competition registrations');
 };
 
-export const checkDuplicateRegistration = async (studentEmail, competitionId) => {
-  if (!studentEmail || !competitionId) return false;
+export const checkDuplicateRegistration = async (studentEmail, competitionId, studentPhone, studentId) => {
+  if (!competitionId) return false;
   const res = await getCompetitionRegistrations();
   if (!res.success) return false;
   const regs = res.data;
   const lowerEmail = (studentEmail || '').toLowerCase().trim();
-  return (regs || []).some(r => 
-    r.competitionId === competitionId && 
-    r.studentEmail.toLowerCase().trim() === lowerEmail &&
-    r.registrationStatus !== 'Cancelled'
-  );
+  const cleanPhone = (studentPhone || '').trim();
+
+  return (regs || []).some(r => {
+    if (r.competitionId !== competitionId || r.registrationStatus === 'Cancelled') {
+      return false;
+    }
+    if (studentId && r.studentId === studentId) return true;
+    if (cleanPhone && r.studentPhone === cleanPhone) return true;
+    if (lowerEmail && r.studentEmail.toLowerCase().trim() === lowerEmail) return true;
+    return false;
+  });
 };
 
 export const createCompetitionRegistration = async (regData) => {
@@ -44,16 +52,25 @@ export const createCompetitionRegistration = async (regData) => {
     return apiResponse(null, false, 'Competition ID is required');
   }
 
-  const isDuplicate = await checkDuplicateRegistration(regData.studentEmail, regData.competitionId);
+  const isDuplicate = await checkDuplicateRegistration(
+    regData.studentEmail,
+    regData.competitionId,
+    regData.studentPhone,
+    regData.studentId
+  );
   if (isDuplicate) {
     return apiResponse(null, false, 'Already registered for this competition.');
   }
 
   const payload = {
-    studentId: regData.studentId || `std_${Date.now()}`,
-    studentName: regData.studentName || 'Student',
+    studentId: regData.studentId || null,
+    studentName: regData.studentName || 'Participant',
     studentEmail: regData.studentEmail,
-    paymentStatus: regData.paymentStatus || 'Paid',
+    studentPhone: regData.studentPhone,
+    age: regData.age ? Number(regData.age) : null,
+    school: regData.school || null,
+    city: regData.city || null,
+    paymentStatus: regData.paymentStatus || 'Pending',
     score: null,
     rank: null
   };
@@ -62,7 +79,7 @@ export const createCompetitionRegistration = async (regData) => {
   if (res && res.success) {
     await logActivity(
       'Competition Registration',
-      'Student Registered for Competition',
+      'Participant Registered for Competition',
       `${payload.studentName} registered for competition ${regData.competitionId}`
     );
     return apiResponse(res.data);

@@ -147,15 +147,13 @@ export default function AdminAttendancePage({ setActiveScreen }) {
     return true;
   });
 
-  // Group Competition Registrations by Competition Name -> Batch Name
+  // Group Competition Registrations by Competition Name
   const groupedCompRegs = compRegistrations.reduce((acc, reg) => {
     if (reg.registrationStatus === 'Cancelled') return acc;
     const compKey = reg.competitionName || 'General Competition';
-    const batchKey = reg.batchName || 'General Batch';
 
-    if (!acc[compKey]) acc[compKey] = {};
-    if (!acc[compKey][batchKey]) acc[compKey][batchKey] = [];
-    acc[compKey][batchKey].push(reg);
+    if (!acc[compKey]) acc[compKey] = [];
+    acc[compKey].push(reg);
     return acc;
   }, {});
 
@@ -222,96 +220,82 @@ export default function AdminAttendancePage({ setActiveScreen }) {
             <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-2">
               <Trophy className="w-10 h-10 text-slate-300 mx-auto" />
               <h3 className="text-base font-bold text-slate-700">No competition attendance records available</h3>
-              <p className="text-xs text-slate-400">Students registered for active competitions will appear here grouped by competition and batch.</p>
+              <p className="text-xs text-slate-400">Participants registered for active competitions will appear here grouped by competition.</p>
             </div>
           ) : (
-            Object.entries(groupedCompRegs).map(([compName, batchesMap]) => (
+            Object.entries(groupedCompRegs).map(([compName, studentList]) => (
               <div key={compName} className="bg-white rounded-3xl border border-slate-200 shadow-md overflow-hidden space-y-4 p-6 sm:p-8">
                 
                 {/* Competition Header */}
-                <div className="flex items-center space-x-3 border-b border-slate-200 pb-4">
-                  <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-xs">
-                    <Trophy className="w-6 h-6" />
+                <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-xs">
+                      <Trophy className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                        COMPETITION EVENT
+                      </span>
+                      <h2 className="text-xl font-black text-slate-900 tracking-tight mt-0.5">{compName}</h2>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-                      COMPETITION EVENT
-                    </span>
-                    <h2 className="text-xl font-black text-slate-900 tracking-tight mt-0.5">{compName}</h2>
+                  <div className="text-xs font-bold text-slate-600">
+                    Registered Participants: <strong className="text-blue-900">{studentList.length}</strong>
                   </div>
                 </div>
 
-                {/* Batches Under Competition */}
-                <div className="space-y-6 pl-2 sm:pl-4 border-l-2 border-slate-200">
-                  {Object.entries(batchesMap).map(([batchName, studentList]) => (
-                    <div key={batchName} className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 space-y-4 shadow-xs">
-                      
-                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
-                        <div className="flex items-center space-x-2.5">
-                          <Layers className="w-4 h-4 text-blue-600" />
-                          <h3 className="text-sm font-extrabold text-slate-900">Batch: {batchName}</h3>
-                        </div>
-                        <div className="text-xs font-bold text-slate-600">
-                          Registered Students: <strong className="text-blue-900">{studentList.length}</strong>
-                        </div>
-                      </div>
+                {/* Registered Participants Competition Attendance Table */}
+                <div className="overflow-x-auto bg-white rounded-xl border border-slate-200/80 shadow-2xs">
+                  <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider">
+                        <th className="py-3 px-4">Participant Name</th>
+                        <th className="py-3 px-4">Email / Phone</th>
+                        <th className="py-3 px-4">Payment Status</th>
+                        <th className="py-3 px-4 text-right">Attendance Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                      {studentList.map((reg) => {
+                        const currAtt = compAttStatus[reg.id] || 'Present';
 
-                      {/* Registered Students Competition Attendance Table */}
-                      <div className="overflow-x-auto bg-white rounded-xl border border-slate-200/80 shadow-2xs">
-                        <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-                          <thead>
-                            <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider">
-                              <th className="py-3 px-4">Student Name</th>
-                              <th className="py-3 px-4">Email</th>
-                              <th className="py-3 px-4">Payment Status</th>
-                              <th className="py-3 px-4 text-right">Competition Attendance Action</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                            {studentList.map((reg) => {
-                              const currAtt = compAttStatus[reg.id] || 'Present';
-
-                              return (
-                                <tr key={reg.id} className="hover:bg-slate-50 transition-colors">
-                                  <td className="py-3.5 px-4 font-black text-slate-900">
-                                    {reg.studentName}
-                                  </td>
-                                  <td className="py-3.5 px-4 font-semibold text-slate-700">
-                                    {reg.studentEmail}
-                                  </td>
-                                  <td className="py-3.5 px-4">
-                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
-                                      reg.paymentStatus === 'Paid'
-                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                        : 'bg-blue-100 text-blue-800 border border-blue-200'
-                                    }`}>
-                                      {reg.paymentStatus}
-                                    </span>
-                                  </td>
-                                  <td className="py-3.5 px-4 text-right space-x-2">
-                                    {['Present', 'Absent', 'Late'].map((st) => (
-                                      <button
-                                        key={st}
-                                        onClick={() => handleToggleCompAttendance(reg.id, reg.competitionId, reg.studentId, reg.batchName, st)}
-                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                          currAtt === st
-                                            ? st === 'Present' ? 'bg-emerald-600 text-white shadow-xs' : st === 'Absent' ? 'bg-rose-600 text-white shadow-xs' : 'bg-amber-600 text-white shadow-xs'
-                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
-                                        }`}
-                                      >
-                                        {st}
-                                      </button>
-                                    ))}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-
-                    </div>
-                  ))}
+                        return (
+                          <tr key={reg.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-3.5 px-4 font-black text-slate-900">
+                              {reg.studentName}
+                            </td>
+                            <td className="py-3.5 px-4 font-semibold text-slate-700">
+                              {reg.studentEmail} {reg.studentPhone ? `(${reg.studentPhone})` : ''}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
+                                reg.paymentStatus === 'Paid'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : 'bg-blue-100 text-blue-800 border border-blue-200'
+                              }`}>
+                                {reg.paymentStatus}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-right space-x-2">
+                              {['Present', 'Absent', 'Late'].map((st) => (
+                                <button
+                                  key={st}
+                                  onClick={() => handleToggleCompAttendance(reg.id, reg.competitionId, reg.studentId, 'Public', st)}
+                                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                    currAtt === st
+                                      ? st === 'Present' ? 'bg-emerald-600 text-white shadow-xs' : st === 'Absent' ? 'bg-rose-600 text-white shadow-xs' : 'bg-amber-600 text-white shadow-xs'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                                  }`}
+                                >
+                                  {st}
+                                </button>
+                              ))}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
 
               </div>

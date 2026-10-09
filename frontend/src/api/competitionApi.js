@@ -8,8 +8,7 @@ export const getCompetitions = async () => {
       id: c.id,
       name: c.title || c.name || 'Competition',
       title: c.title || c.name || 'Competition',
-      category: c.category || '',
-      courseName: c.category || '',
+      category: c.category || 'Academic',
       description: c.description || '',
       startDate: c.startDate || '',
       endDate: c.endDate || '',
@@ -21,7 +20,6 @@ export const getCompetitions = async () => {
       modules: c.modules || [],
       registrations: c.registrations || [],
       venue: 'Online (Zoro Portal)',
-      eligibleBatch: 'All Batches',
       instructions: c.rules || ''
     }));
     return apiResponse(normalized);
@@ -35,7 +33,7 @@ export const createCompetition = async (newCompData) => {
   }
   const payload = {
     title: newCompData.title || newCompData.name,
-    category: newCompData.category || newCompData.courseName || '',
+    category: newCompData.category || 'Academic',
     startDate: newCompData.startDate || newCompData.date || '',
     endDate: newCompData.endDate || newCompData.date || '',
     registrationFee: parseFloat(newCompData.registrationFee || newCompData.fee || 0),
@@ -58,7 +56,7 @@ export const updateCompetition = async (id, updatedData) => {
   }
   const payload = {
     title: updatedData.title || updatedData.name,
-    category: updatedData.category || updatedData.courseName,
+    category: updatedData.category || 'Academic',
     startDate: updatedData.startDate || updatedData.date,
     endDate: updatedData.endDate || updatedData.date,
     registrationFee: parseFloat(updatedData.registrationFee || updatedData.fee || 0),

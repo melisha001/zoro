@@ -66,18 +66,14 @@ export default function AdminCompetitionRegistrationsPage() {
   const totalRevenue = paidRegistrations.reduce((sum, r) => sum + Number(r.registrationFee || 0), 0);
   const totalRegCount = registrations.filter(r => r.registrationStatus !== 'Cancelled').length;
 
-  // Group by Competition Name -> Batch Name -> Array of Students
+  // Group by Competition Name -> Array of Participants
   const groupedByCompetition = filteredRegistrations.reduce((acc, reg) => {
     const compKey = reg.competitionName || 'General Competition';
-    const batchKey = reg.batchName || 'General Batch';
 
     if (!acc[compKey]) {
-      acc[compKey] = {};
+      acc[compKey] = [];
     }
-    if (!acc[compKey][batchKey]) {
-      acc[compKey][batchKey] = [];
-    }
-    acc[compKey][batchKey].push(reg);
+    acc[compKey].push(reg);
     return acc;
   }, {});
 
@@ -92,7 +88,7 @@ export default function AdminCompetitionRegistrationsPage() {
             <span>Competition Registrations & Revenue</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-            Track student registrations, batch breakdown, online Razorpay transactions, and competition revenue.
+            Track participant registrations, online Razorpay transactions, and competition revenue.
           </p>
         </div>
       </div>
@@ -101,7 +97,7 @@ export default function AdminCompetitionRegistrationsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="text-xs text-slate-500 font-semibold">Total Registrations</div>
-          <div className="text-3xl font-black text-slate-900 mt-1">{totalRegCount} Students</div>
+          <div className="text-3xl font-black text-slate-900 mt-1">{totalRegCount} Participants</div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -121,7 +117,7 @@ export default function AdminCompetitionRegistrationsPage() {
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search registrations by student, email, batch, competition, payment ID..."
+            placeholder="Search registrations by participant, email, phone, competition, payment ID..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
@@ -159,7 +155,7 @@ export default function AdminCompetitionRegistrationsPage() {
         </div>
       </div>
 
-      {/* Batch-wise & Competition-wise Grouped Registrations Display */}
+      {/* Competition-wise Grouped Registrations Display */}
       {loading ? (
         <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400">
           Loading competition registrations...
@@ -168,11 +164,11 @@ export default function AdminCompetitionRegistrationsPage() {
         <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-2">
           <Trophy className="w-10 h-10 text-slate-300 mx-auto" />
           <h3 className="text-base font-bold text-slate-700">No competition registrations found</h3>
-          <p className="text-xs text-slate-400">Registered students will appear here automatically grouped by competition and batch.</p>
+          <p className="text-xs text-slate-400">Registered participants will appear here automatically grouped by competition.</p>
         </div>
       ) : (
         <div className="space-y-8">
-          {Object.entries(groupedByCompetition).map(([compName, batchesMap]) => (
+          {Object.entries(groupedByCompetition).map(([compName, studentList]) => (
             <div key={compName} className="bg-white rounded-3xl border border-slate-200 shadow-md overflow-hidden space-y-4">
               
               {/* Competition Group Header */}
@@ -184,106 +180,109 @@ export default function AdminCompetitionRegistrationsPage() {
                   <div>
                     <h2 className="text-lg font-black tracking-tight">{compName}</h2>
                     <span className="text-slate-400 text-xs font-medium">
-                      {Object.values(batchesMap).reduce((s, arr) => s + arr.length, 0)} Registered Participants
+                      {studentList.length} Registered Participants
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Batches Sub-Sections */}
-              <div className="p-6 pt-2 space-y-6">
-                {Object.entries(batchesMap).map(([batchName, studentList]) => (
-                  <div key={batchName} className="space-y-3">
-                    <div className="flex items-center space-x-2 text-xs font-black text-blue-900 uppercase tracking-wider bg-blue-50/70 p-2.5 px-4 rounded-xl border border-blue-200/60">
-                      <Layers className="w-4 h-4 text-blue-600" />
-                      <span>{batchName} ({studentList.length} Students)</span>
-                    </div>
-
-                    {/* Table of Registered Students */}
-                    <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                      <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
-                            <th className="py-3 px-4">Student Name</th>
-                            <th className="py-3 px-4">Email & Phone</th>
-                            <th className="py-3 px-4">Reg Date</th>
-                            <th className="py-3 px-4">Fee (₹)</th>
-                            <th className="py-3 px-4">Payment Status</th>
-                            <th className="py-3 px-4">Razorpay Txn ID</th>
-                            <th className="py-3 px-4">Reg Status</th>
-                            <th className="py-3 px-4 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                          {studentList.map((student) => (
-                            <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="py-3.5 px-4 font-black text-slate-900">
-                                {student.studentName}
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <div className="font-bold text-slate-800">{student.studentEmail}</div>
-                                <div className="text-[11px] text-slate-400">{student.studentPhone}</div>
-                              </td>
-                              <td className="py-3.5 px-4 font-bold text-slate-700">
-                                {student.registrationDate}
-                              </td>
-                              <td className="py-3.5 px-4 font-extrabold text-slate-900">
-                                ₹{student.registrationFee}
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black ${
-                                  student.paymentStatus === 'Paid'
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                    : student.paymentStatus === 'Not Required'
-                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                    : 'bg-rose-100 text-rose-800 border border-rose-200'
-                                }`}>
-                                  {student.paymentStatus}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600 font-bold">
-                                {student.razorpayPaymentId || 'N/A'}
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  student.registrationStatus === 'Registered'
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                    : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                }`}>
-                                  {student.registrationStatus}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4 text-right space-x-2">
-                                <button
-                                  onClick={() => setViewingReg(student)}
-                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
-                                  title="View Details"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </button>
-                                {student.registrationStatus !== 'Cancelled' && (
-                                  <button
-                                    onClick={() => setCancelModalReg(student)}
-                                    className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                                    title="Cancel Registration"
-                                  >
-                                    <XCircle className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))}
+              {/* Table of Registered Students */}
+              <div className="p-6 pt-2 overflow-x-auto">
+                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                        <th className="py-3 px-4">Participant Name</th>
+                        <th className="py-3 px-4">Email & Phone</th>
+                        <th className="py-3 px-4">Age / School / City</th>
+                        <th className="py-3 px-4">Reg Date</th>
+                        <th className="py-3 px-4">Fee (₹)</th>
+                        <th className="py-3 px-4">Payment Status</th>
+                        <th className="py-3 px-4">Razorpay Txn ID</th>
+                        <th className="py-3 px-4">Reg Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                      {studentList.map((student) => (
+                        <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3.5 px-4 font-black text-slate-900">
+                            {student.studentName}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-800">{student.studentEmail}</div>
+                            <div className="text-[11px] text-slate-400">{student.studentPhone}</div>
+                          </td>
+                          <td className="py-3.5 px-4 text-[11px]">
+                            {student.age || student.school || student.city ? (
+                              <div className="space-y-0.5">
+                                {student.age && <span className="font-bold text-slate-800">Age: {student.age} </span>}
+                                {student.school && <div className="text-slate-500">{student.school}</div>}
+                                {student.city && <div className="text-slate-400">{student.city}</div>}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-slate-700">
+                            {student.registrationDate}
+                          </td>
+                          <td className="py-3.5 px-4 font-extrabold text-slate-900">
+                            ₹{student.registrationFee}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black ${
+                              student.paymentStatus === 'Paid'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : student.paymentStatus === 'Not Required'
+                                ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                : 'bg-rose-100 text-rose-800 border border-rose-200'
+                            }`}>
+                              {student.paymentStatus}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600 font-bold">
+                            {student.razorpayPaymentId || 'N/A'}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                              student.registrationStatus === 'Registered'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}>
+                              {student.registrationStatus}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right space-x-2">
+                            <button
+                              onClick={() => setViewingReg(student)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            {student.registrationStatus !== 'Cancelled' && (
+                              <button
+                                onClick={() => setCancelModalReg(student)}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                                title="Cancel Registration"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
             </div>
           ))}
         </div>
       )}
+
 
       {/* VIEW REGISTRATION DETAILS MODAL */}
       {viewingReg && (
