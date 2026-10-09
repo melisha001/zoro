@@ -1,12 +1,12 @@
 # Zoro Academy — System Migration & Deployment Guide
 
-This document details the complete 6-phase overhaul performed on Zoro English Academy, including database schema migrations (V6–V8), API contract updates, security hardening, frontend reliability enhancements, environment configurations, and deployment procedures.
+This document details the complete overhaul performed on Zoro English Academy, including database schema migrations (V6–V13), API contract updates, security hardening, file storage migration, video integration, frontend reliability enhancements, environment configurations, and deployment procedures.
 
 ---
 
 ## 1. System Architecture Overview
 
-- **Backend**: Spring Boot 3.3.4 (**Requires JDK 21**; Java 26 is unsupported by Spring Boot 3.3.4), Spring Data JPA, Hibernate, PostgreSQL, Flyway migrations, Spring Security with JJWT 0.12.6, Bunny Stream Video Integration, Razorpay Payment Gateway.
+- **Backend**: Spring Boot 3.3.4 (**Requires JDK 21**; Java 26 is unsupported by Spring Boot 3.3.4), Spring Data JPA, Hibernate, PostgreSQL, Flyway migrations, Spring Security with JJWT 0.12.6, Bunny Stream Video Integration, Database File Storage (`StoredFile`), Razorpay Payment Gateway.
 - **Frontend**: React 19, Vite 8, Tailwind CSS, Lucide React icons, xlsx data export, React Router (BrowserRouter).
 - **Roles & Permissions**:
   - `ADMIN`: Full administrative control (Users, Fees, Expenses, Salaries, Settings, Course Content, Activity Logs).
@@ -15,9 +15,9 @@ This document details the complete 6-phase overhaul performed on Zoro English Ac
 
 ---
 
-## 2. Database Schema & Flyway Migrations (V6 – V9)
+## 2. Database Schema & Flyway Migrations (V6 – V13)
 
-> **Rule Compliance**: Migrations V1 through V5 were preserved strictly untouched. All enhancements were introduced through additive, non-destructive migrations.
+> **Rule Compliance**: Migrations V1 through V8 were preserved strictly untouched. All enhancements were introduced through additive, non-destructive Flyway migrations (V9–V13).
 
 ### `V6__ids_as_single_source_of_truth.sql`
 - **Objective**: Replaced string-based name/email linking with persistent entity IDs as the single source of truth.
@@ -49,57 +49,70 @@ This document details the complete 6-phase overhaul performed on Zoro English Ac
 - **Key Changes**:
   - Scrambled and invalidated BCrypt hashes for all V2 seed accounts (`usr-admin-1`, `trn-1`, `trn-2`, `std-1`, `std-2`) so no known default password exists. Initial admin credentials are required to bootstrap via `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
----
+### `V10__file_storage_schema.sql` (Task 1)
+- **Objective**: DB-backed file storage with magic byte validation and data migration runner.
+- **Key Changes**:
+  - Created `stored_files` table (`id`, `file_name`, `content_type`, `file_size`, `data`, `public_accessible`, `created_at`, `updated_at`).
+  - Implemented `FileStorageService` with file magic-byte validation (JPEG, PNG, GIF, WEBP, PDF, DOCX, XLSX, MP4, etc.) and `FileMigrationRunner` scanning/converting legacy data/blob URLs.
 
-## 3. Security Hardening & Breaking API Changes
+### `V11__competitions_independent.sql` (Task 4)
+- **Objective**: Made competition registrations independent of courses and batches.
+- **Key Changes**:
+  - Made `student_id` in `competition_registrations` nullable.
+  - Added `age` (INT), `school` (VARCHAR), and `city` (VARCHAR) to `competition_registrations`.
+  - Updated entity, service, and frontend registration modals for independent public signups.
 
-### A. Authentication & Backdoor Removal
-1. **Removed Default Password Backdoors**: The legacy fallback allowing `"password123"` / `"admin123"` on any account has been completely removed.
-2. **Bootstrap Admin Initialization**: Added `AdminUserInitializer` `CommandLineRunner` that bootstraps/updates the admin credentials securely from `ADMIN_EMAIL` and `ADMIN_PASSWORD` (BCrypt-hashed) upon startup.
-3. **Random Temporary Passwords**: Admin creating students or trainers now generates a cryptographically secure 12-character temporary password returned once in `UserDto.temporaryPassword`.
-4. **Duplicate Protection (409 Conflict)**: Creating users with duplicate email or username now throws a 409 `ConflictException`.
-5. **Self-Deletion & Last Admin Protection**: An admin cannot delete their own account or the last remaining administrator in the system.
+### `V12__remove_demo_data.sql` (Task 5)
+- **Objective**: Completely purged hardcoded demo business rows from production migrations.
+- **Key Changes**:
+  - Removed demo courses, modules, resources, batches, student_course_batches, enrollments, schedules, student_fees, submissions, student_progress, and non-admin demo users.
+  - Preserved system configuration and administrator account (`admin@zoro.com`).
+  - Enforced 0 demo data state in `FreshDatabaseCleanTest.java`.
 
-### B. Strict Role-Based Access Control (RBAC)
-- Removed `.requestMatchers("/api/**").permitAll()`.
-- Public endpoints restricted strictly to:
-  - `POST /api/auth/login`
-  - `POST /api/enquiries`
-  - `GET /api/courses/**`
-  - `GET /api/competitions/**` (excluding registrations)
-  - `GET /api/website-settings/**`
-  - `POST /api/competitions/{id}/registrations`
-  - Swagger / OpenAPI documentation
-- All other endpoints require valid Bearer JWT.
-- Added `/api/me/**` scoped endpoints (`/api/me/courses`, `/api/me/batches`, `/api/me/assignments`, `/api/me/submissions`, `/api/me/schedules`) for authenticated users.
-
-### C. Bunny Stream Video Security
-- **JWT Identity Binding**: Video playback authorization resolves the user identity strictly from the JWT authentication principal (never client-supplied parameters).
-- **Course Association Enforced**: Videos not associated with any active course return an immediate access denial.
-- **Enrollment Verification**: Students requesting video tokens must possess an active enrollment in the course.
-- **Webhook Signature Verification**: `BunnyWebhookController` validates the `webhook-signature` or `X-Bunny-Secret` header before processing transcoding updates.
-
-### D. Fee Payment Integrity & Razorpay Verification
-- Verifies Razorpay HMAC-SHA256 signature (`order_id|payment_id`) against `razorpay.key-secret` using constant-time comparison (`MessageDigest.isEqual`).
-- Fee records marked as `Paid` or having payment transactions cannot have their fee lowered below paid amounts or be deleted.
+### `V13__student_batch_membership.sql` (Task 6)
+- **Objective**: Deduplicated student batch relationships and enforced single batch per course constraints.
+- **Key Changes**:
+  - Deduplicated `student_course_batches` and `enrollments` on `(student_id, course_id)`.
+  - Added unique constraints `uk_scb_student_course` on `student_course_batches(student_id, course_id)` and `uk_enrollments_student_course` on `enrollments(student_id, course_id)`.
+  - Added `GET /api/batches/{id}/students` endpoint and `getBatchStudents(id)` in `batchApi.js`.
 
 ---
 
-## 4. Frontend Reliability Overhaul
+## 3. Security Hardening & Session Lifecycle Management
 
-1. **Zero Mock / Fake Success Fallbacks**:
-   - Replaced all fallback empty list/fake success resolutions across `frontend/src/api/*.js` with standard `{ success: false, message, data: null }` error structures.
-   - Validated required IDs before dispatching network requests.
-2. **Visibility-Aware Polling (`usePolling`)**:
-   - Created `usePolling(callback, intervalMs, enabled)` in `frontend/src/hooks/usePolling.js` integrating the Page Visibility API (`document.visibilityState`). Pauses execution when tab is backgrounded and resumes immediately upon focus.
-3. **Session Restoration & Smooth Routing**:
-   - `AuthContext.jsx` restores session on mount via `/api/auth/me`. Shows a full-page loading spinner during initialization, preventing any flashing of the public home or login screen.
-4. **Code-Splitting via `React.lazy` & `Suspense`**:
-   - Portal views in `App.jsx` are dynamically loaded with lazy chunks, keeping initial bundle size minimal and responsive.
+### A. Immediate Session Termination (Task 8)
+- **Database Status Check on Every Request**: `JwtAuthenticationFilter` validates the user in the database on every authenticated API request.
+- **Structured Error Codes**:
+  - User Deleted from DB -> HTTP 401 Unauthorized:
+    ```json
+    { "success": false, "code": "ACCOUNT_REMOVED", "message": "Account has been removed" }
+    ```
+  - User Deactivated/Disabled -> HTTP 401 Unauthorized:
+    ```json
+    { "success": false, "code": "ACCOUNT_DISABLED", "message": "Account has been deactivated" }
+    ```
+  - Expired or Invalid Token -> HTTP 401 Unauthorized:
+    ```json
+    { "success": false, "code": "TOKEN_EXPIRED", "message": "Token expired or invalid" }
+    ```
+- **Frontend Interception**:
+  - `client.js` captures HTTP 401, clears `localStorage` auth session (`clearAuthSession()`), and dispatches custom `auth:unauthorized` event with structured code & message.
+  - `AuthContext.jsx` clears user/role state and sets `authNotice`.
+  - `usePolling.js` listens to `auth:unauthorized` and 401 response statuses, halting all active polling intervals immediately.
+  - `LoginPage.jsx` and `LoginModal.jsx` display prominent alert banners notifying users of session termination reasons.
+
+### B. Secrets & Configuration Validation (Task 0 & Task 2)
+- Added strict startup checks in `JwtTokenProvider` ensuring `jwt.secret` decodes to at least 32 bytes (256 bits) for HMAC-SHA256 signature security.
+- Added strict startup validation in `BunnyStreamProperties` checking `bunny.library-id`, `bunny.api-key`, `bunny.cdn-host`, and `bunny.token-auth-key`.
+- Implemented TUS presigned upload (`SHA256_HEX`), video status polling, and automatic Bunny CDN / file storage cleanup on module or course deletion.
+
+### C. Trainer Dependency & Reassignment Flow (Task 7)
+- `TrainerController` supports `DELETE /api/trainers/{id}?replacementTrainerId=...`.
+- Reassigns courses, batches, and schedules to `replacementTrainerId` in a single `@Transactional` method when deleting a trainer with active dependencies.
 
 ---
 
-## 5. Environment Variables & Secret Configuration
+## 4. Environment Variables & Secret Configuration
 
 Configure the following environment variables in production before starting the application:
 
@@ -113,40 +126,32 @@ Configure the following environment variables in production before starting the 
 | `JWT_SECRET` | Base64-encoded key for HMAC-SHA256 (>= 32 bytes) | `Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=` |
 | `JWT_EXPIRATION` | JWT token expiration in ms | `86400000` |
 | `ADMIN_EMAIL` | Administrator account email for bootstrap | `admin@zoro.com` |
-| `ADMIN_PASSWORD` | Administrator account password for bootstrap | *(Strong password)* |
-| `BUNNY_LIBRARY_ID` | Bunny.net Video Library ID (Required) | `your_bunny_library_id` |
+| `ADMIN_PASSWORD` | Administrator account password for bootstrap | `Admin@123` |
+| `BUNNY_LIBRARY_ID` | Bunny.net Video Library ID (Required) | `770045` |
 | `BUNNY_API_KEY` | Bunny.net Video Library API key | *(Bunny dashboard API key)* |
-| `BUNNY_CDN_HOST` | Bunny Stream Pull Zone hostname (Required) | `your_pullzone.b-cdn.net` |
+| `BUNNY_CDN_HOST` | Bunny Stream Pull Zone hostname (Required) | `vz-770045.b-cdn.net` |
 | `BUNNY_TOKEN_AUTH_KEY`| Bunny.net Stream Token authentication key | *(Bunny CDN Token key)* |
 | `BUNNY_WEBHOOK_SECRET` | Bunny webhook verification shared secret | *(Secret string)* |
 | `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `http://localhost:5173,http://localhost:3000` |
 | `RAZORPAY_KEY_ID` | Razorpay API Key ID | `rzp_live_...` |
 | `RAZORPAY_KEY_SECRET` | Razorpay API Secret | *(Razorpay secret)* |
 
-> [!CAUTION]
-> **Secrets Rotation Requirement**:
-> Because development placeholders existed in previous commits, you **must rotate** the following credentials in your live environments:
-> 1. Bunny.net API Key and Token Authentication Key.
-> 2. JWT Signing Secret (`jwt.secret`).
-> 3. Production PostgreSQL credentials.
-> 4. Razorpay production Key Secret.
-
 ---
 
-## 6. Build & Deployment Instructions
+## 5. Build & Verification Commands
 
 ### Backend (Spring Boot)
 ```bash
 cd backend
 
 # Run automated tests
-mvn clean test
+mvn -q test
 
 # Package production executable JAR
 mvn package -DskipTests
 
-# Run the backend service
-java -jar target/zoro-academy-backend-1.0.0.jar --spring.profiles.active=prod
+# Run local startup script
+.\run-local.ps1
 ```
 
 ### Frontend (React / Vite)
@@ -159,7 +164,7 @@ npm install
 # Run linter
 npx oxlint
 
-# Build production assets
+# Build production bundle
 npm run build
 ```
-Static output will be generated inside `frontend/dist/` ready to be served by Nginx, Cloudflare Pages, or a static CDN.
+Static production output is generated in `frontend/dist/`.
