@@ -68,9 +68,13 @@ export default function TrainerProfilePage() {
           updateUserInContext({ ...payload, avatar: selectedPhoto || profileData.avatar });
           setMsg('Profile and photo updated successfully!');
           setTimeout(() => setMsg(''), 3500);
+        } else {
+          setMsg(res.message || 'Failed to update profile.');
+          return;
         }
       } catch (err) {
         setMsg('Failed to update profile.');
+        return;
       }
     }
     setIsEditing(!isEditing);

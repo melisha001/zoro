@@ -1,10 +1,21 @@
-import { apiResponse, apiGet, apiPost, apiPut, apiDelete, setAuthToken } from './client';
+import { apiResponse, apiGet, apiPost, apiPut, apiPatch, apiDelete, setAuthToken } from './client';
 
 /**
  * User & Authentication API
  * 100% Database-backed via Spring Boot REST endpoints.
  * ZERO mock data. ZERO localStorage persistence.
  */
+
+export const updateUserStatus = async (id, status) => {
+  if (!id) {
+    return apiResponse(null, false, 'User ID is required');
+  }
+  const res = await apiPatch(`/users/${encodeURIComponent(id)}/status`, { status });
+  if (res.success && res.data) {
+    return apiResponse(res.data, true, 'User status updated successfully');
+  }
+  return apiResponse(null, false, res.message || 'Failed to update user status');
+};
 
 // --- STUDENTS CRUD ---
 export const getStudents = async () => {
@@ -46,11 +57,12 @@ export const updateStudentPassword = async (studentIdOrEmail, currentPassword, n
   return { success: false, message: res.message || 'Failed to change password.' };
 };
 
-export const deleteStudent = async (id) => {
+export const deleteStudent = async (id, force = false) => {
   if (!id) {
     return apiResponse(false, false, 'Student ID is required');
   }
-  const res = await apiDelete(`/users/${encodeURIComponent(id)}`);
+  const endpoint = `/users/${encodeURIComponent(id)}${force ? '?force=true' : ''}`;
+  const res = await apiDelete(endpoint);
   if (res.success) {
     return apiResponse(true, true, 'Student deleted successfully');
   }
@@ -97,13 +109,14 @@ export const updateTrainer = async (id, data) => {
 export const updateTrainerProfile = updateTrainer;
 export const updateStudentProfile = updateStudent;
 
-export const deleteTrainer = async (id) => {
+export const deleteTrainer = async (id, force = false) => {
   if (!id) {
     return apiResponse(false, false, 'Trainer ID is required');
   }
-  let res = await apiDelete(`/trainers/${encodeURIComponent(id)}`);
+  const query = force ? '?force=true' : '';
+  let res = await apiDelete(`/trainers/${encodeURIComponent(id)}${query}`);
   if (!res.success) {
-    res = await apiDelete(`/users/${encodeURIComponent(id)}`);
+    res = await apiDelete(`/users/${encodeURIComponent(id)}${query}`);
   }
   if (res.success) {
     return apiResponse(true, true, 'Trainer deleted successfully');

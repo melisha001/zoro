@@ -120,4 +120,5 @@ export const apiFetch = async (endpoint, options = {}) => {
 export const apiGet = (endpoint) => apiFetch(endpoint, { method: 'GET' });
 export const apiPost = (endpoint, body) => apiFetch(endpoint, { method: 'POST', body: JSON.stringify(body) });
 export const apiPut = (endpoint, body) => apiFetch(endpoint, { method: 'PUT', body: JSON.stringify(body) });
+export const apiPatch = (endpoint, body) => apiFetch(endpoint, { method: 'PATCH', body: JSON.stringify(body) });
 export const apiDelete = (endpoint) => apiFetch(endpoint, { method: 'DELETE' });

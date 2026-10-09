@@ -146,4 +146,125 @@ class UserLifecycleTest {
         boolean updated = userService.updatePassword("student@test.com", "wrongPass", "newSecretPassword123");
         assertFalse(updated, "Password update must return false when current password does not match");
     }
+
+    @Test
+    void testCreateStudentWithExplicitValidPassword() {
+        UserDto dto = UserDto.builder()
+                .name("Student User")
+                .email("student_new@test.com")
+                .password("Student@123")
+                .build();
+
+        when(userRepository.findByEmailIgnoreCase("student_new@test.com")).thenReturn(Optional.empty());
+        when(userRepository.findByUsernameIgnoreCase("student_new@test.com")).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserDto created = userService.saveStudent(dto);
+
+        assertNotNull(created);
+        assertNull(created.getTemporaryPassword(), "Temporary password should be null when explicit password provided");
+        verify(passwordEncoder).encode("Student@123");
+    }
+
+    @Test
+    void testCreateStudentWithShortPasswordThrowsException() {
+        UserDto dto = UserDto.builder()
+                .name("Student User")
+                .email("student_short@test.com")
+                .password("short")
+                .build();
+
+        when(userRepository.findByEmailIgnoreCase("student_short@test.com")).thenReturn(Optional.empty());
+
+        assertThrows(IllegalArgumentException.class, () -> userService.saveStudent(dto));
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void testUpdateStudentPreservesExistingPasswordWhenBlank() {
+        User existing = User.builder()
+                .id("std-100")
+                .email("student100@test.com")
+                .password("encoded_existingSecret")
+                .role("STUDENT")
+                .build();
+
+        when(userRepository.findById("std-100")).thenReturn(Optional.of(existing));
+        when(userRepository.findByEmailIgnoreCase("student100@test.com")).thenReturn(Optional.of(existing));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserDto updateDto = UserDto.builder()
+                .id("std-100")
+                .name("Updated Name")
+                .email("student100@test.com")
+                .password("")
+                .build();
+
+        UserDto updated = userService.saveStudent(updateDto);
+
+        assertNotNull(updated);
+        assertEquals("encoded_existingSecret", existing.getPassword());
+    }
+
+    @Test
+    void testUpdateUserStatus() {
+        User existing = User.builder()
+                .id("std-200")
+                .email("student200@test.com")
+                .status("Active")
+                .role("STUDENT")
+                .build();
+
+        when(userRepository.findById("std-200")).thenReturn(Optional.of(existing));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserDto res = userService.updateUserStatus("std-200", "Inactive");
+
+        assertEquals("Inactive", res.getStatus());
+        assertEquals("Inactive", existing.getStatus());
+    }
+
+    @Test
+    void testDeleteStudentWithActiveEnrollmentThrowsConflictIfNotForced() {
+        User student = User.builder()
+                .id("std-300")
+                .role("STUDENT")
+                .build();
+
+        com.zoroacademy.entity.Enrollment enrollment = com.zoroacademy.entity.Enrollment.builder()
+                .id("enr-1")
+                .studentId("std-300")
+                .status("Active")
+                .build();
+
+        when(userRepository.findById("std-300")).thenReturn(Optional.of(student));
+        when(enrollmentRepository.findByStudentId("std-300")).thenReturn(java.util.List.of(enrollment));
+
+        assertThrows(ConflictException.class, () -> userService.deleteUser("std-300", false));
+        verify(userRepository, never()).delete(any());
+    }
+
+    @Test
+    void testDeleteStudentForceTrueDeletesSuccessfully() {
+        User student = User.builder()
+                .id("std-300")
+                .role("STUDENT")
+                .email("student300@test.com")
+                .build();
+
+        com.zoroacademy.entity.Enrollment enrollment = com.zoroacademy.entity.Enrollment.builder()
+                .id("enr-1")
+                .studentId("std-300")
+                .status("Active")
+                .build();
+
+        when(userRepository.findById("std-300")).thenReturn(Optional.of(student));
+        when(enrollmentRepository.findByStudentId("std-300")).thenReturn(java.util.List.of(enrollment));
+
+        userService.deleteUser("std-300", true);
+
+        verify(enrollmentRepository, atLeastOnce()).deleteAll(anyList());
+        verify(studentCourseBatchRepository).deleteByStudentId("std-300");
+        verify(userRepository).delete(student);
+    }
 }

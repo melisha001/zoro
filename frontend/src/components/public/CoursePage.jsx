@@ -1,15 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Calculator, MessageCircle, Play, Check, ChevronDown, ChevronUp, 
-  Clock, Monitor, Award, Users, FileText 
-} from 'lucide-react';
+import { Play } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
 
 export default function CoursePage({ onOpenEnquire }) {
   const [courses, setCourses] = useState([]);
   const [selectedCourseId, setSelectedCourseId] = useState('');
-  const [activeTab, setActiveTab] = useState('overview');
-  const [expandedFaq, setExpandedFaq] = useState(null);
 
   useEffect(() => {
     async function loadCourses() {
@@ -39,7 +34,7 @@ export default function CoursePage({ onOpenEnquire }) {
         {/* Main Grid: Left Sidebar + Right Course Details */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* Left Course Selector Sidebar (Wireframe 2 Left Column) */}
+          {/* Left Course Selector Sidebar */}
           <div className="lg:col-span-3 space-y-2">
             <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-1">
               <h3 className="px-3 py-2 text-xs font-black text-slate-400 uppercase tracking-wider">All Courses</h3>
@@ -63,7 +58,7 @@ export default function CoursePage({ onOpenEnquire }) {
             </div>
           </div>
 
-          {/* Right Main Course View (Wireframe 2 Main Panel) */}
+          {/* Right Main Course View */}
           <div className="lg:col-span-9 space-y-8">
             
             {/* Header & Main Info */}
@@ -117,10 +112,9 @@ export default function CoursePage({ onOpenEnquire }) {
                       </div>
                     )}
 
-
                     <button
                       onClick={onOpenEnquire}
-                      className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-8 py-3.5 rounded-xl shadow-lg transition-transform transform hover:-translate-y-0.5"
+                      className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-8 py-3.5 rounded-xl shadow-lg transition-transform transform hover:-translate-y-0.5 cursor-pointer"
                     >
                       Enquire Now
                     </button>
@@ -156,89 +150,11 @@ export default function CoursePage({ onOpenEnquire }) {
               </div>
             )}
 
-            {/* Tabs Bar (Overview, Benefits, Curriculum, FAQs) */}
+            {/* Course Overview Direct Render */}
             {selectedCourse.id && (
-              <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md p-6 sm:p-8 space-y-6">
-                
-                <div className="flex border-b border-slate-200 space-x-6 text-sm font-bold">
-                  {['overview', 'benefits', 'curriculum', 'faqs'].map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`pb-4 transition-all capitalize border-b-2 ${
-                        activeTab === tab
-                          ? 'border-blue-600 text-blue-600 font-extrabold'
-                          : 'border-transparent text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Tab Content Panels */}
-                {activeTab === 'overview' && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-extrabold text-slate-900">Course Overview</h3>
-                    <p className="text-slate-600 text-sm leading-relaxed">{selectedCourse.overview || selectedCourse.description}</p>
-                  </div>
-                )}
-
-                {activeTab === 'benefits' && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-extrabold text-slate-900">Key Learning Benefits</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {(selectedCourse.benefits || ['Interactive live classes', 'Comprehensive curriculum', 'Certificate upon completion']).map((b, i) => (
-                        <div key={i} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl border border-slate-200/60">
-                          <div className="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center font-bold text-xs shrink-0">✓</div>
-                          <span className="text-xs font-bold text-slate-700">{b}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'curriculum' && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-extrabold text-slate-900">Module Syllabus</h3>
-                    <div className="space-y-2">
-                      {(selectedCourse.curriculum || ['Module 1: Introduction', 'Module 2: Fundamentals', 'Module 3: Advanced Concepts', 'Module 4: Final Assessment']).map((m, idx) => (
-                        <div key={idx} className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center space-x-3 text-xs font-bold text-slate-800">
-                          <FileText className="w-4 h-4 text-blue-600" />
-                          <span>{m}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'faqs' && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-extrabold text-slate-900">Frequently Asked Questions</h3>
-                    <div className="space-y-3">
-                      {(selectedCourse.faqs || [
-                        { q: "What is the class schedule?", a: "Classes are held twice weekly in small interactive online batches." },
-                        { q: "Will I get a certificate?", a: "Yes, a verifiable certificate of completion is awarded." }
-                      ]).map((faq, index) => (
-                        <div key={index} className="border border-slate-200 rounded-xl p-4 bg-slate-50">
-                          <div 
-                            className="flex justify-between items-center cursor-pointer font-bold text-sm text-slate-900"
-                            onClick={() => setExpandedFaq(expandedFaq === index ? null : index)}
-                          >
-                            <span>{faq.q}</span>
-                            {expandedFaq === index ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
-                          </div>
-                          {expandedFaq === index && (
-                            <p className="text-xs text-slate-600 mt-2 pt-2 border-t border-slate-200/60 leading-relaxed">
-                              {faq.a}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
+              <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md p-6 sm:p-8 space-y-4">
+                <h3 className="text-lg font-extrabold text-slate-900">Course Overview</h3>
+                <p className="text-slate-600 text-sm leading-relaxed">{selectedCourse.overview || selectedCourse.description}</p>
               </div>
             )}
 
@@ -250,4 +166,3 @@ export default function CoursePage({ onOpenEnquire }) {
     </div>
   );
 }
-

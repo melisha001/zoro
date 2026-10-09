@@ -69,7 +69,11 @@ export default function StudentProfilePage() {
         phone: sanitizePhone(profileData.phone),
         avatar: selectedPhoto || profileData.avatar
       };
-      await updateStudent(user.id || user.email, payload);
+      const res = await updateStudent(user.id || user.email, payload);
+      if (!res.success) {
+        setMsg({ type: 'error', text: res.message || 'Failed to update profile.' });
+        return;
+      }
       updateUserInContext(payload);
     }
     setIsEditing(false);

@@ -85,15 +85,29 @@ public class UserController {
         return ApiResponse.ok(userService.getUserById(id));
     }
 
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<UserDto> updateUserStatus(
+            @PathVariable String id,
+            @RequestBody Map<String, String> body) {
+        String status = body.get("status");
+        if (status == null || status.isBlank()) {
+            throw new IllegalArgumentException("Status is required");
+        }
+        UserDto updated = userService.updateUserStatus(id, status);
+        return ApiResponse.ok(updated, "User status updated successfully");
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Boolean> deleteUser(
             @PathVariable String id,
+            @RequestParam(value = "force", defaultValue = "false") boolean force,
             @AuthenticationPrincipal UserPrincipal principal) {
         if (principal != null && (principal.getId().equals(id) || principal.getEmail().equalsIgnoreCase(id))) {
             throw new IllegalArgumentException("You cannot delete your own account");
         }
-        userService.deleteUser(id);
+        userService.deleteUser(id, force);
         return ApiResponse.ok(true, "User deleted successfully");
     }
 }

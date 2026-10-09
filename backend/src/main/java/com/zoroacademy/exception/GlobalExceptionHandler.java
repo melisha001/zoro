@@ -18,6 +18,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
     }
 
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation: {}", ex.getMessage());
+        String msg = "Operation cannot be completed because dependent records exist or a database constraint was violated.";
+        if (ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
+            String specific = ex.getMostSpecificCause().getMessage();
+            if (specific.contains("violates foreign key constraint")) {
+                msg = "Cannot delete or modify record because it is referenced by other records (foreign key constraint).";
+            }
+        }
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(msg));
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
         log.warn("Access denied: {}", ex.getMessage());

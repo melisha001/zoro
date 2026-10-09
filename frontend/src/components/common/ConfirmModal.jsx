@@ -9,7 +9,9 @@ export default function ConfirmModal({
   cancelText = "Cancel", 
   onConfirm, 
   onCancel,
-  onClose
+  onClose,
+  error = null,
+  children = null
 }) {
   if (!isOpen) return null;
 
@@ -43,6 +45,14 @@ export default function ConfirmModal({
             <p className="text-xs font-semibold text-slate-500 mt-1.5 leading-relaxed">{message}</p>
           </div>
         </div>
+
+        {error && (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium">
+            {error}
+          </div>
+        )}
+
+        {children}
 
         <div className="flex items-center justify-end space-x-3 pt-2 border-t border-slate-100">
           <button

@@ -66,6 +66,17 @@ class AuthServiceTest {
         assertEquals("STUDENT", response.getUser().getRole());
     }
 
+    @Test
+    void testLoginRejectsInactiveUser() {
+        LoginRequest request = LoginRequest.builder()
+                .email("inactive@student.com")
+                .password("password123")
+                .build();
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> authService.login(request));
+        assertTrue(ex.getMessage().contains("inactive"), "Exception message should indicate inactive account");
+    }
+
     private static class FakeUserRepository implements UserRepository {
         private final User user = User.builder()
                 .id("std-1")
@@ -76,9 +87,20 @@ class AuthServiceTest {
                 .role("STUDENT")
                 .build();
 
+        private final User inactiveUser = User.builder()
+                .id("std-inactive")
+                .email("inactive@student.com")
+                .username("inactive123")
+                .password("encoded_password123")
+                .name("Inactive Student")
+                .role("STUDENT")
+                .status("Inactive")
+                .build();
+
         @Override
         public Optional<User> findByEmailIgnoreCase(String email) {
             if ("arjun@student.com".equalsIgnoreCase(email)) return Optional.of(user);
+            if ("inactive@student.com".equalsIgnoreCase(email)) return Optional.of(inactiveUser);
             return Optional.empty();
         }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, Edit, Trash2, X, Plus, Search, Calendar, AlertTriangle, ArrowRight, ShieldAlert } from 'lucide-react';
-import { getTrainers, createTrainer, updateTrainer, deleteTrainer, getTrainerDependencies, replaceTrainer } from '../../api/userApi';
+import { UserCheck, Edit, Trash2, X, Plus, Search, Calendar, AlertTriangle, ArrowRight, ShieldAlert, CheckCircle2, Copy, Check } from 'lucide-react';
+import { getTrainers, createTrainer, updateTrainer, deleteTrainer, updateUserStatus, getTrainerDependencies, replaceTrainer } from '../../api/userApi';
 import { logActivity } from '../../api/activityLogApi';
 import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
 import ConfirmModal from '../common/ConfirmModal';
@@ -12,14 +12,18 @@ export default function ManageTrainersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTrainer, setEditingTrainer] = useState(null);
   const [deleteTrainerData, setDeleteTrainerData] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
   const [emailError, setEmailError] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [copiedPassword, setCopiedPassword] = useState(false);
+  const [createdTrainerModalData, setCreatedTrainerModalData] = useState(null);
   const [trainerDepModalData, setTrainerDepModalData] = useState(null);
 
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: 'password123',
+    password: '',
     phone: '',
     specialty: 'English Communication',
     salaryAmount: '25000',
@@ -46,6 +50,7 @@ export default function ManageTrainersPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    setFormError('');
     const emailErr = validateEmail(formData.email);
     if (emailErr) {
       setEmailError(emailErr);
@@ -59,12 +64,37 @@ export default function ManageTrainersPage() {
     }
     setPhoneError('');
 
-    await createTrainer({
+    if (formData.password && formData.password.trim().length < 8) {
+      setFormError('Password must be at least 8 characters long.');
+      return;
+    }
+
+    const payload = {
       ...formData,
       name: formData.name.trim(),
       email: formData.email.trim(),
       phone: sanitizePhone(formData.phone)
-    });
+    };
+    if (formData.password && formData.password.trim()) {
+      payload.password = formData.password.trim();
+    } else {
+      delete payload.password;
+    }
+
+    const res = await createTrainer(payload);
+    if (!res.success) {
+      setFormError(res.message || 'Failed to create trainer.');
+      return;
+    }
+
+    if (res.data?.temporaryPassword) {
+      setCreatedTrainerModalData({
+        trainerName: payload.name,
+        email: payload.email,
+        temporaryPassword: res.data.temporaryPassword
+      });
+    }
+
     resetForm();
     setShowAddModal(false);
     loadData();
@@ -73,6 +103,7 @@ export default function ManageTrainersPage() {
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (editingTrainer) {
+      setFormError('');
       const emailErr = validateEmail(formData.email);
       if (emailErr) {
         setEmailError(emailErr);
@@ -86,12 +117,28 @@ export default function ManageTrainersPage() {
       }
       setPhoneError('');
 
-      await updateTrainer(editingTrainer.id, {
+      if (formData.password && formData.password.trim().length < 8) {
+        setFormError('Password must be at least 8 characters long.');
+        return;
+      }
+
+      const payload = {
         ...formData,
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: sanitizePhone(formData.phone)
-      });
+      };
+      if (formData.password && formData.password.trim()) {
+        payload.password = formData.password.trim();
+      } else {
+        delete payload.password;
+      }
+
+      const res = await updateTrainer(editingTrainer.id, payload);
+      if (!res.success) {
+        setFormError(res.message || 'Failed to update trainer.');
+        return;
+      }
       setEditingTrainer(null);
       resetForm();
       loadData();
@@ -99,6 +146,7 @@ export default function ManageTrainersPage() {
   };
 
   const handleInitiateDelete = async (trainer) => {
+    setDeleteError(null);
     try {
       const depRes = await getTrainerDependencies(trainer.id);
       if (depRes.success && depRes.data?.hasDependencies) {
@@ -119,8 +167,13 @@ export default function ManageTrainersPage() {
 
   const handleConfirmDelete = async () => {
     if (deleteTrainerData) {
-      await deleteTrainer(deleteTrainerData.id);
+      const res = await deleteTrainer(deleteTrainerData.id);
+      if (!res.success) {
+        setDeleteError(res.message || 'Failed to delete trainer');
+        return;
+      }
       setDeleteTrainerData(null);
+      setDeleteError(null);
       loadData();
     }
   };
@@ -144,7 +197,11 @@ export default function ManageTrainersPage() {
       }
     }
     const newStatus = trainer.status === 'Inactive' ? 'Active' : 'Inactive';
-    await updateTrainer(trainer.id, { status: newStatus });
+    const res = await updateUserStatus(trainer.id, newStatus);
+    if (!res.success) {
+      alert(res.message || 'Failed to update trainer status');
+      return;
+    }
     logActivity('Trainer Status Changed', `Changed status of trainer "${trainer.name}" to ${newStatus}`, 'Trainer');
     loadData();
   };
@@ -175,10 +232,11 @@ export default function ManageTrainersPage() {
   const resetForm = () => {
     setEmailError('');
     setPhoneError('');
+    setFormError('');
     setFormData({
       name: '',
       email: '',
-      password: 'password123',
+      password: '',
       phone: '',
       specialty: 'English Communication',
       salaryAmount: '25000',
@@ -321,10 +379,13 @@ export default function ManageTrainersPage() {
                       <button
                         onClick={() => {
                           setEditingTrainer(trainer);
+                          setFormError('');
+                          setEmailError('');
+                          setPhoneError('');
                           setFormData({
                             name: trainer.name || '',
                             email: trainer.email || '',
-                            password: trainer.password || 'password123',
+                            password: '',
                             phone: trainer.phone || '',
                             specialty: trainer.specialty || 'English Communication',
                             salaryAmount: trainer.salaryAmount || '25000',
@@ -436,13 +497,15 @@ export default function ManageTrainersPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Generated Password</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Password (min 8 characters)</label>
                   <input
                     type="text"
-                    required
-                    placeholder="password123"
+                    placeholder={editingTrainer ? "Leave blank to keep existing password" : "Leave blank to generate temporary password"}
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, password: e.target.value });
+                      if (formError) setFormError('');
+                    }}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono"
                   />
                 </div>
@@ -491,6 +554,13 @@ export default function ManageTrainersPage() {
                 )}
               </div>
 
+              {formError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <button
                 type="submit"
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3.5 rounded-xl shadow-lg transition-transform text-xs mt-2 cursor-pointer"
@@ -502,14 +572,71 @@ export default function ManageTrainersPage() {
         </div>
       )}
 
+      {/* Credentials Modal when temporary password generated */}
+      {createdTrainerModalData && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-xs">
+            <button
+              onClick={() => setCreatedTrainerModalData(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center space-x-3 text-emerald-600">
+              <CheckCircle2 className="w-8 h-8 shrink-0" />
+              <div>
+                <h3 className="text-base font-black text-slate-900">Trainer Created Successfully!</h3>
+                <p className="text-slate-500 text-[11px] font-medium">Account created for {createdTrainerModalData.email}</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 text-slate-200 p-4 rounded-2xl space-y-2 border border-slate-800 font-mono text-[11px]">
+              <p>Trainer: <strong>{createdTrainerModalData.trainerName}</strong></p>
+              <p>Email: <strong>{createdTrainerModalData.email}</strong></p>
+              {createdTrainerModalData.temporaryPassword && (
+                <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-center justify-between text-amber-300 my-2">
+                  <div>
+                    <span className="text-[10px] text-amber-400 block font-bold uppercase tracking-wider">Temporary Password</span>
+                    <span className="font-mono font-bold text-sm text-white select-all">{createdTrainerModalData.temporaryPassword}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(createdTrainerModalData.temporaryPassword);
+                      setCopiedPassword(true);
+                      setTimeout(() => setCopiedPassword(false), 2000);
+                    }}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold rounded-lg text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                  >
+                    {copiedPassword ? <><Check className="w-3.5 h-3.5" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setCreatedTrainerModalData(null)}
+              className="w-full bg-blue-600 text-white font-black py-3 rounded-xl shadow-md text-xs cursor-pointer hover:bg-blue-700"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal (Standard for zero dependencies) */}
       <ConfirmModal
         isOpen={Boolean(deleteTrainerData)}
         title="Delete Trainer Account"
         message={`Are you sure you want to delete account for "${deleteTrainerData?.name}" (${deleteTrainerData?.email})?`}
         confirmText="Delete Trainer"
+        error={deleteError}
         onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteTrainerData(null)}
+        onCancel={() => {
+          setDeleteTrainerData(null);
+          setDeleteError(null);
+        }}
       />
 
       {/* Trainer Dependency & Replacement Modal */}

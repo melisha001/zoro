@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   UserPlus, Search, Edit, Trash2, Key, CheckCircle, X, Calendar, 
-  Download, Layers, User, Mail, CheckCircle2, AlertCircle, FileSpreadsheet, ChevronDown, ChevronUp, Users as UsersIcon
+  Download, Layers, User, Mail, CheckCircle2, AlertCircle, FileSpreadsheet, ChevronDown, ChevronUp, Users as UsersIcon,
+  Copy, Check
 } from 'lucide-react';
-import { getStudents, createStudent, updateStudent, deleteStudent } from '../../api/userApi';
+import { getStudents, createStudent, updateStudent, deleteStudent, updateUserStatus } from '../../api/userApi';
 import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { logActivity } from '../../api/activityLogApi';
@@ -23,17 +24,21 @@ export default function ManageStudentsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [deleteStudentData, setDeleteStudentData] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+  const [showForceOption, setShowForceOption] = useState(false);
   
   const [usernameError, setUsernameError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [copiedPassword, setCopiedPassword] = useState(false);
   const [createdEmailModalData, setCreatedEmailModalData] = useState(null);
 
   const [formData, setFormData] = useState({
     name: '',
     username: '',
     email: '',
-    password: 'password123',
+    password: '',
     phone: '',
     status: 'Active',
     selectedCourses: [],
@@ -78,11 +83,12 @@ export default function ManageStudentsPage() {
     setUsernameError('');
     setEmailError('');
     setPhoneError('');
+    setFormError('');
     setFormData({
       name: '',
       username: '',
       email: '',
-      password: 'password123',
+      password: '',
       phone: '',
       status: 'Active',
       selectedCourses: [],
@@ -122,6 +128,7 @@ export default function ManageStudentsPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    setFormError('');
     const uErr = validateUsername(formData.username, null);
     if (uErr) {
       setUsernameError(uErr);
@@ -142,6 +149,11 @@ export default function ManageStudentsPage() {
     }
     setPhoneError('');
 
+    if (formData.password && formData.password.trim().length < 8) {
+      setFormError('Password must be at least 8 characters long.');
+      return;
+    }
+
     const courseBatches = (formData.selectedCourses || []).map(crs => {
       const crsObj = coursesList.find(c => c.title === crs || c.id === crs);
       const bName = (formData.courseBatchMap && formData.courseBatchMap[crs]) || '';
@@ -160,15 +172,22 @@ export default function ManageStudentsPage() {
       name: formData.name.trim(),
       username: formData.username.trim(),
       email: formData.email.trim(),
-      password: formData.password || 'password123',
       phone: sanitizePhone(formData.phone),
       status: formData.status || 'Active',
       joinedOn: formData.joinedOn,
       course: courseString,
       courseBatches
     };
+    if (formData.password && formData.password.trim()) {
+      newStudentObj.password = formData.password.trim();
+    }
 
-    await createStudent(newStudentObj);
+    const res = await createStudent(newStudentObj);
+    if (!res.success) {
+      setFormError(res.message || 'Failed to create student');
+      return;
+    }
+
     logActivity('Student Created', `Added student "${newStudentObj.name}" (@${newStudentObj.username}) enrolled in ${courseString}`, 'Student');
 
     setCreatedEmailModalData({
@@ -176,7 +195,8 @@ export default function ManageStudentsPage() {
       username: newStudentObj.username,
       email: newStudentObj.email,
       joiningDate: newStudentObj.joinedOn,
-      courseBatches
+      courseBatches,
+      temporaryPassword: res.data?.temporaryPassword || null
     });
 
     resetForm();
@@ -187,6 +207,7 @@ export default function ManageStudentsPage() {
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!editingStudent) return;
+    setFormError('');
 
     const uErr = validateUsername(formData.username, editingStudent.id);
     if (uErr) {
@@ -208,6 +229,11 @@ export default function ManageStudentsPage() {
     }
     setPhoneError('');
 
+    if (formData.password && formData.password.trim().length < 8) {
+      setFormError('Password must be at least 8 characters long.');
+      return;
+    }
+
     const courseBatches = (formData.selectedCourses || []).map(crs => {
       const crsObj = coursesList.find(c => c.title === crs || c.id === crs);
       const bName = (formData.courseBatchMap && formData.courseBatchMap[crs]) || '';
@@ -222,17 +248,25 @@ export default function ManageStudentsPage() {
 
     const courseString = courseBatches.map(cb => `${cb.course} (${cb.batch})`).join(', ');
 
-    await updateStudent(editingStudent.id, {
+    const updatePayload = {
       name: formData.name.trim(),
       username: formData.username.trim(),
       email: formData.email.trim(),
-      password: formData.password || 'password123',
       phone: sanitizePhone(formData.phone),
       status: formData.status || 'Active',
       joinedOn: formData.joinedOn,
       course: courseString,
       courseBatches
-    });
+    };
+    if (formData.password && formData.password.trim()) {
+      updatePayload.password = formData.password.trim();
+    }
+
+    const res = await updateStudent(editingStudent.id, updatePayload);
+    if (!res.success) {
+      setFormError(res.message || 'Failed to update student');
+      return;
+    }
 
     logActivity('Student Updated', `Updated student details for "${formData.name}" (@${formData.username})`, 'Student');
 
@@ -243,16 +277,27 @@ export default function ManageStudentsPage() {
 
   const handleToggleStudentStatus = async (student) => {
     const newStatus = student.status === 'Inactive' ? 'Active' : 'Inactive';
-    await updateStudent(student.id, { status: newStatus });
+    const res = await updateUserStatus(student.id, newStatus);
+    if (!res.success) {
+      alert(res.message || 'Failed to update student status');
+      return;
+    }
     logActivity('Student Status Changed', `Changed status of student "${student.name}" to ${newStatus}`, 'Student');
     loadData();
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = async (force = false) => {
     if (deleteStudentData) {
-      await deleteStudent(deleteStudentData.id);
+      const res = await deleteStudent(deleteStudentData.id, force);
+      if (!res.success) {
+        setDeleteError(res.message || 'Failed to delete student');
+        setShowForceOption(true);
+        return;
+      }
       logActivity('Student Deleted', `Deleted student account for "${deleteStudentData.name}"`, 'Student');
       setDeleteStudentData(null);
+      setDeleteError(null);
+      setShowForceOption(false);
       loadData();
     }
   };
@@ -262,6 +307,7 @@ export default function ManageStudentsPage() {
     setUsernameError('');
     setEmailError('');
     setPhoneError('');
+    setFormError('');
 
     let selectedCourses = [];
     let courseBatchMap = {};
@@ -285,7 +331,7 @@ export default function ManageStudentsPage() {
       name: student.name || '',
       username: student.username || student.email.split('@')[0] || '',
       email: student.email || '',
-      password: student.password || 'password123',
+      password: '',
       phone: student.phone || '',
       status: student.status || 'Active',
       selectedCourses,
@@ -560,7 +606,11 @@ export default function ManageStudentsPage() {
                                     <Edit className="w-4 h-4" />
                                   </button>
                                   <button
-                                    onClick={() => setDeleteStudentData(student)}
+                                    onClick={() => {
+                                      setDeleteStudentData(student);
+                                      setDeleteError(null);
+                                      setShowForceOption(false);
+                                    }}
                                     className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
                                     title="Delete Account"
                                   >
@@ -596,7 +646,6 @@ export default function ManageStudentsPage() {
                   <th className="py-3 px-4">Student Name</th>
                   <th className="py-3 px-4">Username</th>
                   <th className="py-3 px-4">Email (Login ID)</th>
-                  <th className="py-3 px-4">Password</th>
                   <th className="py-3 px-4">Courses & Assigned Batches</th>
                   <th className="py-3 px-4">Date of Joining</th>
                   <th className="py-3 px-4">Status</th>
@@ -625,7 +674,6 @@ export default function ManageStudentsPage() {
                         <td className="py-4 px-4 font-black text-slate-900">{student.name}</td>
                         <td className="py-4 px-4 font-bold text-slate-800 font-mono">@{student.username || 'n/a'}</td>
                         <td className="py-4 px-4 text-blue-900 font-bold">{student.email}</td>
-                        <td className="py-4 px-4 font-mono text-slate-500">{student.password}</td>
                         <td className="py-4 px-4 text-slate-700">
                           <div className="flex flex-col gap-1.5 max-w-xs">
                             {displayCourseBatches.map((cb, idx) => (
@@ -664,7 +712,11 @@ export default function ManageStudentsPage() {
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => setDeleteStudentData(student)}
+                            onClick={() => {
+                              setDeleteStudentData(student);
+                              setDeleteError(null);
+                              setShowForceOption(false);
+                            }}
                             className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
                             title="Delete Account"
                           >
@@ -676,7 +728,7 @@ export default function ManageStudentsPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="8" className="py-8 text-center text-slate-500 font-bold text-xs">
+                    <td colSpan="7" className="py-8 text-center text-slate-500 font-bold text-xs">
                       No students found matching your search or date filter.
                     </td>
                   </tr>
@@ -791,13 +843,15 @@ export default function ManageStudentsPage() {
               {/* Password & Joined On Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-extrabold text-slate-700 mb-1">Generated Password *</label>
+                  <label className="block font-extrabold text-slate-700 mb-1">Password (min 8 characters)</label>
                   <input
                     type="text"
-                    required
-                    placeholder="password123"
+                    placeholder={editingStudent ? "Leave blank to keep existing password" : "Leave blank to generate temporary password"}
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, password: e.target.value });
+                      if (formError) setFormError('');
+                    }}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900"
                   />
                 </div>
@@ -911,6 +965,13 @@ export default function ManageStudentsPage() {
                 </div>
               </div>
 
+              {formError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <button
                 type="submit"
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3.5 rounded-xl shadow-lg transition-transform text-xs mt-2 cursor-pointer"
@@ -952,6 +1013,25 @@ export default function ManageStudentsPage() {
                 <div><strong>Email:</strong> {createdEmailModalData.email}</div>
                 <div><strong>Date of Joining:</strong> {createdEmailModalData.joiningDate}</div>
               </div>
+              {createdEmailModalData.temporaryPassword && (
+                <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-center justify-between text-amber-300 my-2">
+                  <div>
+                    <span className="text-[10px] text-amber-400 block font-bold uppercase tracking-wider">Temporary Password</span>
+                    <span className="font-mono font-bold text-sm text-white select-all">{createdEmailModalData.temporaryPassword}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(createdEmailModalData.temporaryPassword);
+                      setCopiedPassword(true);
+                      setTimeout(() => setCopiedPassword(false), 2000);
+                    }}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold rounded-lg text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                  >
+                    {copiedPassword ? <><Check className="w-3.5 h-3.5" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+                  </button>
+                </div>
+              )}
               <div><strong>Enrolled Courses & Batches:</strong></div>
               <ul className="list-disc pl-5 space-y-0.5 text-blue-300">
                 {createdEmailModalData.courseBatches.map((cb, i) => (
@@ -978,9 +1058,36 @@ export default function ManageStudentsPage() {
         title="Delete Student Account"
         message={`Are you sure you want to delete student account for "${deleteStudentData?.name}" (@${deleteStudentData?.username})?`}
         confirmText="Delete Student"
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteStudentData(null)}
-      />
+        error={deleteError}
+        onConfirm={() => handleConfirmDelete(false)}
+        onCancel={() => {
+          setDeleteStudentData(null);
+          setDeleteError(null);
+          setShowForceOption(false);
+        }}
+      >
+        {showForceOption && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-3">
+            <div className="text-amber-800 text-xs font-bold">
+              ⚠️ Warning: Force deleting will permanently remove:
+            </div>
+            <ul className="list-disc pl-5 text-[11px] text-amber-700 space-y-1">
+              <li>All active and past course enrollments & batch assignments</li>
+              <li>All pending and recorded fee records & payment history</li>
+              <li>All attendance records</li>
+              <li>All assignment submissions & doubts</li>
+              <li>All student notifications & learning progress</li>
+            </ul>
+            <button
+              type="button"
+              onClick={() => handleConfirmDelete(true)}
+              className="w-full py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl text-xs transition-colors cursor-pointer"
+            >
+              Remove from all courses and delete
+            </button>
+          </div>
+        )}
+      </ConfirmModal>
 
     </div>
   );

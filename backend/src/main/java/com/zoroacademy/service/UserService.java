@@ -27,6 +27,55 @@ public class UserService {
     private final EnrollmentService enrollmentService;
     private final NotificationService notificationService;
     private final ActivityLogService activityLogService;
+    private final AttendanceRecordRepository attendanceRecordRepository;
+    private final AssignmentSubmissionRepository assignmentSubmissionRepository;
+    private final DoubtRepository doubtRepository;
+    private final NotificationRepository notificationRepository;
+    private final StudentProgressRepository studentProgressRepository;
+    private final StudentModuleProgressRepository studentModuleProgressRepository;
+    private final EnrollmentRequestRepository enrollmentRequestRepository;
+    private final CompetitionRegistrationRepository competitionRegistrationRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public UserService(UserRepository userRepository,
+                       PasswordEncoder passwordEncoder,
+                       StudentCourseBatchRepository studentCourseBatchRepository,
+                       EnrollmentRepository enrollmentRepository,
+                       CourseRepository courseRepository,
+                       BatchRepository batchRepository,
+                       ScheduleRepository scheduleRepository,
+                       StudentFeeRepository studentFeeRepository,
+                       EnrollmentService enrollmentService,
+                       NotificationService notificationService,
+                       ActivityLogService activityLogService,
+                       AttendanceRecordRepository attendanceRecordRepository,
+                       AssignmentSubmissionRepository assignmentSubmissionRepository,
+                       DoubtRepository doubtRepository,
+                       NotificationRepository notificationRepository,
+                       StudentProgressRepository studentProgressRepository,
+                       StudentModuleProgressRepository studentModuleProgressRepository,
+                       EnrollmentRequestRepository enrollmentRequestRepository,
+                       CompetitionRegistrationRepository competitionRegistrationRepository) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.studentCourseBatchRepository = studentCourseBatchRepository;
+        this.enrollmentRepository = enrollmentRepository;
+        this.courseRepository = courseRepository;
+        this.batchRepository = batchRepository;
+        this.scheduleRepository = scheduleRepository;
+        this.studentFeeRepository = studentFeeRepository;
+        this.enrollmentService = enrollmentService;
+        this.notificationService = notificationService;
+        this.activityLogService = activityLogService;
+        this.attendanceRecordRepository = attendanceRecordRepository;
+        this.assignmentSubmissionRepository = assignmentSubmissionRepository;
+        this.doubtRepository = doubtRepository;
+        this.notificationRepository = notificationRepository;
+        this.studentProgressRepository = studentProgressRepository;
+        this.studentModuleProgressRepository = studentModuleProgressRepository;
+        this.enrollmentRequestRepository = enrollmentRequestRepository;
+        this.competitionRegistrationRepository = competitionRegistrationRepository;
+    }
 
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
@@ -39,17 +88,10 @@ public class UserService {
                        EnrollmentService enrollmentService,
                        NotificationService notificationService,
                        ActivityLogService activityLogService) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.studentCourseBatchRepository = studentCourseBatchRepository;
-        this.enrollmentRepository = enrollmentRepository;
-        this.courseRepository = courseRepository;
-        this.batchRepository = batchRepository;
-        this.scheduleRepository = scheduleRepository;
-        this.studentFeeRepository = studentFeeRepository;
-        this.enrollmentService = enrollmentService;
-        this.notificationService = notificationService;
-        this.activityLogService = activityLogService;
+        this(userRepository, passwordEncoder, studentCourseBatchRepository, enrollmentRepository,
+             courseRepository, batchRepository, scheduleRepository, studentFeeRepository,
+             enrollmentService, notificationService, activityLogService,
+             null, null, null, null, null, null, null, null);
     }
 
     private UserDto convertUserToDto(User user) {
@@ -159,7 +201,12 @@ public class UserService {
         user.setCourse(dto.getCourse());
 
         String generatedTempPassword = null;
-        if (user.getPassword() == null || user.getPassword().isBlank()) {
+        if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
+            if (dto.getPassword().length() < 8) {
+                throw new IllegalArgumentException("Password must be at least 8 characters long");
+            }
+            user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        } else if (user.getPassword() == null || user.getPassword().isBlank()) {
             generatedTempPassword = generateTemporaryPassword();
             user.setPassword(passwordEncoder.encode(generatedTempPassword));
         }
@@ -284,7 +331,12 @@ public class UserService {
         user.setSalaryCreditDate(dto.getSalaryCreditDate());
 
         String generatedTempPassword = null;
-        if (user.getPassword() == null || user.getPassword().isBlank()) {
+        if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
+            if (dto.getPassword().length() < 8) {
+                throw new IllegalArgumentException("Password must be at least 8 characters long");
+            }
+            user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        } else if (user.getPassword() == null || user.getPassword().isBlank()) {
             generatedTempPassword = generateTemporaryPassword();
             user.setPassword(passwordEncoder.encode(generatedTempPassword));
         }
@@ -430,7 +482,26 @@ public class UserService {
     }
 
     @Transactional
+    public UserDto updateUserStatus(String id, String status) {
+        if (status == null || status.isBlank()) {
+            throw new IllegalArgumentException("Status is required");
+        }
+        User user = userRepository.findById(id)
+                .or(() -> userRepository.findByEmailIgnoreCase(id))
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
+
+        user.setStatus(status.trim());
+        user = userRepository.save(user);
+        return convertUserToDto(user);
+    }
+
+    @Transactional
     public void deleteUser(String id) {
+        deleteUser(id, false);
+    }
+
+    @Transactional
+    public void deleteUser(String id, boolean force) {
         User user = userRepository.findById(id)
                 .or(() -> userRepository.findByEmailIgnoreCase(id))
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
@@ -442,32 +513,75 @@ public class UserService {
             }
         }
 
-        if ("TRAINER".equalsIgnoreCase(user.getRole())) {
-            TrainerDependencyDto dep = getTrainerDependencies(user.getId());
-            if (dep.isHasDependencies()) {
-                throw new com.zoroacademy.exception.ConflictException("Cannot delete trainer with " + dep.getCourseCount() + " assigned courses, " + dep.getBatchCount() + " batches, and " + dep.getScheduleCount() + " schedules. Reassign them first.");
+        if (!force) {
+            if ("TRAINER".equalsIgnoreCase(user.getRole())) {
+                TrainerDependencyDto dep = getTrainerDependencies(user.getId());
+                if (dep.isHasDependencies()) {
+                    throw new com.zoroacademy.exception.ConflictException("Cannot delete trainer with " + dep.getCourseCount() + " assigned courses, " + dep.getBatchCount() + " batches, and " + dep.getScheduleCount() + " schedules. Reassign them first.");
+                }
+            }
+
+            if ("STUDENT".equalsIgnoreCase(user.getRole())) {
+                List<Enrollment> activeEnrs = enrollmentRepository.findByStudentId(user.getId()).stream()
+                        .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
+                        .toList();
+                if (!activeEnrs.isEmpty()) {
+                    throw new com.zoroacademy.exception.ConflictException("Cannot delete student with " + activeEnrs.size() + " active course enrollments.");
+                }
+                List<StudentFee> pendingFees = studentFeeRepository.findByStudentId(user.getId()).stream()
+                        .filter(f -> "Pending".equalsIgnoreCase(f.getStatus()))
+                        .toList();
+                if (!pendingFees.isEmpty()) {
+                    throw new com.zoroacademy.exception.ConflictException("Cannot delete student with " + pendingFees.size() + " pending fee records.");
+                }
             }
         }
 
-        if ("STUDENT".equalsIgnoreCase(user.getRole())) {
-            List<Enrollment> activeEnrs = enrollmentRepository.findByStudentId(user.getId()).stream()
-                    .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
-                    .toList();
-            if (!activeEnrs.isEmpty()) {
-                throw new com.zoroacademy.exception.ConflictException("Cannot delete student with " + activeEnrs.size() + " active course enrollments.");
+        // Cascaded removal of student's dependents in ONE transaction
+        if (attendanceRecordRepository != null) {
+            attendanceRecordRepository.deleteAll(attendanceRecordRepository.findByStudentId(user.getId()));
+        }
+        if (assignmentSubmissionRepository != null) {
+            assignmentSubmissionRepository.deleteAll(assignmentSubmissionRepository.findByStudentId(user.getId()));
+            if (user.getEmail() != null) {
+                assignmentSubmissionRepository.deleteAll(assignmentSubmissionRepository.findByStudentEmailIgnoreCase(user.getEmail()));
             }
-            List<StudentFee> pendingFees = studentFeeRepository.findByStudentId(user.getId()).stream()
-                    .filter(f -> "Pending".equalsIgnoreCase(f.getStatus()))
-                    .toList();
-            if (!pendingFees.isEmpty()) {
-                throw new com.zoroacademy.exception.ConflictException("Cannot delete student with " + pendingFees.size() + " pending fee records.");
+        }
+        if (doubtRepository != null) {
+            doubtRepository.deleteAll(doubtRepository.findByStudentId(user.getId()));
+        }
+        if (notificationRepository != null) {
+            notificationRepository.deleteAll(notificationRepository.findByRecipientId(user.getId()));
+        }
+        if (studentProgressRepository != null) {
+            studentProgressRepository.deleteAll(studentProgressRepository.findByStudentIdIgnoreCase(user.getId()));
+        }
+        if (studentModuleProgressRepository != null) {
+            studentModuleProgressRepository.deleteAll(studentModuleProgressRepository.findByStudentId(user.getId()));
+        }
+        if (enrollmentRequestRepository != null) {
+            enrollmentRequestRepository.deleteAll(enrollmentRequestRepository.findByStudentId(user.getId()));
+            if (user.getEmail() != null) {
+                enrollmentRequestRepository.deleteAll(enrollmentRequestRepository.findByStudentEmailIgnoreCase(user.getEmail()));
             }
+        }
+        if (competitionRegistrationRepository != null) {
+            competitionRegistrationRepository.deleteAll(competitionRegistrationRepository.findByStudentId(user.getId()));
+        }
+        if (studentFeeRepository != null) {
+            studentFeeRepository.deleteAll(studentFeeRepository.findByStudentId(user.getId()));
         }
 
         studentCourseBatchRepository.deleteByStudentId(user.getId());
         List<Enrollment> enrs = enrollmentRepository.findByStudentId(user.getId());
         if (enrs != null && !enrs.isEmpty()) {
             enrollmentRepository.deleteAll(enrs);
+        }
+        if (user.getEmail() != null) {
+            List<Enrollment> enrsByEmail = enrollmentRepository.findByStudentEmailIgnoreCase(user.getEmail());
+            if (enrsByEmail != null && !enrsByEmail.isEmpty()) {
+                enrollmentRepository.deleteAll(enrsByEmail);
+            }
         }
         userRepository.delete(user);
     }

@@ -51,6 +51,10 @@ public class AuthService {
             throw new IllegalArgumentException("Invalid email/username or password");
         }
 
+        if ("Inactive".equalsIgnoreCase(user.getStatus())) {
+            throw new IllegalArgumentException("Account is inactive. Please contact administrator.");
+        }
+
         String token = tokenProvider.generateTokenFromUsername(
                 user.getEmail(), user.getId(), user.getRole(), user.getName());
 
