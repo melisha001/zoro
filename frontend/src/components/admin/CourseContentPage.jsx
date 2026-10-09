@@ -5,8 +5,10 @@ import {
   ExternalLink, Image as ImageIcon, AlertCircle, CheckCircle2,
   Music, Download
 } from 'lucide-react';
+import * as tus from 'tus-js-client';
 import { getCourseById, addModule, updateModule, deleteModule } from '../../api/courseApi';
 import { uploadFile } from '../../api/fileApi';
+import { createVideoUploadSession, getVideoDetails } from '../../api/videoApi';
 import ConfirmModal from '../common/ConfirmModal';
 
 const ALLOWED_EXTENSIONS = [
@@ -27,14 +29,21 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
   const [fileErrors, setFileErrors] = useState({});
   const [uploadingFiles, setUploadingFiles] = useState({});
 
+  const [videoUploadState, setVideoUploadState] = useState({
+    isUploading: false,
+    progress: 0,
+    error: '',
+    tusUpload: null,
+    videoId: '',
+    status: '',
+    duration: '',
+    thumbnail: ''
+  });
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    url: '',
-    videoStorageKey: '',
-    videoFileName: '',
-    videoFileSize: '',
-    videoDuration: '',
+    videoId: '',
     thumbnail: '',
     notesFile: null,
     worksheetFile: null,
@@ -65,11 +74,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     setFormData({
       title: '',
       description: '',
-      url: '',
-      videoStorageKey: '',
-      videoFileName: '',
-      videoFileSize: '',
-      videoDuration: '',
+      videoId: '',
       thumbnail: '',
       notesFile: null,
       worksheetFile: null,
@@ -79,6 +84,16 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
       assessmentTitle: '',
       assessmentGoogleFormUrl: '',
       assessmentFile: null
+    });
+    setVideoUploadState({
+      isUploading: false,
+      progress: 0,
+      error: '',
+      tusUpload: null,
+      videoId: '',
+      status: '',
+      duration: '',
+      thumbnail: ''
     });
     setFileErrors({});
   };
@@ -137,16 +152,122 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     }
   };
 
-  const handleVideoSelect = (e) => {
+  const handleVideoUploadSelect = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-    setFormData(prev => ({
+    const validVideoExts = ['mp4', 'mov', 'webm', 'mkv'];
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!ext || !validVideoExts.includes(ext)) {
+      setFileErrors(prev => ({ ...prev, video: 'Please select a valid video file (.mp4, .mov, .webm)' }));
+      e.target.value = '';
+      return;
+    }
+
+    setFileErrors(prev => ({ ...prev, video: '' }));
+    setVideoUploadState(prev => ({
       ...prev,
-      videoFileName: file.name,
-      videoFileSize: `${sizeMb} MB`
+      isUploading: true,
+      progress: 0,
+      error: ''
     }));
+
+    try {
+      const sessionRes = await createVideoUploadSession({
+        title: formData.title || file.name,
+        courseId: course.id,
+        moduleId: editingModule?.id
+      });
+
+      if (!sessionRes.success || !sessionRes.data) {
+        throw new Error(sessionRes.message || 'Failed to initialize Bunny upload session');
+      }
+
+      const { videoId, libraryId, tusEndpoint, authorizationSignature, authorizationExpire } = sessionRes.data;
+
+      const upload = new tus.Upload(file, {
+        endpoint: tusEndpoint,
+        retryDelays: [0, 3000, 5000],
+        headers: {
+          AuthorizationSignature: authorizationSignature,
+          AuthorizationExpire: String(authorizationExpire),
+          VideoId: videoId,
+          LibraryId: String(libraryId)
+        },
+        metadata: {
+          filename: file.name,
+          filetype: file.type
+        },
+        onError: (err) => {
+          setVideoUploadState(prev => ({
+            ...prev,
+            isUploading: false,
+            error: err.message || 'TUS Upload failed'
+          }));
+        },
+        onProgress: (bytesUploaded, bytesTotal) => {
+          const pct = Math.round((bytesUploaded / bytesTotal) * 100);
+          setVideoUploadState(prev => ({ ...prev, progress: pct }));
+        },
+        onSuccess: () => {
+          setVideoUploadState(prev => ({
+            ...prev,
+            isUploading: false,
+            videoId,
+            status: 'Processing'
+          }));
+          setFormData(prev => ({ ...prev, videoId }));
+          pollVideoStatus(videoId);
+        }
+      });
+
+      setVideoUploadState(prev => ({ ...prev, tusUpload: upload }));
+      upload.start();
+    } catch (err) {
+      setVideoUploadState(prev => ({
+        ...prev,
+        isUploading: false,
+        error: err.message || 'Video upload session creation failed'
+      }));
+    }
+  };
+
+  const handleCancelVideoUpload = () => {
+    if (videoUploadState.tusUpload) {
+      videoUploadState.tusUpload.abort();
+    }
+    setVideoUploadState({
+      isUploading: false,
+      progress: 0,
+      error: 'Upload cancelled by user',
+      tusUpload: null,
+      videoId: '',
+      status: '',
+      duration: '',
+      thumbnail: ''
+    });
+  };
+
+  const pollVideoStatus = async (vId) => {
+    if (!vId) return;
+    try {
+      const res = await getVideoDetails(vId);
+      if (res.success && res.data) {
+        const video = res.data;
+        const statusLabel = video.statusLabel || (video.status === 3 ? 'Ready' : 'Processing');
+        setVideoUploadState(prev => ({
+          ...prev,
+          status: statusLabel,
+          duration: video.durationSeconds ? `${Math.floor(video.durationSeconds / 60)}:${video.durationSeconds % 60 < 10 ? '0' : ''}${video.durationSeconds % 60}` : '',
+          thumbnail: video.thumbnailUrl || ''
+        }));
+        if (video.status !== 3 && video.status !== 4) {
+          setTimeout(() => pollVideoStatus(vId), 4000);
+        }
+      }
+    } catch (err) {
+      console.warn('Poll video status failed:', err);
+    }
   };
 
   const handleThumbnailUpload = async (e) => {
@@ -192,8 +313,17 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
       };
     }
 
+    const videoStorageRef = formData.videoId ? JSON.stringify({ videoId: formData.videoId }) : null;
+
     const payload = {
-      ...formData,
+      title: formData.title,
+      description: formData.description,
+      duration: videoUploadState.duration || 'Lesson Video',
+      videoStorageRef,
+      thumbnail: formData.thumbnail,
+      notesFile: formData.notesFile,
+      worksheetFile: formData.worksheetFile,
+      assignmentFile: formData.assignmentFile,
       afterSessionAssessment
     };
 
@@ -219,14 +349,20 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
   const openEditModal = (mod) => {
     setEditingModule(mod);
     const asa = mod.afterSessionAssessment || null;
+    let existingVideoId = '';
+    if (mod.videoStorageRef) {
+      try {
+        const parsed = JSON.parse(mod.videoStorageRef);
+        existingVideoId = parsed.videoId || '';
+      } catch (e) {
+        existingVideoId = mod.videoStorageRef;
+      }
+    }
+
     setFormData({
       title: mod.title || '',
       description: mod.description || '',
-      url: mod.url || '',
-      videoStorageKey: mod.videoStorageKey || mod.storageKey || '',
-      videoFileName: mod.videoFileName || mod.fileName || '',
-      videoFileSize: mod.videoFileSize || mod.fileSize || '',
-      videoDuration: mod.videoDuration || mod.duration || '',
+      videoId: existingVideoId,
       thumbnail: mod.thumbnail || '',
       notesFile: mod.notesFile || mod.notesPdf || null,
       worksheetFile: mod.worksheetFile || mod.activitySheetPdf || null,
@@ -237,6 +373,11 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
       assessmentGoogleFormUrl: asa?.googleFormUrl || '',
       assessmentFile: asa?.file || null
     });
+
+    if (existingVideoId) {
+      setVideoUploadState(prev => ({ ...prev, videoId: existingVideoId }));
+      pollVideoStatus(existingVideoId);
+    }
     setFileErrors({});
   };
 
@@ -542,48 +683,66 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                 />
               </div>
 
-              {/* 3. Video Stream & Storage Reference */}
+              {/* 3. Lesson Video Upload (Bunny TUS Direct Stream) */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
-                <label className="block font-extrabold text-slate-800">Lesson Video Stream & Storage Reference</label>
+                <label className="block font-extrabold text-slate-800">Upload MP4 Video</label>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Direct Video Stream URL</label>
-                    <input
-                      type="url"
-                      placeholder="https://commondatastorage.googleapis.com/..."
-                      value={formData.url}
-                      onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-medium focus:border-blue-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Cloud Storage Reference Key</label>
-                    <input
-                      type="text"
-                      placeholder="cloud_storage_vids/lesson_01.mp4"
-                      value={formData.videoStorageKey}
-                      onChange={(e) => setFormData({ ...formData, videoStorageKey: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-medium focus:border-blue-600"
-                    />
-                  </div>
-                </div>
-
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Upload / Select MP4 Video File</label>
                   <input
                     type="file"
-                    accept="video/mp4,video/webm,video/mkv"
-                    onChange={handleVideoSelect}
+                    accept="video/mp4,video/mov,video/webm"
+                    onChange={handleVideoUploadSelect}
+                    disabled={videoUploadState.isUploading}
                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium cursor-pointer"
                   />
-                  {formData.videoFileName && (
-                    <p className="text-[11px] font-mono text-emerald-700 font-bold mt-1">
-                      ✓ Selected: {formData.videoFileName} ({formData.videoFileSize}) — Key: {formData.videoStorageKey}
-                    </p>
-                  )}
                 </div>
+
+                {videoUploadState.isUploading && (
+                  <div className="space-y-2 bg-white p-3 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                      <span>Uploading video to Bunny CDN...</span>
+                      <span>{videoUploadState.progress}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div className="bg-blue-600 h-2 transition-all duration-300" style={{ width: `${videoUploadState.progress}%` }} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCancelVideoUpload}
+                      className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer"
+                    >
+                      Cancel Upload
+                    </button>
+                  </div>
+                )}
+
+                {videoUploadState.error && (
+                  <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" /> {videoUploadState.error}
+                  </p>
+                )}
+
+                {formData.videoId && !videoUploadState.isUploading && (
+                  <div className="flex items-center justify-between bg-emerald-50 p-3 rounded-xl border border-emerald-200 text-xs">
+                    <div>
+                      <p className="font-bold text-emerald-900">✓ Video Linked (ID: {formData.videoId})</p>
+                      <p className="text-[11px] text-emerald-700 font-medium">
+                        Status: <span className="font-bold uppercase">{videoUploadState.status || 'Ready'}</span>
+                        {videoUploadState.duration && ` • Duration: ${videoUploadState.duration}`}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, videoId: '' }));
+                        setVideoUploadState(prev => ({ ...prev, videoId: '', status: '' }));
+                      }}
+                      className="text-rose-600 font-bold hover:underline text-[11px]"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* 4. Thumbnail Image Upload */}
@@ -816,9 +975,10 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
 
               <button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3.5 rounded-xl shadow-lg transition-transform text-xs mt-2 cursor-pointer"
+                disabled={videoUploadState.isUploading || Object.values(uploadingFiles).some(Boolean)}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-3.5 rounded-xl shadow-lg transition-transform text-xs mt-2 cursor-pointer"
               >
-                {editingModule ? 'Save Changes' : 'Save Module'}
+                {videoUploadState.isUploading ? 'Uploading Video...' : editingModule ? 'Save Changes' : 'Save Module'}
               </button>
             </form>
           </div>

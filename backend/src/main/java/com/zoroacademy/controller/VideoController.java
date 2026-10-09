@@ -31,6 +31,29 @@ public class VideoController {
     }
 
     /**
+     * Get video details and status.
+     */
+    @GetMapping("/{id}")
+    public ApiResponse<com.zoroacademy.entity.Video> getVideoDetails(@PathVariable String id) {
+        com.zoroacademy.entity.Video video = bunnyStreamService.getVideoDetails(id);
+        if (video != null) {
+            return ApiResponse.ok(video, "Video retrieved successfully");
+        } else {
+            return ApiResponse.error("Video not found");
+        }
+    }
+
+    /**
+     * Delete video from Bunny CDN and database.
+     */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRAINER')")
+    public ApiResponse<Void> deleteVideo(@PathVariable String id) {
+        bunnyStreamService.deleteVideo(id);
+        return ApiResponse.ok(null, "Video deleted successfully");
+    }
+
+    /**
      * Secure video playback authorization endpoint for students, trainers, and admins.
      * User identity is strictly resolved from the authenticated JWT principal.
      */

@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './client';
+import { apiGet, apiPost, apiDelete } from './client';
 
 /**
  * Bunny Stream Video API
@@ -21,6 +21,18 @@ export const createVideoUploadSession = async ({ title, courseId, moduleId, coll
     success: false,
     message: res.message || 'Failed to create video upload session'
   };
+};
+
+export const getVideoDetails = async (videoId) => {
+  if (!videoId) return { success: false, message: 'Video ID is required' };
+  const res = await apiGet(`/videos/${encodeURIComponent(videoId)}`);
+  return res;
+};
+
+export const deleteVideo = async (videoId) => {
+  if (!videoId) return { success: false, message: 'Video ID is required' };
+  const res = await apiDelete(`/videos/${encodeURIComponent(videoId)}`);
+  return res;
 };
 
 export const getVideoPlayback = async (videoId, _studentId, courseId) => {

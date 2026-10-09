@@ -23,6 +23,9 @@ public class CourseService {
     private final ScheduleRepository scheduleRepository;
     private final AssignmentRepository assignmentRepository;
     private final DoubtRepository doubtRepository;
+    private final BunnyStreamService bunnyStreamService;
+    private final FileStorageService fileStorageService;
+    private final VideoRepository videoRepository;
 
     public CourseService(CourseRepository courseRepository,
                          CourseModuleRepository moduleRepository,
@@ -34,7 +37,10 @@ public class CourseService {
                          StudentFeeRepository studentFeeRepository,
                          ScheduleRepository scheduleRepository,
                          AssignmentRepository assignmentRepository,
-                         DoubtRepository doubtRepository) {
+                         DoubtRepository doubtRepository,
+                         BunnyStreamService bunnyStreamService,
+                         FileStorageService fileStorageService,
+                         VideoRepository videoRepository) {
         this.courseRepository = courseRepository;
         this.moduleRepository = moduleRepository;
         this.resourceRepository = resourceRepository;
@@ -46,6 +52,9 @@ public class CourseService {
         this.scheduleRepository = scheduleRepository;
         this.assignmentRepository = assignmentRepository;
         this.doubtRepository = doubtRepository;
+        this.bunnyStreamService = bunnyStreamService;
+        this.fileStorageService = fileStorageService;
+        this.videoRepository = videoRepository;
     }
 
     @Transactional(readOnly = true)
@@ -247,6 +256,30 @@ public class CourseService {
         return savedCourse;
     }
 
+    private void cleanupStoredFilesFromText(String text) {
+        if (text == null || text.isBlank()) return;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("/api/files/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})").matcher(text);
+        while (matcher.find()) {
+            try {
+                fileStorageService.deleteFile(matcher.group(1));
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void cleanupModuleFilesAndVideos(CourseModule module) {
+        if (module == null) return;
+        List<Video> videos = videoRepository.findByModuleId(module.getId());
+        for (Video v : videos) {
+            bunnyStreamService.deleteVideo(v.getBunnyVideoId());
+        }
+        if (module.getVideoStorageRef() != null) {
+            cleanupStoredFilesFromText(module.getVideoStorageRef());
+        }
+        if (module.getAfterSessionAssessment() != null) {
+            cleanupStoredFilesFromText(module.getAfterSessionAssessment());
+        }
+    }
+
     @Transactional
     public void deleteCourse(String id) {
         long activeEnrollments = enrollmentRepository.findByCourseId(id).stream()
@@ -259,7 +292,22 @@ public class CourseService {
         if (!batches.isEmpty()) {
             throw new ConflictException("Cannot delete course with " + batches.size() + " active batches");
         }
-        courseRepository.deleteById(id);
+
+        Course course = courseRepository.findById(id).orElse(null);
+        if (course != null) {
+            if (course.getModules() != null) {
+                for (CourseModule m : course.getModules()) {
+                    cleanupModuleFilesAndVideos(m);
+                }
+            }
+            List<Video> courseVideos = videoRepository.findByCourseId(id);
+            for (Video v : courseVideos) {
+                bunnyStreamService.deleteVideo(v.getBunnyVideoId());
+            }
+            cleanupStoredFilesFromText(course.getThumbnail());
+            cleanupStoredFilesFromText(course.getPreviewVideoUrl());
+            courseRepository.delete(course);
+        }
     }
 
     @Transactional
@@ -280,7 +328,20 @@ public class CourseService {
         if (updated.getTitle() != null) existing.setTitle(updated.getTitle());
         if (updated.getDescription() != null) existing.setDescription(updated.getDescription());
         if (updated.getDuration() != null) existing.setDuration(updated.getDuration());
-        if (updated.getVideoStorageRef() != null) existing.setVideoStorageRef(updated.getVideoStorageRef());
+
+        if (updated.getVideoStorageRef() != null) {
+            // If replacing video, delete previous video if it changed
+            String oldRef = existing.getVideoStorageRef();
+            if (oldRef != null && !oldRef.equals(updated.getVideoStorageRef())) {
+                try {
+                    com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(oldRef);
+                    if (node.has("videoId")) {
+                        bunnyStreamService.deleteVideo(node.get("videoId").asText());
+                    }
+                } catch (Exception ignored) {}
+            }
+            existing.setVideoStorageRef(updated.getVideoStorageRef());
+        }
         if (updated.getAfterSessionAssessment() != null) existing.setAfterSessionAssessment(updated.getAfterSessionAssessment());
 
         return moduleRepository.save(existing);
@@ -288,7 +349,11 @@ public class CourseService {
 
     @Transactional
     public void deleteModule(String courseId, String moduleId) {
-        moduleRepository.deleteById(moduleId);
+        CourseModule module = moduleRepository.findById(moduleId).orElse(null);
+        if (module != null) {
+            cleanupModuleFilesAndVideos(module);
+            moduleRepository.delete(module);
+        }
     }
 
     @Transactional

@@ -47,6 +47,22 @@ public class BunnyStreamService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final RestTemplate restTemplate = new RestTemplate();
 
+    private String sha256Hex(String input) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("SHA-256 calculation failed", e);
+        }
+    }
+
     /**
      * Creates an upload session with Bunny Stream API.
      */
@@ -56,9 +72,10 @@ public class BunnyStreamService {
                 ? request.getTitle()
                 : "Lesson Video " + System.currentTimeMillis();
 
+        int libraryId = properties.getLibraryId() != null ? Integer.parseInt(properties.getLibraryId()) : 770045;
         String videoId;
         try {
-            String url = String.format("https://video.bunnycdn.com/library/%s/videos", properties.getLibraryId());
+            String url = String.format("https://video.bunnycdn.com/library/%d/videos", libraryId);
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("AccessKey", properties.getApiKey());
@@ -80,12 +97,15 @@ public class BunnyStreamService {
         }
 
         String streamUrl = String.format("https://%s/%s/playlist.m3u8", properties.getCdnHost(), videoId);
-        String uploadUrl = String.format("https://video.bunnycdn.com/library/%s/videos/%s", properties.getLibraryId(), videoId);
+        String tusEndpoint = "https://video.bunnycdn.com/tusupload";
+
+        long expirationTime = (System.currentTimeMillis() / 1000) + 86400;
+        String authSignature = sha256Hex(libraryId + properties.getApiKey() + expirationTime + videoId);
 
         Video video = Video.builder()
                 .id(videoId)
                 .bunnyVideoId(videoId)
-                .libraryId(properties.getLibraryId() != null ? Integer.parseInt(properties.getLibraryId()) : 770045)
+                .libraryId(libraryId)
                 .title(videoTitle)
                 .courseId(request.getCourseId())
                 .moduleId(request.getModuleId())
@@ -102,13 +122,77 @@ public class BunnyStreamService {
 
         return VideoUploadResponse.builder()
                 .videoId(videoId)
-                .libraryId(properties.getLibraryId() != null ? Integer.parseInt(properties.getLibraryId()) : 770045)
-                .uploadUrl(uploadUrl)
-                .authorizationSignature(properties.getApiKey())
+                .libraryId(libraryId)
+                .uploadUrl(tusEndpoint)
+                .authorizationSignature(authSignature)
+                .authorizationExpire(expirationTime)
+                .tusEndpoint(tusEndpoint)
                 .directStreamUrl(streamUrl)
                 .title(videoTitle)
                 .status("Created")
                 .build();
+    }
+
+    @Transactional
+    public Video getVideoDetails(String videoId) {
+        if (videoId == null || videoId.isBlank()) return null;
+
+        Optional<Video> videoOpt = videoRepository.findById(videoId)
+                .or(() -> videoRepository.findByBunnyVideoId(videoId));
+
+        if (videoOpt.isEmpty()) {
+            return null;
+        }
+
+        Video video = videoOpt.get();
+        if (video.getStatus() == null || video.getStatus() != 3) {
+            try {
+                String url = String.format("https://video.bunnycdn.com/library/%d/videos/%s",
+                        video.getLibraryId(), video.getBunnyVideoId());
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("AccessKey", properties.getApiKey());
+                headers.set("Accept", "application/json");
+
+                HttpEntity<Void> entity = new HttpEntity<>(headers);
+                String response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, String.class).getBody();
+                if (response != null) {
+                    JsonNode root = objectMapper.readTree(response);
+                    int statusInt = root.path("status").asInt(video.getStatus() != null ? video.getStatus() : 0);
+                    int lengthSec = root.path("length").asInt(video.getDurationSeconds() != null ? video.getDurationSeconds() : 0);
+
+                    video.setStatus(statusInt);
+                    video.setStatusLabel(mapBunnyStatus(statusInt));
+                    if (lengthSec > 0) {
+                        video.setDurationSeconds(lengthSec);
+                    }
+                    video.setUpdatedAt(LocalDateTime.now());
+                    videoRepository.save(video);
+                }
+            } catch (Exception e) {
+                log.debug("Could not sync video status from Bunny CDN: {}", e.getMessage());
+            }
+        }
+        return video;
+    }
+
+    @Transactional
+    public void deleteVideo(String videoId) {
+        if (videoId == null || videoId.isBlank()) return;
+        Optional<Video> videoOpt = videoRepository.findById(videoId)
+                .or(() -> videoRepository.findByBunnyVideoId(videoId));
+        if (videoOpt.isPresent()) {
+            Video v = videoOpt.get();
+            try {
+                String url = String.format("https://video.bunnycdn.com/library/%d/videos/%s", v.getLibraryId(), v.getBunnyVideoId());
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("AccessKey", properties.getApiKey());
+                HttpEntity<Void> entity = new HttpEntity<>(headers);
+                restTemplate.exchange(url, org.springframework.http.HttpMethod.DELETE, entity, Void.class);
+            } catch (Exception e) {
+                log.warn("Failed to delete video {} from Bunny Stream: {}", videoId, e.getMessage());
+            }
+            videoRepository.delete(v);
+        }
     }
 
     /**

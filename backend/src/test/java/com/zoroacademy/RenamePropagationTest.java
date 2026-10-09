@@ -3,7 +3,9 @@ package com.zoroacademy;
 import com.zoroacademy.entity.*;
 import com.zoroacademy.repository.*;
 import com.zoroacademy.service.ActivityLogService;
+import com.zoroacademy.service.BunnyStreamService;
 import com.zoroacademy.service.CourseService;
+import com.zoroacademy.service.FileStorageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -46,6 +48,10 @@ class RenamePropagationTest {
         assignmentRepository = mock(AssignmentRepository.class);
         doubtRepository = mock(DoubtRepository.class);
 
+        BunnyStreamService bunnyStreamService = mock(BunnyStreamService.class);
+        FileStorageService fileStorageService = mock(FileStorageService.class);
+        VideoRepository videoRepository = mock(VideoRepository.class);
+
         courseService = new CourseService(
                 courseRepository,
                 courseModuleRepository,
@@ -57,7 +63,10 @@ class RenamePropagationTest {
                 studentFeeRepository,
                 scheduleRepository,
                 assignmentRepository,
-                doubtRepository
+                doubtRepository,
+                bunnyStreamService,
+                fileStorageService,
+                videoRepository
         );
     }
 
