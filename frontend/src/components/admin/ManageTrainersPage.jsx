@@ -442,7 +442,7 @@ export default function ManageTrainersPage() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Priya Sharma"
+                  placeholder="e.g. Jane Doe"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
@@ -454,7 +454,7 @@ export default function ManageTrainersPage() {
                 <input
                   type="email"
                   required
-                  placeholder="priya@gmail.com"
+                  placeholder="trainer@example.com"
                   value={formData.email}
                   onChange={(e) => {
                     const val = e.target.value;

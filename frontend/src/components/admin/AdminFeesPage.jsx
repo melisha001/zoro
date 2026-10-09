@@ -49,7 +49,7 @@ export default function AdminFeesPage() {
       return;
     }
 
-    const cBatches = targetStudent.courseBatches || (targetStudent.course ? [{ course: targetStudent.course, batch: targetStudent.batch || 'Batch A' }] : []);
+    const cBatches = targetStudent.courseBatches || (targetStudent.course ? [{ course: targetStudent.course, batch: targetStudent.batch || 'Unassigned' }] : []);
     const initialMap = {};
 
     cBatches.forEach(cb => {
@@ -99,7 +99,7 @@ export default function AdminFeesPage() {
     const { totalFee, paid, due, status } = calculateAddFeeTotals();
 
     const courseSummary = Object.keys(selectedFeeCourses).join(', ');
-    const batchSummary = targetStudent.courseBatches?.[0]?.batch || targetStudent.batch || 'Batch A';
+    const batchSummary = targetStudent.courseBatches?.[0]?.batch || targetStudent.batch || 'Unassigned';
 
     await createFeeRecord({
       studentId: targetStudent.id,
@@ -304,7 +304,7 @@ export default function AdminFeesPage() {
                     {records.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-4 px-4 font-black text-slate-900">{item.student}</td>
-                        <td className="py-4 px-4 font-bold text-blue-600">{item.batch || 'Batch A'}</td>
+                        <td className="py-4 px-4 font-bold text-blue-600">{item.batch || 'Unassigned'}</td>
                         <td className="py-4 px-4 font-mono font-bold text-slate-800">₹{item.totalFee.toLocaleString()}</td>
                         <td className="py-4 px-4 font-mono font-bold text-emerald-700">₹{item.paidAmount.toLocaleString()}</td>
                         <td className="py-4 px-4 font-mono font-bold text-rose-600">₹{item.dueAmount.toLocaleString()}</td>

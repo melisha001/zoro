@@ -425,7 +425,6 @@ export default function AdminAttendancePage({ setActiveScreen }) {
             ) : (
               activeCourseBlocks.map((courseTitle) => {
                 const courseBatches = allBatches.filter(b => b.courseName === courseTitle && b.status === 'Active');
-                const batchesToDisplay = courseBatches.length > 0 ? courseBatches : [{ id: 'b-default', name: 'Batch A', trainerName: 'Priya', courseName: courseTitle }];
 
                 return (
                   <div key={courseTitle} className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden space-y-6 p-6 sm:p-8">
@@ -445,55 +444,63 @@ export default function AdminAttendancePage({ setActiveScreen }) {
 
                     {/* 2. BATCHES UNDER THIS SUBJECT */}
                     <div className="space-y-6 pl-2 sm:pl-4 border-l-2 border-slate-200">
-                      {batchesToDisplay.map((batchObj) => {
-                        const batchName = batchObj.name;
-                        const trainerName = batchObj.trainerName || 'Priya';
+                      {courseBatches.length === 0 ? (
+                        <div className="p-4 text-center text-xs font-bold text-slate-400 italic bg-slate-50/50 rounded-2xl border border-slate-200/60">
+                          No active batches created for this course yet.
+                        </div>
+                      ) : (
+                        courseBatches.map((batchObj) => {
+                          const batchName = batchObj.name;
+                          const trainerName = batchObj.trainerName || 'Unassigned';
 
-                        const batchStudents = allStudents.filter(s => {
-                          if (s.courseBatches && Array.isArray(s.courseBatches)) {
-                            return s.courseBatches.some(cb => cb.course === courseTitle && cb.batch === batchName);
-                          }
-                          if (s.course) {
-                            return s.course.includes(courseTitle) && s.course.includes(batchName);
-                          }
-                          return false;
-                        });
+                          const batchStudents = allStudents.filter(s => {
+                            if (s.courseBatches && Array.isArray(s.courseBatches)) {
+                              return s.courseBatches.some(cb => cb.course === courseTitle && cb.batch === batchName);
+                            }
+                            if (s.course) {
+                              return s.course.includes(courseTitle) && s.course.includes(batchName);
+                            }
+                            return false;
+                          });
 
-                        const finalStudents = batchStudents.length > 0 ? batchStudents : allStudents.slice(0, 3);
+                          return (
+                            <div key={batchName || batchObj.id} className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 space-y-4 shadow-xs">
+                              
+                              {/* BATCH HEADER */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
+                                <div className="flex items-center space-x-2.5">
+                                  <Layers className="w-4 h-4 text-blue-600" />
+                                  <h3 className="text-sm font-extrabold text-slate-900">Batch: {batchName}</h3>
+                                  <span className="text-xs text-slate-500 font-semibold inline-flex items-center gap-1">
+                                    • <User className="w-3.5 h-3.5 text-slate-400" /> Trainer: <strong className="text-slate-800">{trainerName}</strong>
+                                  </span>
+                                </div>
 
-                        return (
-                          <div key={batchName} className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 space-y-4 shadow-xs">
-                            
-                            {/* BATCH HEADER */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
-                              <div className="flex items-center space-x-2.5">
-                                <Layers className="w-4 h-4 text-blue-600" />
-                                <h3 className="text-sm font-extrabold text-slate-900">Batch: {batchName}</h3>
-                                <span className="text-xs text-slate-500 font-semibold inline-flex items-center gap-1">
-                                  • <User className="w-3.5 h-3.5 text-slate-400" /> Trainer: <strong className="text-slate-800">{trainerName}</strong>
-                                </span>
+                                <div className="text-xs font-bold text-slate-600">
+                                  Total Batch Students: <strong className="text-blue-900">{batchStudents.length}</strong>
+                                </div>
                               </div>
 
-                              <div className="text-xs font-bold text-slate-600">
-                                Total Batch Students: <strong className="text-blue-900">{finalStudents.length}</strong>
-                              </div>
-                            </div>
-
-                            {/* 3. STUDENTS TABLE UNDER THIS BATCH */}
-                            <div className="overflow-x-auto bg-white rounded-xl border border-slate-200/80 shadow-2xs">
-                              <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-                                <thead>
-                                  <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider">
-                                    <th className="py-3 px-4">Student Name</th>
-                                    <th className="py-3 px-4">Present / Total</th>
-                                    <th className="py-3 px-4">Attendance %</th>
-                                    <th className="py-3 px-4">Status</th>
-                                    <th className="py-3 px-4">Attendance Remarks (Trainer / Admin Shared)</th>
-                                    <th className="py-3 px-4 text-right">Save Remark</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                                  {finalStudents.map((std, sIdx) => {
+                              {/* 3. STUDENTS TABLE UNDER THIS BATCH */}
+                              {batchStudents.length === 0 ? (
+                                <div className="p-4 text-center text-xs font-bold text-slate-400 italic bg-white rounded-xl border border-slate-200/80">
+                                  No students enrolled in this batch yet.
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto bg-white rounded-xl border border-slate-200/80 shadow-2xs">
+                                  <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                                    <thead>
+                                      <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider">
+                                        <th className="py-3 px-4">Student Name</th>
+                                        <th className="py-3 px-4">Present / Total</th>
+                                        <th className="py-3 px-4">Attendance %</th>
+                                        <th className="py-3 px-4">Status</th>
+                                        <th className="py-3 px-4">Attendance Remarks (Trainer / Admin Shared)</th>
+                                        <th className="py-3 px-4 text-right">Save Remark</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                                      {batchStudents.map((std, sIdx) => {
                                     const sName = std.name || 'Student';
                                     const key = `${sName.toLowerCase().trim()}_${courseTitle}_${batchName}`;
                                     const currentRemark = remarksState[key] || '';
@@ -573,9 +580,9 @@ export default function AdminAttendancePage({ setActiveScreen }) {
                                 </tbody>
                               </table>
                             </div>
-
-                          </div>
-                        );
+                          )}
+                        </div>
+                      );
                       })}
                     </div>
 

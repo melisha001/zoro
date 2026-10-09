@@ -393,10 +393,7 @@ export default function AdminSalaryPage() {
                     <option key={t.id} value={t.name}>{t.name} ({t.specialty || 'Trainer'})</option>
                   ))}
                   {trainers.length === 0 && (
-                    <>
-                      <option value="Priya">Priya (English & Lead Trainer)</option>
-                      <option value="Rahul">Rahul (Chess Mastery)</option>
-                    </>
+                    <option value="">No trainers found</option>
                   )}
                 </select>
               </div>

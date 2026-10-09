@@ -41,9 +41,9 @@ export default function AdminSchedulePage() {
 
   const [formData, setFormData] = useState({
     title: '',
-    course: 'English Communication',
-    batch: 'Batch A',
-    trainer: 'Priya',
+    course: '',
+    batch: '',
+    trainer: '',
     time: '05:00 PM - 06:00 PM',
     mode: 'Online (Google Meet)',
     date: todayStr,
@@ -102,8 +102,8 @@ export default function AdminSchedulePage() {
         setFormData(prev => ({
           ...prev,
           course: firstCourse,
-          batch: defaultBatch?.name || 'Batch A',
-          trainer: defaultBatch?.trainerName || loadedTrainers[0]?.name || 'Priya'
+          batch: defaultBatch?.name || '',
+          trainer: defaultBatch?.trainerName || loadedTrainers[0]?.name || ''
         }));
       }
     } catch (err) {
@@ -114,7 +114,7 @@ export default function AdminSchedulePage() {
   const handleCourseChangeInForm = (newCourseTitle) => {
     const courseBatches = (batchesList || []).filter(b => b.courseName === newCourseTitle && b.status === 'Active');
     const firstBatch = courseBatches[0];
-    const autoTrainer = firstBatch ? firstBatch.trainerName : (trainers[0]?.name || 'Priya');
+    const autoTrainer = firstBatch ? firstBatch.trainerName : (trainers[0]?.name || '');
 
     setFormData(prev => ({
       ...prev,
@@ -224,9 +224,9 @@ export default function AdminSchedulePage() {
     setEditingSchedule(item);
     setFormData({
       title: item.title || '',
-      course: item.course || 'English Communication',
-      batch: item.batch || 'Batch A',
-      trainer: item.trainer || 'Priya',
+      course: item.course || '',
+      batch: item.batch || '',
+      trainer: item.trainer || '',
       time: item.time || '05:00 PM - 06:00 PM',
       mode: item.mode || 'Online (Google Meet)',
       date: item.date || todayStr,
@@ -282,7 +282,7 @@ export default function AdminSchedulePage() {
         title: '',
         course: firstCourse,
         batch: matchingBatches[0]?.name || '',
-        trainer: matchingBatches[0]?.trainerName || trainers[0]?.name || 'Priya',
+        trainer: matchingBatches[0]?.trainerName || trainers[0]?.name || '',
         time: '05:00 PM - 06:00 PM',
         mode: 'Online (Google Meet)',
         date: todayStr,
@@ -408,7 +408,7 @@ export default function AdminSchedulePage() {
               title: '',
               course: firstCourse,
               batch: defaultBatch?.name || '',
-              trainer: defaultBatch?.trainerName || safeTrainers[0]?.name || 'Priya',
+              trainer: defaultBatch?.trainerName || safeTrainers[0]?.name || '',
               time: '05:00 PM - 06:00 PM',
               mode: 'Online (Google Meet)',
               date: todayStr,
@@ -558,7 +558,7 @@ export default function AdminSchedulePage() {
                       </td>
                       <td className="py-4 px-4 font-bold text-[#0F52BA]">
                         <span className="bg-blue-50 text-[#0F52BA] border border-blue-200 px-2.5 py-1 rounded-lg">
-                          {item.batch || 'Batch A'}
+                          {item.batch || 'Unassigned'}
                         </span>
                       </td>
                       <td className="py-4 px-4 font-extrabold text-slate-800">

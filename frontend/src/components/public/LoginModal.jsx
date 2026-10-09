@@ -81,7 +81,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
               <input
                 type="email"
                 required
-                placeholder="e.g. arjun@student.com or priya@trainer.com"
+                placeholder="e.g. user@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"

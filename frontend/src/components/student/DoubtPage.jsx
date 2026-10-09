@@ -14,8 +14,8 @@ export default function DoubtPage({ setActiveScreen }) {
   const [msg, setMsg] = useState('');
   const [doubtsEnabled, setDoubtsEnabled] = useState(true);
 
-  const studentName = user?.name || 'Arjun M';
-  const studentEmail = user?.email || 'arjun@student.com';
+  const studentName = user?.name || '';
+  const studentEmail = user?.email || '';
 
   useEffect(() => {
     loadDoubts();

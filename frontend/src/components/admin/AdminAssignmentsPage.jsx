@@ -237,7 +237,7 @@ export default function AdminAssignmentsPage() {
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : 'bg-blue-50 text-blue-700 border-blue-200'
                         }`}>
-                          {asg.targetName || asg.batch || 'Batch A'}
+                          {asg.targetName || asg.batch || 'N/A'}
                         </span>
                       </td>
                       <td className="py-4 px-4 font-bold text-slate-800">{asg.createdBy || 'Trainer'}</td>
