@@ -39,8 +39,15 @@ public class TrainerController {
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Boolean> deleteTrainer(@PathVariable String id) {
-        userService.deleteUser(id);
+    public ApiResponse<Boolean> deleteTrainer(
+            @PathVariable String id,
+            @RequestParam(name = "replacementTrainerId", required = false) String replacementTrainerId,
+            @RequestParam(name = "force", defaultValue = "false") boolean force) {
+        if (replacementTrainerId != null && !replacementTrainerId.isBlank()) {
+            userService.replaceTrainer(id, new com.zoroacademy.dto.TrainerReplacementRequest(replacementTrainerId, "DELETE"));
+        } else {
+            userService.deleteUser(id, force);
+        }
         return ApiResponse.ok(true, "Trainer deleted successfully");
     }
 

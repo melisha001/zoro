@@ -212,10 +212,15 @@ export default function ManageTrainersPage() {
       return;
     }
     const { trainer, replacementTrainerId, action } = trainerDepModalData;
-    const res = await replaceTrainer(trainer.id, {
-      newTrainerId: replacementTrainerId,
-      action
-    });
+    let res;
+    if (action === 'DELETE') {
+      res = await deleteTrainer(trainer.id, replacementTrainerId);
+    } else {
+      res = await replaceTrainer(trainer.id, {
+        newTrainerId: replacementTrainerId,
+        action
+      });
+    }
     if (res.success) {
       logActivity(
         action === 'DELETE' ? 'Trainer Replaced & Deleted' : 'Trainer Replaced & Inactivated',

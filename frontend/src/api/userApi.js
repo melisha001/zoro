@@ -109,13 +109,17 @@ export const updateTrainer = async (id, data) => {
 export const updateTrainerProfile = updateTrainer;
 export const updateStudentProfile = updateStudent;
 
-export const deleteTrainer = async (id, force = false) => {
+export const deleteTrainer = async (id, replacementTrainerId = null, force = false) => {
   if (!id) {
     return apiResponse(false, false, 'Trainer ID is required');
   }
-  const query = force ? '?force=true' : '';
+  const params = [];
+  if (replacementTrainerId) params.push(`replacementTrainerId=${encodeURIComponent(replacementTrainerId)}`);
+  if (force) params.push('force=true');
+  const query = params.length > 0 ? `?${params.join('&')}` : '';
+
   let res = await apiDelete(`/trainers/${encodeURIComponent(id)}${query}`);
-  if (!res.success) {
+  if (!res.success && !replacementTrainerId) {
     res = await apiDelete(`/users/${encodeURIComponent(id)}${query}`);
   }
   if (res.success) {
