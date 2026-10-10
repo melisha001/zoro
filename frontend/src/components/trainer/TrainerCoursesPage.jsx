@@ -220,9 +220,11 @@ export default function TrainerCoursesPage() {
                   {/* Content Details */}
                   <div className="p-6 space-y-4">
                     <div>
-                      <div className="text-[10px] font-extrabold text-purple-600 uppercase tracking-wider">
-                        {course.subtitle || 'Professional Educator Training'}
-                      </div>
+                      {course.category && (
+                        <div className="text-[10px] font-extrabold text-purple-600 uppercase tracking-wider">
+                          {course.category}
+                        </div>
+                      )}
                       <h2 className="text-xl font-black text-slate-900 tracking-tight mt-0.5">
                         {course.title}
                       </h2>

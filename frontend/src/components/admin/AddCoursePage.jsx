@@ -10,7 +10,6 @@ export default function AddCoursePage({ setActiveScreen }) {
   const [trainersList, setTrainersList] = useState([]);
   const [formData, setFormData] = useState({
     title: '',
-    subtitle: '',
     description: '',
     duration: '3 Months',
     fee: '15000',
@@ -110,29 +109,16 @@ export default function AddCoursePage({ setActiveScreen }) {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Course Title *</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Advanced English Grammar"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Subtitle / Tagline</label>
-              <input
-                type="text"
-                placeholder="e.g. Master Writing. Speak Confidently."
-                value={formData.subtitle}
-                onChange={(e) => setFormData({ ...formData, subtitle: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Course Title *</label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Advanced English Grammar"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
+            />
           </div>
 
           <div>

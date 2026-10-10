@@ -75,9 +75,6 @@ export default function CoursePage({ onOpenEnquire }) {
                     <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
                       {selectedCourse.title}
                     </h1>
-                    <h2 className="text-base font-bold text-blue-600">
-                      {selectedCourse.subtitle || selectedCourse.level || 'Professional Certification'}
-                    </h2>
                     <p className="text-slate-600 text-sm leading-relaxed">
                       {selectedCourse.description}
                     </p>

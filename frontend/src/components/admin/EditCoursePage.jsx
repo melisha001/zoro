@@ -31,7 +31,6 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
           const matchedTrainer = trainers.find(t => t.id === c.trainerId || (c.assignedTrainer && t.name?.toLowerCase().trim() === c.assignedTrainer?.toLowerCase().trim()));
           setFormData({
             title: '',
-            subtitle: '',
             description: '',
             duration: '3 Months',
             fee: '15000',
@@ -117,27 +116,15 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
 
       <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-md max-w-4xl">
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Course Title *</label>
-              <input
-                type="text"
-                required
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Subtitle / Tagline</label>
-              <input
-                type="text"
-                value={formData.subtitle || ''}
-                onChange={(e) => setFormData({ ...formData, subtitle: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Course Title *</label>
+            <input
+              type="text"
+              required
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600"
+            />
           </div>
 
           <div>
