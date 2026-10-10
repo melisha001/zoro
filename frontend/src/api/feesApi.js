@@ -7,7 +7,10 @@ import { apiGet, apiPost, apiPut, apiDelete, apiResponse } from './client';
  */
 
 export const getFeeRecords = async () => {
-  const res = await apiGet('/fees');
+  let res = await apiGet('/fees');
+  if (!res.success && (res.status === 403 || res.status === 401 || res?.message?.toLowerCase().includes('access denied'))) {
+    res = await apiGet('/me/fees');
+  }
   if (res.success && Array.isArray(res.data)) {
     const normalized = res.data.map(f => ({
       ...f,
@@ -21,6 +24,23 @@ export const getFeeRecords = async () => {
     return apiResponse(normalized);
   }
   return apiResponse([], false, res?.message || 'Failed to fetch fee records');
+};
+
+export const getMyFeeRecords = async () => {
+  const res = await apiGet('/me/fees');
+  if (res.success && Array.isArray(res.data)) {
+    const normalized = res.data.map(f => ({
+      ...f,
+      student: f.studentName || f.student || 'Unknown Student',
+      studentName: f.studentName || f.student || 'Unknown Student',
+      totalFee: parseFloat(f.totalFee || 0),
+      paidAmount: parseFloat(f.paidAmount || 0),
+      dueAmount: parseFloat(f.dueAmount || 0),
+      status: f.status || 'Pending'
+    }));
+    return apiResponse(normalized);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch my fees');
 };
 
 export const getFeeById = async (id) => {

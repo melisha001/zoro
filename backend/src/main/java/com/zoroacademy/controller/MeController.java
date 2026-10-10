@@ -1,15 +1,15 @@
 package com.zoroacademy.controller;
 
 import com.zoroacademy.common.ApiResponse;
+import com.zoroacademy.dto.UserDto;
 import com.zoroacademy.entity.*;
 import com.zoroacademy.repository.*;
 import com.zoroacademy.security.UserPrincipal;
+import com.zoroacademy.service.UserService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -27,6 +27,9 @@ public class MeController {
     private final AssignmentSubmissionRepository assignmentSubmissionRepository;
     private final ScheduleRepository scheduleRepository;
     private final TrainerCourseRequestRepository trainerCourseRequestRepository;
+    private final UserService userService;
+    private final StudentFeeRepository studentFeeRepository;
+    private final AttendanceRecordRepository attendanceRecordRepository;
 
     public MeController(UserRepository userRepository,
                         CourseRepository courseRepository,
@@ -36,7 +39,10 @@ public class MeController {
                         AssignmentRepository assignmentRepository,
                         AssignmentSubmissionRepository assignmentSubmissionRepository,
                         ScheduleRepository scheduleRepository,
-                        TrainerCourseRequestRepository trainerCourseRequestRepository) {
+                        TrainerCourseRequestRepository trainerCourseRequestRepository,
+                        UserService userService,
+                        StudentFeeRepository studentFeeRepository,
+                        AttendanceRecordRepository attendanceRecordRepository) {
         this.userRepository = userRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
@@ -46,6 +52,9 @@ public class MeController {
         this.assignmentSubmissionRepository = assignmentSubmissionRepository;
         this.scheduleRepository = scheduleRepository;
         this.trainerCourseRequestRepository = trainerCourseRequestRepository;
+        this.userService = userService;
+        this.studentFeeRepository = studentFeeRepository;
+        this.attendanceRecordRepository = attendanceRecordRepository;
     }
 
     private User getCurrentUser() {
@@ -225,5 +234,132 @@ public class MeController {
                 .toList();
 
         return ApiResponse.ok(matching);
+    }
+
+    @GetMapping("/students")
+    public ApiResponse<List<UserDto>> getMyStudents() {
+        User user = getCurrentUser();
+        String role = user.getRole().toUpperCase();
+
+        if ("STUDENT".equals(role)) {
+            throw new org.springframework.security.access.AccessDeniedException("Students are not authorized to view student lists");
+        }
+
+        if ("ADMIN".equals(role)) {
+            return ApiResponse.ok(userService.getStudents());
+        }
+
+        // TRAINER
+        List<Batch> batches = batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(user.getId(), user.getName());
+        List<Course> courses = new ArrayList<>(courseRepository.findByTrainerIdOrAssignedTrainerIgnoreCase(user.getId(), user.getName()));
+        List<TrainerCourseRequest> approvedReqs = trainerCourseRequestRepository.findByTrainerIdAndStatusIgnoreCase(user.getId(), "Approved");
+        Set<String> courseIds = courses.stream().map(Course::getId).collect(Collectors.toSet());
+        for (TrainerCourseRequest req : approvedReqs) {
+            courseIds.add(req.getCourseId());
+        }
+
+        Set<String> studentIds = new LinkedHashSet<>();
+        for (Batch b : batches) {
+            if (b.getId() != null) {
+                studentCourseBatchRepository.findByBatchId(b.getId()).forEach(scb -> {
+                    if (scb.getStudentId() != null) studentIds.add(scb.getStudentId());
+                });
+                enrollmentRepository.findByBatchId(b.getId()).forEach(e -> {
+                    if (e.getStudentId() != null) studentIds.add(e.getStudentId());
+                });
+            }
+            if (b.getName() != null) {
+                enrollmentRepository.findByBatchNameIgnoreCase(b.getName()).forEach(e -> {
+                    if (e.getStudentId() != null) studentIds.add(e.getStudentId());
+                });
+            }
+        }
+
+        for (String cId : courseIds) {
+            studentCourseBatchRepository.findByCourseId(cId).forEach(scb -> {
+                if (scb.getStudentId() != null) studentIds.add(scb.getStudentId());
+            });
+            enrollmentRepository.findByCourseId(cId).forEach(e -> {
+                if (e.getStudentId() != null) studentIds.add(e.getStudentId());
+            });
+        }
+
+        List<User> students = userRepository.findAllById(studentIds).stream()
+                .filter(u -> "STUDENT".equalsIgnoreCase(u.getRole()))
+                .filter(u -> !"inactive".equalsIgnoreCase(u.getStatus()))
+                .toList();
+
+        List<UserDto> dtos = students.stream()
+                .map(userService::convertUserToDto)
+                .collect(Collectors.toList());
+
+        return ApiResponse.ok(dtos);
+    }
+
+    @GetMapping("/profile")
+    public ApiResponse<UserDto> getMyProfile() {
+        User user = getCurrentUser();
+        return ApiResponse.ok(userService.convertUserToDto(user));
+    }
+
+    @PutMapping("/profile")
+    public ApiResponse<UserDto> updateMyProfile(@RequestBody UserDto updateDto) {
+        User user = getCurrentUser();
+        UserDto updated = userService.updateProfile(user.getId(), updateDto);
+        return ApiResponse.ok(updated, "Profile updated successfully");
+    }
+
+    @GetMapping("/fees")
+    public ApiResponse<List<StudentFee>> getMyFees() {
+        User user = getCurrentUser();
+        String role = user.getRole().toUpperCase();
+
+        if ("ADMIN".equals(role)) {
+            return ApiResponse.ok(studentFeeRepository.findAll());
+        }
+
+        if ("STUDENT".equals(role)) {
+            List<StudentFee> fees = new ArrayList<>(studentFeeRepository.findByStudentId(user.getId()));
+            if (user.getEmail() != null) {
+                for (StudentFee f : studentFeeRepository.findByStudentId(user.getEmail())) {
+                    if (fees.stream().noneMatch(existing -> existing.getId().equals(f.getId()))) {
+                        fees.add(f);
+                    }
+                }
+            }
+            return ApiResponse.ok(fees);
+        }
+
+        return ApiResponse.ok(Collections.emptyList());
+    }
+
+    @GetMapping("/attendance")
+    public ApiResponse<List<AttendanceRecord>> getMyAttendance() {
+        User user = getCurrentUser();
+        String role = user.getRole().toUpperCase();
+
+        if ("ADMIN".equals(role)) {
+            return ApiResponse.ok(attendanceRecordRepository.findAll());
+        }
+
+        if ("STUDENT".equals(role)) {
+            List<AttendanceRecord> records = new ArrayList<>(attendanceRecordRepository.findByStudentId(user.getId()));
+            if (user.getEmail() != null) {
+                for (AttendanceRecord r : attendanceRecordRepository.findByStudentId(user.getEmail())) {
+                    if (records.stream().noneMatch(existing -> existing.getId().equals(r.getId()))) {
+                        records.add(r);
+                    }
+                }
+            }
+            return ApiResponse.ok(records);
+        }
+
+        // TRAINER
+        List<Schedule> schedules = scheduleRepository.findByTrainerIdOrTrainerIgnoreCaseOrderByDateAsc(user.getId(), user.getName());
+        Set<String> scheduleIds = schedules.stream().map(Schedule::getId).collect(Collectors.toSet());
+        List<AttendanceRecord> records = attendanceRecordRepository.findAll().stream()
+                .filter(ar -> ar.getScheduleId() != null && scheduleIds.contains(ar.getScheduleId()))
+                .collect(Collectors.toList());
+        return ApiResponse.ok(records);
     }
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Mail, Phone, MapPin, BookOpen, Check, Edit3, Camera } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
-import { updateStudent } from '../../api/userApi';
+import { updateStudentProfile } from '../../api/userApi';
 import { uploadFile } from '../../api/fileApi';
 import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
 
@@ -71,7 +71,7 @@ export default function StudentProfilePage() {
         phone: sanitizePhone(profileData.phone),
         avatar: selectedPhoto || profileData.avatar
       };
-      const res = await updateStudent(user.id || user.email, payload);
+      const res = await updateStudentProfile(user.id || user.email, payload);
       if (!res.success) {
         setMsg({ type: 'error', text: res.message || 'Failed to update profile.' });
         return;

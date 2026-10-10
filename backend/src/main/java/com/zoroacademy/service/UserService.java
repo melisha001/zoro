@@ -94,7 +94,8 @@ public class UserService {
              null, null, null, null, null, null, null, null);
     }
 
-    private UserDto convertUserToDto(User user) {
+    @Transactional(readOnly = true)
+    public UserDto convertUserToDto(User user) {
         if (user == null) return null;
         UserDto dto = UserDto.fromEntity(user);
         if ("STUDENT".equalsIgnoreCase(user.getRole())) {
@@ -117,6 +118,35 @@ public class UserService {
             }
         }
         return dto;
+    }
+
+    @Transactional
+    public UserDto updateProfile(String userId, UserDto updateDto) {
+        User user = userRepository.findById(userId)
+                .or(() -> userRepository.findByEmailIgnoreCase(userId))
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+
+        if (updateDto.getName() != null && !updateDto.getName().isBlank()) {
+            user.setName(updateDto.getName().trim());
+        }
+
+        if (updateDto.getPhone() != null && !updateDto.getPhone().isBlank()) {
+            PhoneValidator.validate(updateDto.getPhone());
+            user.setPhone(PhoneValidator.sanitize(updateDto.getPhone()));
+        } else if (updateDto.getPhone() != null) {
+            user.setPhone(null);
+        }
+
+        if (updateDto.getAvatar() != null) {
+            user.setAvatar(updateDto.getAvatar());
+        }
+
+        if (updateDto.getAddress() != null) {
+            user.setAddress(updateDto.getAddress());
+        }
+
+        user = userRepository.save(user);
+        return convertUserToDto(user);
     }
 
     @Transactional(readOnly = true)

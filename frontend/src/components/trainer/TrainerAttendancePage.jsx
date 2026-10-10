@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, CheckCircle2, Save, BookOpen, Layers } from 'lucide-react';
 import { getBatches } from '../../api/batchApi';
-import { getStudents } from '../../api/userApi';
+import { getTrainerStudents } from '../../api/userApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
 import { getAttendanceRemarks, saveAttendanceRemark, recordBatchAttendance } from '../../api/attendanceApi';
 import { useAuth } from '../../context/AuthContext';
@@ -31,7 +31,7 @@ export default function TrainerAttendancePage() {
     try {
       const [bRes, sRes, cRes, reqsRes] = await Promise.all([
         getBatches(),
-        getStudents(),
+        getTrainerStudents(),
         getCourses(),
         getTrainerCourseRequests()
       ]);

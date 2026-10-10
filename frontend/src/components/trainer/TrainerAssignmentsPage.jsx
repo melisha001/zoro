@@ -5,7 +5,7 @@ import { getCreatedAssignments, createExtraAssignment, updateAssignment, deleteA
 import { uploadFile } from '../../api/fileApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
-import { getStudents } from '../../api/userApi';
+import { getTrainerStudents } from '../../api/userApi';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerAllocatedCourses, getTrainerAllocatedBatches, filterStudentsByCourseAndBatch } from '../../utils/trainerFilterHelper';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
@@ -63,7 +63,7 @@ export default function TrainerAssignmentsPage() {
       const [cRes, bRes, stdRes, reqsRes] = await Promise.all([
         getCourses(),
         getBatches(),
-        getStudents(),
+        getTrainerStudents(),
         getTrainerCourseRequests()
       ]);
 

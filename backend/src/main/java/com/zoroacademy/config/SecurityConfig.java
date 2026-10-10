@@ -103,6 +103,8 @@ public class SecurityConfig {
                         // 3. TRAINER or ADMIN Endpoints
                         .requestMatchers(HttpMethod.GET, "/api/batches/**").hasAnyRole("ADMIN", "TRAINER")
                         .requestMatchers("/api/schedules/**").hasAnyRole("ADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.GET, "/api/attendance/student/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/attendance").authenticated()
                         .requestMatchers("/api/attendance/**").hasAnyRole("ADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.POST, "/api/assignments").hasAnyRole("ADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.PUT, "/api/assignments/**").hasAnyRole("ADMIN", "TRAINER")

@@ -7,11 +7,22 @@ import { apiGet, apiPost, apiResponse } from './client';
  */
 
 export const getAttendanceRecords = async () => {
-  const res = await apiGet('/attendance');
+  let res = await apiGet('/attendance');
+  if (!res.success && (res.status === 403 || res.status === 401 || res?.message?.toLowerCase().includes('access denied'))) {
+    res = await apiGet('/me/attendance');
+  }
   if (res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
   return apiResponse([], false, res?.message || 'Failed to fetch attendance records');
+};
+
+export const getMyAttendanceRecords = async () => {
+  const res = await apiGet('/me/attendance');
+  if (res.success && Array.isArray(res.data)) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch my attendance records');
 };
 
 export const getStudentAttendance = async (studentId) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, BookOpen, Layers } from 'lucide-react';
-import { getStudents } from '../../api/userApi';
+import { getTrainerStudents } from '../../api/userApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { useAuth } from '../../context/AuthContext';
@@ -22,7 +22,7 @@ export default function TrainerStudentsPage() {
     async function loadData() {
       try {
         const [stdRes, crsRes, btcRes, reqsRes] = await Promise.all([
-          getStudents(),
+          getTrainerStudents(),
           getCourses(),
           getBatches(),
           getTrainerCourseRequests()

@@ -61,7 +61,10 @@ export function computeDynamicStatus(schedule, now = new Date()) {
 }
 
 export const getSchedules = async () => {
-  const res = await apiGet('/schedules');
+  let res = await apiGet('/me/schedules');
+  if (!res.success) {
+    res = await apiGet('/schedules');
+  }
   if (res.success && Array.isArray(res.data)) {
     const sorted = sortSchedulesByTime(res.data.map(s => ({
       ...s,

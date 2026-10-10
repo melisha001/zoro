@@ -19,11 +19,22 @@ export const updateUserStatus = async (id, status) => {
 
 // --- STUDENTS CRUD ---
 export const getStudents = async () => {
-  const res = await apiGet('/users/students');
+  let res = await apiGet('/users/students');
+  if (!res.success && (res.status === 403 || res.status === 401 || res.message?.toLowerCase().includes('access denied'))) {
+    res = await apiGet('/me/students');
+  }
   if (res.success && Array.isArray(res.data)) {
     return apiResponse(res.data);
   }
   return apiResponse([], false, res.message || 'Failed to fetch students');
+};
+
+export const getTrainerStudents = async () => {
+  const res = await apiGet('/me/students');
+  if (res.success && Array.isArray(res.data)) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res.message || 'Failed to fetch trainer students');
 };
 
 export const createStudent = async (data) => {
@@ -106,8 +117,31 @@ export const updateTrainer = async (id, data) => {
   return apiResponse(null, false, res.message || 'Failed to update trainer');
 };
 
-export const updateTrainerProfile = updateTrainer;
-export const updateStudentProfile = updateStudent;
+export const getMyProfile = async () => {
+  const res = await apiGet('/me/profile');
+  if (res.success && res.data) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch profile');
+};
+
+export const updateMyProfile = async (data) => {
+  const res = await apiPut('/me/profile', data);
+  if (res.success && res.data) {
+    return apiResponse(res.data, true, 'Profile updated successfully');
+  }
+  return apiResponse(null, false, res?.message || 'Failed to update profile');
+};
+
+export const updateTrainerProfile = async (idOrData, maybeData) => {
+  const payload = maybeData !== undefined ? maybeData : idOrData;
+  return updateMyProfile(payload);
+};
+
+export const updateStudentProfile = async (idOrData, maybeData) => {
+  const payload = maybeData !== undefined ? maybeData : idOrData;
+  return updateMyProfile(payload);
+};
 
 export const deleteTrainer = async (id, replacementTrainerId = null, force = false) => {
   if (!id) {

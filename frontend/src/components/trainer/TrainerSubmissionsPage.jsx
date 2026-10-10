@@ -6,7 +6,7 @@ import {
 import { getSubmissions, updateCorrection } from '../../api/assignmentApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
-import { getStudents } from '../../api/userApi';
+import { getTrainerStudents } from '../../api/userApi';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerAllocatedCourses, getTrainerAllocatedBatches } from '../../utils/trainerFilterHelper';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
@@ -61,7 +61,7 @@ export default function TrainerSubmissionsPage() {
         getSubmissions(),
         getCourses(),
         getBatches(),
-        getStudents(),
+        getTrainerStudents(),
         getTrainerCourseRequests()
       ]);
 
