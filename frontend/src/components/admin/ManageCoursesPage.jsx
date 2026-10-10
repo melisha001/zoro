@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, BookOpen, Edit, Layers, Trash2, User, Search, DollarSign, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { getCourses, deleteCourse } from '../../api/courseApi';
 import ConfirmModal from '../common/ConfirmModal';
+import { resolveFileUrl } from '../../api/fileApi';
 
 export default function ManageCoursesPage({ setActiveScreen, setSelectedCourseIdForEdit }) {
   const navigate = useNavigate();
@@ -117,7 +118,7 @@ export default function ManageCoursesPage({ setActiveScreen, setSelectedCourseId
                 <div>
                   <div className="relative h-44 bg-slate-900 overflow-hidden">
                     <img 
-                      src={course.thumbnail} 
+                      src={resolveFileUrl(course.thumbnail)} 
                       alt={course.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90"
                     />

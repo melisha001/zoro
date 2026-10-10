@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Play } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
+import { resolveFileUrl } from '../../api/fileApi';
 
 export default function CoursePage({ onOpenEnquire }) {
   const [courses, setCourses] = useState([]);
@@ -124,7 +125,7 @@ export default function CoursePage({ onOpenEnquire }) {
                   <div className="md:col-span-5">
                     <div className="relative rounded-2xl overflow-hidden shadow-lg border-2 border-slate-200 group bg-slate-900">
                       <img
-                        src={selectedCourse.thumbnail || selectedCourse.videoUrl || 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=800'}
+                        src={resolveFileUrl(selectedCourse.thumbnail || selectedCourse.videoUrl) || 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=800'}
                         alt={selectedCourse.title}
                         className="w-full h-56 object-cover opacity-90 group-hover:scale-105 transition-transform duration-500"
                         onError={(e) => {

@@ -1,11 +1,12 @@
 import React from 'react';
 import { X, Download, FileText, Film, Music, Image as ImageIcon, FileSpreadsheet, Archive } from 'lucide-react';
+import { resolveFileUrl } from '../../api/fileApi';
 
 export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDownload = false }) {
   if (!isOpen || !file) return null;
 
   const fileName = file.name || file.title || file.filename || 'Attachment File';
-  const fileUrl = file.url || file.fileUrl || file.path || '#';
+  const fileUrl = resolveFileUrl(file.url || file.fileUrl || file.path) || '#';
   const fileSize = file.size || file.fileSize || 'Standard';
 
   // Extract Extension & MIME

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import * as tus from 'tus-js-client';
 import { getCourseById, addModule, updateModule, deleteModule } from '../../api/courseApi';
-import { uploadFile } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl } from '../../api/fileApi';
 import { createVideoUploadSession, getVideoDetails } from '../../api/videoApi';
 import ConfirmModal from '../common/ConfirmModal';
 
@@ -354,7 +354,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
       try {
         const parsed = JSON.parse(mod.videoStorageRef);
         existingVideoId = parsed.videoId || '';
-      } catch (e) {
+      } catch {
         existingVideoId = mod.videoStorageRef;
       }
     }
@@ -502,7 +502,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                     <div className="flex flex-col md:flex-row gap-4 items-start border-b border-slate-100 pb-4">
                       {mod.thumbnail ? (
                         <div className="w-32 h-24 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0">
-                          <img src={mod.thumbnail} alt={mod.title} className="w-full h-full object-cover" />
+                          <img src={resolveFileUrl(mod.thumbnail)} alt={mod.title} className="w-full h-full object-cover" />
                         </div>
                       ) : (
                         <div className="w-32 h-24 rounded-xl bg-slate-100 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-[10px] font-semibold shrink-0">
@@ -542,7 +542,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                           <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
                             <div>📄 {notes.name} ({notes.size})</div>
                             {notes.fileUrl && (
-                              <a href={notes.fileUrl} download={notes.name} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px]">
+                              <a href={resolveFileUrl(notes.fileUrl)} download={notes.name} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px]">
                                 <Download className="w-3 h-3" /> Download / View
                               </a>
                             )}
@@ -565,7 +565,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                           <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
                             <div>📑 {worksheet.name} ({worksheet.size})</div>
                             {worksheet.fileUrl && (
-                              <a href={worksheet.fileUrl} download={worksheet.name} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px]">
+                              <a href={resolveFileUrl(worksheet.fileUrl)} download={worksheet.name} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px]">
                                 <Download className="w-3 h-3" /> Download / View
                               </a>
                             )}
@@ -588,7 +588,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                           <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
                             <div>📝 {assignment.name} ({assignment.size})</div>
                             {assignment.fileUrl && (
-                              <a href={assignment.fileUrl} download={assignment.name} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px]">
+                              <a href={resolveFileUrl(assignment.fileUrl)} download={assignment.name} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px]">
                                 <Download className="w-3 h-3" /> Download / View
                               </a>
                             )}
@@ -751,7 +751,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                 <div className="flex items-center gap-3">
                   {formData.thumbnail && (
                     <div className="relative w-16 h-16 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 shrink-0">
-                      <img src={formData.thumbnail} alt="Preview" className="w-full h-full object-cover" />
+                      <img src={resolveFileUrl(formData.thumbnail)} alt="Preview" className="w-full h-full object-cover" />
                       <button
                         type="button"
                         onClick={() => setFormData({ ...formData, thumbnail: '' })}

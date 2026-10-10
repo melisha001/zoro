@@ -1,6 +1,93 @@
 import { getAuthToken, API_BASE_URL } from './client';
 
 /**
+ * Resolves a file URL or path for display/download in the frontend.
+ * - Leaves absolute URLs (http, https, data:, blob:) unchanged (including Bunny CDN URLs).
+ * - Resolves relative /api/files/... paths using backend API_BASE_URL origin.
+ * - Resolves bare UUIDs or file paths to /api/files/{id}.
+ * 
+ * @param {string} urlOrPath 
+ * @returns {string} Fully resolved accessible URL
+ */
+export function resolveFileUrl(urlOrPath) {
+  if (!urlOrPath) return '';
+  if (typeof urlOrPath !== 'string') return '';
+
+  const trimmed = urlOrPath.trim();
+  if (!trimmed) return '';
+
+  // Already fully qualified URLs or in-memory blobs
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+    return trimmed;
+  }
+
+  // Prepend backend origin to relative /api/ paths
+  if (trimmed.startsWith('/api/')) {
+    try {
+      const baseObj = new URL(API_BASE_URL, window.location.origin);
+      return `${baseObj.origin}${trimmed}`;
+    } catch {
+      return trimmed;
+    }
+  }
+
+  // Handle files/{id}
+  if (trimmed.startsWith('files/')) {
+    return resolveFileUrl(`/api/${trimmed}`);
+  }
+
+  // Handle UUID identifier directly
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(trimmed)) {
+    return resolveFileUrl(`/api/files/${trimmed}`);
+  }
+
+  // Handle standard relative paths starting with /
+  if (trimmed.startsWith('/')) {
+    try {
+      const baseObj = new URL(API_BASE_URL, window.location.origin);
+      return `${baseObj.origin}${trimmed}`;
+    } catch {
+      return trimmed;
+    }
+  }
+
+  return trimmed;
+}
+
+/**
+ * Fetch a temporary signed link for a private stored file.
+ * 
+ * @param {string} fileId 
+ * @returns {Promise<{ id: string, url: string, expiresAt: number, isPublic: boolean }>}
+ */
+export async function getFileLink(fileId) {
+  if (!fileId) return null;
+  const token = getAuthToken();
+  const headers = { 'Accept': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(fileId)}/link`, {
+    headers
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to retrieve file link: HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (data && data.success && data.data) {
+    return {
+      ...data.data,
+      url: resolveFileUrl(data.data.url)
+    };
+  }
+  throw new Error(data?.message || 'Failed to retrieve file link');
+}
+
+/**
  * Upload a file to the backend file storage system with progress callback.
  * 
  * @param {File} file - The file object to upload
@@ -44,7 +131,7 @@ export async function uploadFile(file, category = 'document', onProgress = null)
           const fileUrl = data.url || `/api/files/${data.id}`;
           resolve({
             id: data.id,
-            url: fileUrl,
+            url: resolveFileUrl(fileUrl),
             name: data.name || file.name,
             size: data.size || file.size,
             contentType: data.contentType || file.type

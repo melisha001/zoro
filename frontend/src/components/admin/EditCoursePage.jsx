@@ -4,6 +4,7 @@ import { ArrowLeft, Save, Video, Layers, CheckCircle2 } from 'lucide-react';
 import { getCourseById, updateCourse } from '../../api/courseApi';
 import { getTrainers } from '../../api/userApi';
 import FileUploader from '../common/FileUploader';
+import { resolveFileUrl } from '../../api/fileApi';
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -343,7 +344,7 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
             <label className="block text-xs font-bold text-slate-700 mb-1">Course Thumbnail Image</label>
             {formData.thumbnail && (
               <div className="mb-2 w-32 h-20 rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
-                <img src={formData.thumbnail} alt="Thumbnail preview" className="w-full h-full object-cover" />
+                <img src={resolveFileUrl(formData.thumbnail)} alt="Thumbnail preview" className="w-full h-full object-cover" />
               </div>
             )}
             <FileUploader 

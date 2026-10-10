@@ -1,13 +1,20 @@
 package com.zoroacademy.config;
 
 import com.zoroacademy.entity.StoredFile;
+import com.zoroacademy.repository.StoredFileRepository;
 import com.zoroacademy.service.FileStorageService;
+import com.zoroacademy.service.storage.BunnyStorageProvider;
+import com.zoroacademy.service.storage.StorageProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -19,10 +26,22 @@ public class FileMigrationRunner implements CommandLineRunner {
 
     private final JdbcTemplate jdbcTemplate;
     private final FileStorageService fileStorageService;
+    private final StorageProvider storageProvider;
+    private final StoredFileRepository storedFileRepository;
 
-    public FileMigrationRunner(JdbcTemplate jdbcTemplate, FileStorageService fileStorageService) {
+    @Value("${app.storage.dir:./uploads}")
+    private String storageDir;
+
+    public FileMigrationRunner(
+            JdbcTemplate jdbcTemplate,
+            FileStorageService fileStorageService,
+            StorageProvider storageProvider,
+            StoredFileRepository storedFileRepository
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.fileStorageService = fileStorageService;
+        this.storageProvider = storageProvider;
+        this.storedFileRepository = storedFileRepository;
     }
 
     @Override
@@ -53,7 +72,59 @@ public class FileMigrationRunner implements CommandLineRunner {
             migrateTableColumn(table, column, category);
         }
 
+        migrateLocalFilesToBunny();
+
         log.info("Completed file storage data migration scan.");
+    }
+
+    private void migrateLocalFilesToBunny() {
+        if (!(storageProvider instanceof BunnyStorageProvider bunnyProvider)) {
+            return;
+        }
+
+        log.info("Checking stored_files for local-to-Bunny storage sync...");
+        try {
+            List<StoredFile> files = storedFileRepository.findAll();
+            int migratedCount = 0;
+
+            for (StoredFile file : files) {
+                String currentPath = file.getStoragePath();
+                if (currentPath != null && (currentPath.startsWith("public/") || currentPath.startsWith("private/"))) {
+                    continue;
+                }
+
+                try {
+                    Path localFile = Paths.get(storageDir).resolve(currentPath != null ? Paths.get(currentPath).getFileName().toString() : file.getId());
+                    if (!Files.exists(localFile) && currentPath != null) {
+                        localFile = Paths.get(currentPath);
+                    }
+
+                    if (Files.exists(localFile) && Files.isRegularFile(localFile)) {
+                        byte[] bytes = Files.readAllBytes(localFile);
+                        String prefix = Boolean.TRUE.equals(file.getIsPublic()) ? "public" : "private";
+                        String ext = "";
+                        int dot = file.getOriginalName() != null ? file.getOriginalName().lastIndexOf('.') : -1;
+                        if (dot >= 0) {
+                            ext = file.getOriginalName().substring(dot);
+                        }
+                        String newPath = prefix + "/" + file.getCategory() + "/" + file.getId() + ext;
+                        bunnyProvider.store(newPath, bytes, file.getContentType());
+
+                        file.setStoragePath(newPath);
+                        storedFileRepository.save(file);
+                        migratedCount++;
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to sync stored_file {} to Bunny Storage: {}", file.getId(), e.getMessage());
+                }
+            }
+
+            if (migratedCount > 0) {
+                log.info("Successfully synced {} local files to Bunny Storage.", migratedCount);
+            }
+        } catch (Exception e) {
+            log.warn("Could not query stored_files for Bunny migration: {}", e.getMessage());
+        }
     }
 
     private void migrateTableColumn(String table, String column, String category) {
@@ -91,7 +162,6 @@ public class FileMigrationRunner implements CommandLineRunner {
                 log.info("Migrated {} 'data:' URIs in {}.{} to stored_files", migratedCount, table, column);
             }
         } catch (Exception e) {
-            // Table or column may not exist in specific test schemas; log debug
             log.debug("Skipping migration for {}.{}: {}", table, column, e.getMessage());
         }
     }
@@ -106,7 +176,7 @@ public class FileMigrationRunner implements CommandLineRunner {
             return null;
         }
 
-        String metadata = dataUri.substring(5, commaIdx); // e.g. "image/png;base64"
+        String metadata = dataUri.substring(5, commaIdx);
         String base64Data = dataUri.substring(commaIdx + 1);
 
         String contentType = "application/octet-stream";

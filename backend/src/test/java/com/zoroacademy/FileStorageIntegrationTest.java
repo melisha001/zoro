@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -125,4 +126,53 @@ public class FileStorageIntegrationTest {
         mockMvc.perform(get(fileUrl).with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(otherPrincipal)))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    public void testPrivateFileLinkAndTokenAccess() throws Exception {
+        byte[] pdfBytes = "%PDF-1.4 private worksheet content".getBytes();
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "worksheet.pdf",
+                "application/pdf",
+                pdfBytes
+        );
+
+        com.zoroacademy.entity.User trainerUser = new com.zoroacademy.entity.User();
+        trainerUser.setId("trainer-user-1");
+        trainerUser.setEmail("trainer1@zoro.com");
+        trainerUser.setName("Trainer One");
+        trainerUser.setRole("TRAINER");
+        trainerUser.setPassword("pass123456");
+        com.zoroacademy.security.UserPrincipal trainerPrincipal = com.zoroacademy.security.UserPrincipal.create(trainerUser);
+
+        String uploadRes = mockMvc.perform(multipart("/api/files")
+                        .file(file)
+                        .param("category", "worksheet")
+                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(trainerPrincipal)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        Map<?, ?> uploadMap = objectMapper.readValue(uploadRes, Map.class);
+        Map<?, ?> uploadData = (Map<?, ?>) uploadMap.get("data");
+        String fileId = (String) uploadData.get("id");
+
+        // Request private link as trainer
+        String linkRes = mockMvc.perform(get("/api/files/" + fileId + "/link")
+                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(trainerPrincipal)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.url").exists())
+                .andReturn().getResponse().getContentAsString();
+
+        Map<?, ?> linkMap = objectMapper.readValue(linkRes, Map.class);
+        Map<?, ?> linkData = (Map<?, ?>) linkMap.get("data");
+        String signedUrl = (String) linkData.get("url");
+        assertNotNull(signedUrl);
+
+        // Access via signed URL without authentication
+        mockMvc.perform(get(signedUrl))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"));
+    }
 }
+

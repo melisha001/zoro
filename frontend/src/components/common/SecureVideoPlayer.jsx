@@ -118,12 +118,23 @@ export default function SecureVideoPlayer({
   };
 
   // Secure Bunny Stream or protected video source
-  const videoSrc = videoRefData?.streamUrl 
-    || videoRefData?.fallbackUrl 
-    || videoRefData?.directStreamUrl 
-    || (videoRefData?.storageKey 
-      ? `https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4#t=${initialPosition}`
-      : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+  let parsedRef = videoRefData;
+  if (typeof videoRefData === 'string' && videoRefData.trim().startsWith('{')) {
+    try {
+      parsedRef = JSON.parse(videoRefData);
+    } catch {
+      // fallback
+    }
+  }
+
+  const videoSrc = (typeof parsedRef === 'string' && (parsedRef.startsWith('http://') || parsedRef.startsWith('https://')))
+    ? parsedRef
+    : (parsedRef?.streamUrl 
+      || parsedRef?.fallbackUrl 
+      || parsedRef?.directStreamUrl 
+      || (parsedRef?.storageKey 
+        ? `https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4#t=${initialPosition}`
+        : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'));
 
   if (!isAuthorized) {
     return (

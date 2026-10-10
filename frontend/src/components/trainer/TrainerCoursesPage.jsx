@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Award, Layers, Clock, Video, FileText, CheckCircle2, UserCheck, Search, Send, AlertCircle, Plus, Check } from 'lucide-react';
 import { getCourses, getTrainerCourseRequests, createTrainerCourseRequest } from '../../api/courseApi';
+import { resolveFileUrl } from '../../api/fileApi';
 import { useAuth } from '../../context/AuthContext';
 
 function matchesTrainer(course, user) {
@@ -198,7 +199,7 @@ export default function TrainerCoursesPage() {
                   {/* Course Thumbnail */}
                   <div className="relative h-48 bg-slate-900 overflow-hidden">
                     <img
-                      src={course.thumbnail || 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=800'}
+                      src={resolveFileUrl(course.thumbnail) || 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=800'}
                       alt={course.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90"
                       onError={(e) => {

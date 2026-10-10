@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Mail, Phone, Calendar, Edit3, Check, Upload, Camera } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { updateTrainerProfile } from '../../api/userApi';
-import { uploadFile } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl } from '../../api/fileApi';
 import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
 
 export default function TrainerProfilePage() {
@@ -103,7 +103,7 @@ export default function TrainerProfilePage() {
           <div className="relative group">
             {selectedPhoto ? (
               <img
-                src={selectedPhoto}
+                src={resolveFileUrl(selectedPhoto)}
                 alt={profileData.name}
                 className="w-24 h-24 rounded-full object-cover ring-4 ring-blue-500/20 shadow-md"
               />

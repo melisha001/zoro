@@ -6,7 +6,7 @@ import {
   Image, FileCheck, Users, Upload, Layers
 } from 'lucide-react';
 import { getCompetitions, createCompetition, updateCompetition, deleteCompetition } from '../../api/competitionApi';
-import { uploadFile } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl } from '../../api/fileApi';
 import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import ConfirmModal from '../common/ConfirmModal';
@@ -316,7 +316,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                   {/* Banner Header */}
                   <div className="relative h-44 bg-slate-900 overflow-hidden">
                     {comp.banner ? (
-                      <img src={comp.banner} alt={comp.name} className="w-full h-full object-cover" />
+                      <img src={resolveFileUrl(comp.banner)} alt={comp.name} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-blue-900 to-indigo-900 flex items-center justify-center text-white/20">
                         <Trophy className="w-20 h-20" />
@@ -621,7 +621,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                     />
                   </div>
                   {bannerPreview && (
-                    <img src={bannerPreview} alt="Preview" className="h-16 w-32 object-cover rounded-xl border border-slate-200 mt-2" />
+                    <img src={resolveFileUrl(bannerPreview)} alt="Preview" className="h-16 w-32 object-cover rounded-xl border border-slate-200 mt-2" />
                   )}
                 </div>
 

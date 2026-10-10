@@ -39,7 +39,7 @@ public class FileController {
 
         Map<String, Object> result = new HashMap<>();
         result.put("id", storedFile.getId());
-        result.put("url", "/api/files/" + storedFile.getId());
+        result.put("url", fileStorageService.getFileUrl(storedFile));
         result.put("name", storedFile.getOriginalName());
         result.put("size", storedFile.getSizeBytes());
         result.put("contentType", storedFile.getContentType());
@@ -49,17 +49,16 @@ public class FileController {
         return ApiResponse.ok(result, "File uploaded successfully");
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<Resource> getFile(
+    @GetMapping("/{id}/link")
+    public ApiResponse<Map<String, Object>> getFileLink(
             @PathVariable String id,
             @AuthenticationPrincipal UserPrincipal currentUser
     ) {
         StoredFile storedFile = fileStorageService.getFileMetadata(id);
 
-        // Security check for non-public files
         if (!Boolean.TRUE.equals(storedFile.getIsPublic())) {
             if (currentUser == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+                return ApiResponse.error("Authentication required to access private file");
             }
 
             String userId = currentUser.getId();
@@ -69,21 +68,69 @@ public class FileController {
             boolean isOwner = userId != null && userId.equals(storedFile.getOwnerId());
 
             if (!isAdmin && !isOwner) {
-                // Check if user is trainer or student and file is educational content/submission
                 boolean isTrainer = roleUpper.equals("TRAINER");
                 boolean isStudent = roleUpper.equals("STUDENT");
                 String cat = (storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "");
 
                 if (cat.contains("submission") || cat.contains("doubt")) {
                     if (!isTrainer) {
-                        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                        return ApiResponse.error("Forbidden: You do not have permission to access this file link");
                     }
                 } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module")) {
                     if (!isStudent && !isTrainer) {
-                        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                        return ApiResponse.error("Forbidden: You do not have permission to access this file link");
                     }
                 } else {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                    return ApiResponse.error("Forbidden: You do not have permission to access this file link");
+                }
+            }
+        }
+
+        Map<String, Object> linkData = fileStorageService.generateFileLink(storedFile, 7200);
+        return ApiResponse.ok(linkData);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Resource> getFile(
+            @PathVariable String id,
+            @RequestParam(value = "token", required = false) String token,
+            @RequestParam(value = "expires", required = false) Long expires,
+            @AuthenticationPrincipal UserPrincipal currentUser
+    ) {
+        StoredFile storedFile = fileStorageService.getFileMetadata(id);
+
+        // Security check for non-public files
+        if (!Boolean.TRUE.equals(storedFile.getIsPublic())) {
+            boolean hasValidToken = token != null && expires != null && fileStorageService.validateInternalToken(id, token, expires);
+
+            if (!hasValidToken) {
+                if (currentUser == null) {
+                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+                }
+
+                String userId = currentUser.getId();
+                String roleUpper = currentUser.getRole() != null ? currentUser.getRole().toUpperCase() : "";
+
+                boolean isAdmin = roleUpper.equals("ADMIN") || roleUpper.equals("SUPER_ADMIN");
+                boolean isOwner = userId != null && userId.equals(storedFile.getOwnerId());
+
+                if (!isAdmin && !isOwner) {
+                    // Check if user is trainer or student and file is educational content/submission
+                    boolean isTrainer = roleUpper.equals("TRAINER");
+                    boolean isStudent = roleUpper.equals("STUDENT");
+                    String cat = (storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "");
+
+                    if (cat.contains("submission") || cat.contains("doubt")) {
+                        if (!isTrainer) {
+                            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                        }
+                    } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module")) {
+                        if (!isStudent && !isTrainer) {
+                            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                        }
+                    } else {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                    }
                 }
             }
         }

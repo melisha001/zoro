@@ -3,7 +3,7 @@ import { User, Mail, Phone, MapPin, BookOpen, Check, Edit3, Camera } from 'lucid
 import { useAuth } from '../../context/AuthContext';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { updateStudentProfile } from '../../api/userApi';
-import { uploadFile } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl } from '../../api/fileApi';
 import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
 
 export default function StudentProfilePage() {
@@ -106,7 +106,7 @@ export default function StudentProfilePage() {
           <div className="relative group">
             {selectedPhoto ? (
               <img
-                src={selectedPhoto}
+                src={resolveFileUrl(selectedPhoto)}
                 alt={profileData.name}
                 className="w-24 h-24 rounded-full object-cover ring-4 ring-blue-500/20 shadow-md"
               />

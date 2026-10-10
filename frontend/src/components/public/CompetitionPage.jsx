@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, DollarSign, Clock, Monitor, Trophy, Play, CheckCircle2, Award, ChevronRight, Tag } from 'lucide-react';
 import { getCompetitions } from '../../api/competitionApi';
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
+import { resolveFileUrl } from '../../api/fileApi';
 import CompetitionRegisterModal from './CompetitionRegisterModal';
 
 export default function CompetitionPage({ currentUser }) {
@@ -116,7 +117,7 @@ export default function CompetitionPage({ currentUser }) {
           <div className="lg:col-span-8">
             <div className="relative rounded-3xl overflow-hidden shadow-xl border border-slate-200 group bg-slate-950">
               <img
-                src={activeComp.banner || activeComp.bannerUrl || 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=800'}
+                src={resolveFileUrl(activeComp.banner || activeComp.bannerUrl) || 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=800'}
                 alt={activeComp.name}
                 className="w-full h-80 sm:h-96 object-cover opacity-90 group-hover:scale-105 transition-transform duration-500"
                 onError={(e) => {

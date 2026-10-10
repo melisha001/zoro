@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bell, Calendar as CalendarIcon, Menu, X, AlertTriangle, Clock, CheckCircle2, Info } from 'lucide-react';
 import { getTrainers } from '../../api/userApi';
 import { getSchedules } from '../../api/scheduleApi';
+import { resolveFileUrl } from '../../api/fileApi';
 
 export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScreen }) {
   const [showNotifPanel, setShowNotifPanel] = useState(false);
@@ -201,7 +202,7 @@ export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScr
           title="View Profile"
         >
           <img
-            src={user.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120"}
+            src={resolveFileUrl(user.avatar) || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120"}
             alt={user.name}
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-blue-500/20"
           />

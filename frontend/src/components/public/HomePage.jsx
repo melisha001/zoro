@@ -3,6 +3,7 @@ import { Award, Users, Globe, CheckCircle, ArrowRight, Play, Sparkles } from 'lu
 import { getCourses } from '../../api/courseApi';
 import { getCompetitions } from '../../api/competitionApi';
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
+import { resolveFileUrl } from '../../api/fileApi';
 
 export default function HomePage({ setActiveScreen, onOpenEnquire }) {
   const [courses, setCourses] = useState([]);
@@ -142,7 +143,7 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {courses.slice(0, 6).map((course) => {
-            const courseImg = course.thumbnail || course.videoUrl || defaultThumbnailFallback;
+            const courseImg = resolveFileUrl(course.thumbnail || course.videoUrl) || defaultThumbnailFallback;
 
             return (
               <div key={course.id} className="bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-md hover:shadow-xl transition-all group flex flex-col justify-between">

@@ -33,6 +33,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, setActiv
   const [isAuthorized, setIsAuthorized] = useState(true);
   const [authMsg, setAuthMsg] = useState('');
   const [msg, setMsg] = useState('');
+  const [playbackData, setPlaybackData] = useState(null);
 
   const studentIdentifier = user?.email || user?.id || '';
   const studentName = user?.name || '';
@@ -50,6 +51,21 @@ export default function CourseLearningPage({ courseId: initialCourseId, setActiv
     loadAllData();
     loadSubmissionsData();
   }, [studentIdentifier]);
+
+  useEffect(() => {
+    if (activeModule?.id && selectedCourse?.id && studentIdentifier) {
+      authorizeVideoPlayback(studentIdentifier, selectedCourse.id, activeModule.id).then(res => {
+        if (res.success && res.data) {
+          setIsAuthorized(true);
+          setPlaybackData(res.data);
+        } else {
+          setIsAuthorized(false);
+          setAuthMsg(res.message || 'Access Denied: You are not enrolled in this course.');
+          setPlaybackData(null);
+        }
+      });
+    }
+  }, [activeModule?.id, selectedCourse?.id, studentIdentifier]);
 
   const loadAllData = async () => {
     try {
@@ -722,7 +738,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, setActiv
                 
                 {/* Requirement #4, #5, #6, #7, #8: SECURE VIDEO PLAYER WITH DYNAMIC WATERMARK */}
                 <SecureVideoPlayer
-                  videoRefData={activeModule?.videoStorageRef}
+                  videoRefData={playbackData || activeModule?.videoStorageRef}
                   videoTitle={activeModule?.title || selectedCourse.title}
                   courseTitle={selectedCourse.title}
                   studentName={studentName}
