@@ -70,6 +70,7 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
 
                         // 2. ADMIN Role Specific Endpoints
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/dashboard/**").hasRole("ADMIN")
                         .requestMatchers("/api/activity-logs/**").hasRole("ADMIN")
                         .requestMatchers("/api/fees/**").hasRole("ADMIN")

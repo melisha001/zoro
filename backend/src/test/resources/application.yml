@@ -20,6 +20,15 @@ spring:
   flyway:
     enabled: false
 
+app:
+  storage:
+    provider: "local"
+    bunny:
+      host: "sg.storage.bunnycdn.com"
+      zone: "test-zone"
+      password: "test-storage-password"
+      cdn-host: "test-cdn.b-cdn.net"
+
 admin:
   email: "admin@zoro.com"
   password: "adminPassword123!"
@@ -35,7 +44,7 @@ bunny:
 
 jwt:
   secret: "Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM="
-  expiration: 86400000
+  expiration-ms: 604800000
 
 cors:
   allowed-origins: "*"

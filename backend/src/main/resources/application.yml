@@ -28,7 +28,12 @@ spring:
 
 app:
   storage:
-    dir: ${FILE_STORAGE_DIR:./uploads}
+    provider: ${APP_STORAGE_PROVIDER:bunny}
+    bunny:
+      host: ${BUNNY_STORAGE_HOST}
+      zone: ${BUNNY_STORAGE_ZONE}
+      password: ${BUNNY_STORAGE_PASSWORD}
+      cdn-host: ${BUNNY_STORAGE_CDN_HOST}
 
 bunny:
   stream:
@@ -37,11 +42,15 @@ bunny:
     cdn-host: ${BUNNY_CDN_HOST}
     token-auth-key: ${BUNNY_TOKEN_AUTH_KEY}
     token-expiration-seconds: 7200
-    webhook-secret: ${BUNNY_WEBHOOK_SECRET:}
+    webhook-secret: ${BUNNY_WEBHOOK_SECRET}
+
+admin:
+  email: ${ADMIN_EMAIL}
+  password: ${ADMIN_PASSWORD}
 
 jwt:
   secret: ${JWT_SECRET}
-  expiration: 86400000
+  expiration-ms: ${JWT_EXPIRATION_MS}
 
 cors:
   allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}
