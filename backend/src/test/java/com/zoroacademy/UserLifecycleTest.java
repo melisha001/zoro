@@ -87,6 +87,7 @@ class UserLifecycleTest {
         assertNotNull(created);
         assertNotNull(created.getTemporaryPassword());
         assertTrue(created.getTemporaryPassword().length() >= 10, "Temporary password must be at least 10 chars");
+        assertTrue(created.getMustChangePassword(), "New student with temp password must have mustChangePassword = true");
         assertEquals("STUDENT", created.getRole());
         assertEquals("9876543210", created.getPhone());
     }
@@ -266,5 +267,50 @@ class UserLifecycleTest {
         verify(enrollmentRepository, atLeastOnce()).deleteAll(anyList());
         verify(studentCourseBatchRepository).deleteByStudentId("std-300");
         verify(userRepository).delete(student);
+    }
+
+    @Test
+    void testResetUserPasswordSetsMustChangePasswordAndReturnsTemporaryPassword() {
+        User user = User.builder()
+                .id("usr-reset-1")
+                .email("user1@zoro.com")
+                .role("STUDENT")
+                .password("encoded_oldPassword123")
+                .mustChangePassword(false)
+                .build();
+
+        when(userRepository.findById("usr-reset-1")).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserDto resetDto = userService.resetUserPassword("usr-reset-1");
+
+        assertNotNull(resetDto);
+        assertNotNull(resetDto.getTemporaryPassword());
+        assertTrue(resetDto.getTemporaryPassword().length() >= 10);
+        assertTrue(resetDto.getMustChangePassword());
+        assertTrue(user.getMustChangePassword());
+        verify(passwordEncoder).encode(resetDto.getTemporaryPassword());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void testUpdatePasswordClearsMustChangePassword() {
+        User user = User.builder()
+                .id("usr-update-1")
+                .email("user2@zoro.com")
+                .password("encoded_tempPassword123")
+                .mustChangePassword(true)
+                .build();
+
+        when(userRepository.findById("usr-update-1")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("tempPassword123", "encoded_tempPassword123")).thenReturn(true);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        boolean updated = userService.updatePassword("usr-update-1", "tempPassword123", "brandNewPassword123");
+
+        assertTrue(updated);
+        assertFalse(user.getMustChangePassword());
+        verify(passwordEncoder).encode("brandNewPassword123");
+        verify(userRepository).save(user);
     }
 }

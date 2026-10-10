@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, Edit, Trash2, X, Plus, Search, Calendar, AlertTriangle, ArrowRight, ShieldAlert, CheckCircle2, Copy, Check } from 'lucide-react';
-import { getTrainers, createTrainer, updateTrainer, deleteTrainer, updateUserStatus, getTrainerDependencies, replaceTrainer } from '../../api/userApi';
+import { Edit, Trash2, X, Plus, Search, Calendar, AlertTriangle, ArrowRight, ShieldAlert, CheckCircle2, Copy, Check, Key } from 'lucide-react';
+import { getTrainers, createTrainer, updateTrainer, deleteTrainer, updateUserStatus, getTrainerDependencies, replaceTrainer, resetUserPassword } from '../../api/userApi';
 import { logActivity } from '../../api/activityLogApi';
 import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
 import ConfirmModal from '../common/ConfirmModal';
@@ -19,6 +19,32 @@ export default function ManageTrainersPage() {
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [createdTrainerModalData, setCreatedTrainerModalData] = useState(null);
   const [trainerDepModalData, setTrainerDepModalData] = useState(null);
+  const [resetPasswordLoadingId, setResetPasswordLoadingId] = useState(null);
+
+  const handleResetPassword = async (trainer) => {
+    if (!window.confirm(`Reset temporary password for trainer "${trainer.name}" (${trainer.email})?`)) {
+      return;
+    }
+    setResetPasswordLoadingId(trainer.id);
+    try {
+      const res = await resetUserPassword(trainer.id);
+      if (res.success && res.data) {
+        logActivity('Trainer Password Reset', `Generated new temporary password for trainer "${trainer.name}"`, 'Trainer');
+        setCreatedTrainerModalData({
+          trainerName: trainer.name,
+          email: trainer.email,
+          temporaryPassword: res.data.temporaryPassword
+        });
+        loadData();
+      } else {
+        alert(res.message || 'Failed to reset trainer password.');
+      }
+    } catch (err) {
+      alert('Error resetting password: ' + (err?.message || 'Server error'));
+    } finally {
+      setResetPasswordLoadingId(null);
+    }
+  };
 
   const [formData, setFormData] = useState({
     name: '',
@@ -381,8 +407,16 @@ export default function ManageTrainersPage() {
                       <td className="py-4 px-4 text-slate-600 font-medium">{trainer.joinedOn || trainer.dateOfJoining || ''}</td>
                       <td className="py-4 px-4 text-slate-500 font-mono">{formatPhone(trainer.phone) || 'N/A'}</td>
                       <td className="py-4 px-4 text-right space-x-2">
-                      <button
-                        onClick={() => {
+                        <button
+                          onClick={() => handleResetPassword(trainer)}
+                          disabled={resetPasswordLoadingId === trainer.id}
+                          className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors disabled:opacity-50"
+                          title="Reset Temporary Password"
+                        >
+                          <Key className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
                           setEditingTrainer(trainer);
                           setFormError('');
                           setEmailError('');

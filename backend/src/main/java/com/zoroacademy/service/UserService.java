@@ -236,9 +236,11 @@ public class UserService {
                 throw new IllegalArgumentException("Password must be at least 8 characters long");
             }
             user.setPassword(passwordEncoder.encode(dto.getPassword()));
+            user.setMustChangePassword(false);
         } else if (user.getPassword() == null || user.getPassword().isBlank()) {
             generatedTempPassword = generateTemporaryPassword();
             user.setPassword(passwordEncoder.encode(generatedTempPassword));
+            user.setMustChangePassword(true);
         }
 
         user = userRepository.save(user);
@@ -366,9 +368,11 @@ public class UserService {
                 throw new IllegalArgumentException("Password must be at least 8 characters long");
             }
             user.setPassword(passwordEncoder.encode(dto.getPassword()));
+            user.setMustChangePassword(false);
         } else if (user.getPassword() == null || user.getPassword().isBlank()) {
             generatedTempPassword = generateTemporaryPassword();
             user.setPassword(passwordEncoder.encode(generatedTempPassword));
+            user.setMustChangePassword(true);
         }
 
         user = userRepository.save(user);
@@ -507,8 +511,25 @@ public class UserService {
         }
 
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setMustChangePassword(false);
         userRepository.save(user);
         return true;
+    }
+
+    @Transactional
+    public UserDto resetUserPassword(String id) {
+        User user = userRepository.findById(id)
+                .or(() -> userRepository.findByEmailIgnoreCase(id))
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
+
+        String tempPassword = generateTemporaryPassword();
+        user.setPassword(passwordEncoder.encode(tempPassword));
+        user.setMustChangePassword(true);
+        user = userRepository.save(user);
+
+        UserDto dto = convertUserToDto(user);
+        dto.setTemporaryPassword(tempPassword);
+        return dto;
     }
 
     @Transactional

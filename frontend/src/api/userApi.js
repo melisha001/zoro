@@ -68,6 +68,28 @@ export const updateStudentPassword = async (studentIdOrEmail, currentPassword, n
   return { success: false, message: res.message || 'Failed to change password.' };
 };
 
+export const changePassword = async (currentPassword, newPassword) => {
+  const res = await apiPost('/users/password', {
+    currentPassword,
+    newPassword
+  });
+  if (res.success) {
+    return { success: true, message: res.message || 'Password changed successfully.' };
+  }
+  return { success: false, message: res.message || 'Failed to change password.' };
+};
+
+export const resetUserPassword = async (id) => {
+  if (!id) {
+    return apiResponse(null, false, 'User ID is required');
+  }
+  const res = await apiPost(`/users/${encodeURIComponent(id)}/reset-password`);
+  if (res.success && res.data) {
+    return apiResponse(res.data, true, res.message || 'Password reset successfully');
+  }
+  return apiResponse(null, false, res.message || 'Failed to reset password');
+};
+
 export const deleteStudent = async (id, force = false) => {
   if (!id) {
     return apiResponse(false, false, 'Student ID is required');

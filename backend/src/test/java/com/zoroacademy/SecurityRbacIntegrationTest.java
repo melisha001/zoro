@@ -2,6 +2,7 @@ package com.zoroacademy;
 
 import com.zoroacademy.common.ApiResponse;
 import com.zoroacademy.controller.MeController;
+import com.zoroacademy.controller.UserController;
 import com.zoroacademy.dto.UserDto;
 import com.zoroacademy.entity.*;
 import com.zoroacademy.repository.*;
@@ -204,5 +205,26 @@ class SecurityRbacIntegrationTest {
         assertTrue(resp.isSuccess());
         assertEquals(1, resp.getData().size());
         assertEquals("PRESENT", resp.getData().get(0).getStatus());
+    }
+
+    @Test
+    void testAdminResetPasswordSetsTemporaryPasswordAndMustChangePassword() {
+        UserController userController = new UserController(userService);
+        UserDto resetResult = UserDto.builder()
+                .id("std-1")
+                .email("student@zoro.com")
+                .name("Student User")
+                .temporaryPassword("TempPass987!")
+                .mustChangePassword(true)
+                .build();
+
+        when(userService.resetUserPassword("std-1")).thenReturn(resetResult);
+
+        ApiResponse<UserDto> response = userController.resetPassword("std-1");
+        assertTrue(response.isSuccess());
+        assertNotNull(response.getData());
+        assertEquals("TempPass987!", response.getData().getTemporaryPassword());
+        assertTrue(response.getData().getMustChangePassword());
+        verify(userService).resetUserPassword("std-1");
     }
 }

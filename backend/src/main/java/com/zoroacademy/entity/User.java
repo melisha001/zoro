@@ -60,6 +60,9 @@ public class User {
     @Column(length = 255)
     private String course;
 
+    @Column(name = "must_change_password")
+    private Boolean mustChangePassword = false;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -70,7 +73,7 @@ public class User {
 
     public User() {}
 
-    public User(String id, String email, String username, String password, String name, String role, String phone, String avatar, String status, String address, String joinedOn, String specialty, String code, BigDecimal salaryAmount, String salaryCreditDate, String course, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public User(String id, String email, String username, String password, String name, String role, String phone, String avatar, String status, String address, String joinedOn, String specialty, String code, BigDecimal salaryAmount, String salaryCreditDate, String course, Boolean mustChangePassword, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.email = email;
         this.username = username;
@@ -87,8 +90,13 @@ public class User {
         this.salaryAmount = salaryAmount;
         this.salaryCreditDate = salaryCreditDate;
         this.course = course;
+        this.mustChangePassword = mustChangePassword != null ? mustChangePassword : false;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+    }
+
+    public User(String id, String email, String username, String password, String name, String role, String phone, String avatar, String status, String address, String joinedOn, String specialty, String code, BigDecimal salaryAmount, String salaryCreditDate, String course, LocalDateTime createdAt, LocalDateTime updatedAt) {
+        this(id, email, username, password, name, role, phone, avatar, status, address, joinedOn, specialty, code, salaryAmount, salaryCreditDate, course, false, createdAt, updatedAt);
     }
 
     public String getId() {
@@ -235,6 +243,14 @@ public class User {
         this.updatedAt = updatedAt;
     }
 
+    public Boolean getMustChangePassword() {
+        return mustChangePassword != null ? mustChangePassword : false;
+    }
+
+    public void setMustChangePassword(Boolean mustChangePassword) {
+        this.mustChangePassword = mustChangePassword;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -256,6 +272,7 @@ public class User {
         private BigDecimal salaryAmount = BigDecimal.ZERO;
         private String salaryCreditDate;
         private String course;
+        private Boolean mustChangePassword = false;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
 
@@ -323,6 +340,10 @@ public class User {
             this.course = course;
             return this;
         }
+        public Builder mustChangePassword(Boolean mustChangePassword) {
+            this.mustChangePassword = mustChangePassword;
+            return this;
+        }
         public Builder createdAt(LocalDateTime createdAt) {
             this.createdAt = createdAt;
             return this;
@@ -333,7 +354,7 @@ public class User {
         }
 
         public User build() {
-            return new User(id, email, username, password, name, role, phone, avatar, status, address, joinedOn, specialty, code, salaryAmount, salaryCreditDate, course, createdAt, updatedAt);
+            return new User(id, email, username, password, name, role, phone, avatar, status, address, joinedOn, specialty, code, salaryAmount, salaryCreditDate, course, mustChangePassword, createdAt, updatedAt);
         }
     }
 

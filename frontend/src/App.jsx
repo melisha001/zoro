@@ -11,6 +11,7 @@ import CompetitionPage from './components/public/CompetitionPage';
 import ContactPage from './components/public/ContactPage';
 import EnquireModal from './components/public/EnquireModal';
 import LoginModal from './components/public/LoginModal';
+import ForceChangePasswordModal from './components/common/ForceChangePasswordModal';
 
 // Code-splitting via React.lazy for portal screens
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
@@ -513,6 +514,7 @@ function AppRoutes() {
         }} 
         onLoginSuccess={handleLoginSuccess}
       />
+      <ForceChangePasswordModal />
     </>
   );
 }

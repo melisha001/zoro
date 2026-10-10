@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  UserPlus, Search, Edit, Trash2, Key, CheckCircle, X, Calendar, 
-  Download, Layers, User, Mail, CheckCircle2, AlertCircle, FileSpreadsheet, ChevronDown, ChevronUp, Users as UsersIcon,
+  UserPlus, Search, Edit, Trash2, Key, X, Calendar, 
+  Download, CheckCircle2, AlertCircle, Users as UsersIcon,
   Copy, Check
 } from 'lucide-react';
-import { getStudents, createStudent, updateStudent, deleteStudent, updateUserStatus } from '../../api/userApi';
+import { getStudents, createStudent, updateStudent, deleteStudent, updateUserStatus, resetUserPassword } from '../../api/userApi';
 import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { logActivity } from '../../api/activityLogApi';
 import { exportToExcel } from '../../utils/excelExporter';
-import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
+import { sanitizePhone, validatePhone } from '../../utils/phoneValidator';
 import ConfirmModal from '../common/ConfirmModal';
 
 export default function ManageStudentsPage() {
@@ -33,6 +33,35 @@ export default function ManageStudentsPage() {
   const [formError, setFormError] = useState('');
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [createdEmailModalData, setCreatedEmailModalData] = useState(null);
+  const [resetPasswordLoadingId, setResetPasswordLoadingId] = useState(null);
+
+  const handleResetPassword = async (student) => {
+    if (!window.confirm(`Reset temporary password for student "${student.name}" (@${student.username || student.email})?`)) {
+      return;
+    }
+    setResetPasswordLoadingId(student.id);
+    try {
+      const res = await resetUserPassword(student.id);
+      if (res.success && res.data) {
+        logActivity('Student Password Reset', `Generated new temporary password for student "${student.name}"`, 'Student');
+        setCreatedEmailModalData({
+          studentName: student.name,
+          username: student.username || student.email,
+          email: student.email,
+          joiningDate: student.joinedOn || student.dateOfJoining || '12 Jan 2026',
+          temporaryPassword: res.data.temporaryPassword,
+          courseBatches: res.data.courseBatches || (student.courseBatches || [])
+        });
+        loadData();
+      } else {
+        alert(res.message || 'Failed to reset student password.');
+      }
+    } catch (err) {
+      alert('Error resetting password: ' + (err?.message || 'Server error'));
+    } finally {
+      setResetPasswordLoadingId(null);
+    }
+  };
 
   const [formData, setFormData] = useState({
     name: '',
@@ -599,6 +628,14 @@ export default function ManageStudentsPage() {
                                 </td>
                                 <td className="py-3.5 px-4 text-right space-x-2">
                                   <button
+                                    onClick={() => handleResetPassword(student)}
+                                    disabled={resetPasswordLoadingId === student.id}
+                                    className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors disabled:opacity-50"
+                                    title="Reset Temporary Password"
+                                  >
+                                    <Key className="w-4 h-4" />
+                                  </button>
+                                  <button
                                     onClick={() => openEditModal(student)}
                                     className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
                                     title="Edit Account"
@@ -704,6 +741,14 @@ export default function ManageStudentsPage() {
                           </button>
                         </td>
                         <td className="py-4 px-4 text-right space-x-2">
+                          <button
+                            onClick={() => handleResetPassword(student)}
+                            disabled={resetPasswordLoadingId === student.id}
+                            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors disabled:opacity-50"
+                            title="Reset Temporary Password"
+                          >
+                            <Key className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => openEditModal(student)}
                             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"

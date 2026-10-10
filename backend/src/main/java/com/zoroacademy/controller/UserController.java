@@ -79,6 +79,13 @@ public class UserController {
         }
     }
 
+    @PostMapping("/{id}/reset-password")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<UserDto> resetPassword(@PathVariable String id) {
+        UserDto result = userService.resetUserPassword(id);
+        return ApiResponse.ok(result, "Password reset successfully");
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or #id == principal.id")
     public ApiResponse<UserDto> getUserById(@PathVariable String id) {
