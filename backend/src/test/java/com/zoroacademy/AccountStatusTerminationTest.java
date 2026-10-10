@@ -124,12 +124,26 @@ class AccountStatusTerminationTest {
                 .status("Active")
                 .build();
 
+        when(userRepository.findById("usr-act")).thenReturn(Optional.of(activeUser));
         when(userRepository.findByEmailIgnoreCase("active@zoro.com")).thenReturn(Optional.of(activeUser));
 
         filter.doFilter(request, response, filterChain);
 
         assertEquals(200, response.getStatus());
         assertNotNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(filterChain, times(1)).doFilter(request, response);
+    }
+
+    @Test
+    void testPublicRouteAllowsAnonymousPassThroughWithInvalidJwt() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/courses");
+        request.addHeader("Authorization", "Bearer invalid-or-expired-jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        assertEquals(200, response.getStatus());
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
         verify(filterChain, times(1)).doFilter(request, response);
     }
 }

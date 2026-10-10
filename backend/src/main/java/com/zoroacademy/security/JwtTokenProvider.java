@@ -47,33 +47,65 @@ public class JwtTokenProvider {
     }
 
     public String generateToken(Authentication authentication) {
-        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
-        return generateTokenFromUsername(userPrincipal.getUsername(), userPrincipal.getId(), userPrincipal.getRole(), userPrincipal.getName());
+        return generateToken(authentication, false);
     }
 
-    public String generateTokenFromUsername(String email, String userId, String role, String name) {
+    public String generateToken(Authentication authentication, boolean rememberMe) {
+        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+        return generateToken(userPrincipal.getId(), userPrincipal.getEmail(), userPrincipal.getRole(), userPrincipal.getName(), rememberMe);
+    }
+
+    public String generateToken(String userId, String email, String role, String name, boolean rememberMe) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
+        long duration = rememberMe 
+                ? (30L * 24 * 60 * 60 * 1000L) 
+                : (jwtExpirationMs > 0 ? jwtExpirationMs : (8L * 60 * 60 * 1000L));
+        Date expiryDate = new Date(now.getTime() + duration);
 
         return Jwts.builder()
-                .subject(email)
+                .subject(userId)
                 .claim("userId", userId)
+                .claim("email", email)
                 .claim("role", role)
                 .claim("name", name)
+                .claim("rememberMe", rememberMe)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey(), Jwts.SIG.HS256)
                 .compact();
     }
 
-    public String getUsernameFromJwt(String token) {
-        Claims claims = Jwts.parser()
+    public String generateTokenFromUsername(String email, String userId, String role, String name) {
+        return generateToken(userId, email, role, name, false);
+    }
+
+    public Claims getClaimsFromJwt(String token) {
+        return Jwts.parser()
                 .verifyWith(getSigningKey())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
 
-        return claims.getSubject();
+    public Claims getClaimsEvenIfExpired(String token) {
+        try {
+            return getClaimsFromJwt(token);
+        } catch (ExpiredJwtException e) {
+            return e.getClaims();
+        }
+    }
+
+    public String getUserIdFromJwt(String token) {
+        Claims claims = getClaimsEvenIfExpired(token);
+        String subject = claims.getSubject();
+        String userId = claims.get("userId", String.class);
+        return (userId != null && !userId.isBlank()) ? userId : subject;
+    }
+
+    public String getUsernameFromJwt(String token) {
+        Claims claims = getClaimsEvenIfExpired(token);
+        String email = claims.get("email", String.class);
+        return (email != null && !email.isBlank()) ? email : claims.getSubject();
     }
 
     public boolean validateToken(String authToken) {
@@ -83,7 +115,7 @@ public class JwtTokenProvider {
         } catch (SecurityException | MalformedJwtException e) {
             log.error("Invalid JWT signature: {}", e.getMessage());
         } catch (ExpiredJwtException e) {
-            log.error("Expired JWT token: {}", e.getMessage());
+            log.warn("Expired JWT token: {}", e.getMessage());
         } catch (UnsupportedJwtException e) {
             log.error("Unsupported JWT token: {}", e.getMessage());
         } catch (IllegalArgumentException e) {

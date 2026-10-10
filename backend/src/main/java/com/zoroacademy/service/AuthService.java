@@ -6,13 +6,17 @@ import com.zoroacademy.dto.RegisterRequest;
 import com.zoroacademy.dto.UserDto;
 import com.zoroacademy.entity.User;
 import com.zoroacademy.exception.ConflictException;
+import com.zoroacademy.exception.UnauthorizedException;
 import com.zoroacademy.repository.UserRepository;
 import com.zoroacademy.security.JwtTokenProvider;
 import com.zoroacademy.util.PhoneValidator;
+import io.jsonwebtoken.Claims;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Date;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -55,11 +59,65 @@ public class AuthService {
             throw new IllegalArgumentException("Account is inactive. Please contact administrator.");
         }
 
-        String token = tokenProvider.generateTokenFromUsername(
-                user.getEmail(), user.getId(), user.getRole(), user.getName());
+        boolean rememberMe = Boolean.TRUE.equals(request.getRememberMe());
+        String token = tokenProvider.generateToken(
+                user.getId(), user.getEmail(), user.getRole(), user.getName(), rememberMe);
 
         return LoginResponse.builder()
                 .token(token)
+                .tokenType("Bearer")
+                .user(UserDto.fromEntity(user))
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public LoginResponse refreshToken(String token) {
+        if (token == null || token.isBlank()) {
+            throw new UnauthorizedException("Token is required for refresh");
+        }
+
+        Claims claims;
+        try {
+            claims = tokenProvider.getClaimsEvenIfExpired(token);
+        } catch (Exception e) {
+            throw new UnauthorizedException("Invalid token: " + e.getMessage());
+        }
+
+        Date exp = claims.getExpiration();
+        if (exp != null) {
+            long maxGraceMs = 7L * 24 * 60 * 60 * 1000L;
+            if (System.currentTimeMillis() - exp.getTime() > maxGraceMs) {
+                throw new UnauthorizedException("Token expired beyond allowed refresh window");
+            }
+        }
+
+        String rawUserId = claims.get("userId", String.class);
+        final String effectiveUserId = (rawUserId != null && !rawUserId.isBlank()) 
+                ? rawUserId 
+                : claims.getSubject();
+        final String effectiveEmail = claims.get("email", String.class);
+
+        Optional<User> userOpt = Optional.empty();
+        if (effectiveUserId != null && !effectiveUserId.isBlank()) {
+            userOpt = userRepository.findById(effectiveUserId)
+                    .or(() -> userRepository.findByEmailIgnoreCase(effectiveUserId));
+        }
+        if (userOpt.isEmpty() && effectiveEmail != null && !effectiveEmail.isBlank()) {
+            userOpt = userRepository.findByEmailIgnoreCase(effectiveEmail);
+        }
+
+        User user = userOpt.orElseThrow(() -> new UnauthorizedException("User account not found"));
+
+        if (user.getStatus() != null && !"Active".equalsIgnoreCase(user.getStatus().trim())) {
+            throw new UnauthorizedException("Account is inactive");
+        }
+
+        boolean rememberMe = Boolean.TRUE.equals(claims.get("rememberMe", Boolean.class));
+        String newToken = tokenProvider.generateToken(
+                user.getId(), user.getEmail(), user.getRole(), user.getName(), rememberMe);
+
+        return LoginResponse.builder()
+                .token(newToken)
                 .tokenType("Bearer")
                 .user(UserDto.fromEntity(user))
                 .build();

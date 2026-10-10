@@ -389,10 +389,16 @@ function PublicContactWrapper() {
 }
 
 function AppRoutes() {
-  const { loading } = useAuth();
+  const { loading, authNotice, clearAuthNotice } = useAuth();
   const navigate = useNavigate();
   const [isEnquireOpen, setIsEnquireOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+
+  useEffect(() => {
+    if (authNotice) {
+      setIsLoginOpen(true);
+    }
+  }, [authNotice]);
 
   if (loading) {
     return (
@@ -501,7 +507,10 @@ function AppRoutes() {
       <EnquireModal isOpen={isEnquireOpen} onClose={() => setIsEnquireOpen(false)} />
       <LoginModal 
         isOpen={isLoginOpen} 
-        onClose={() => setIsLoginOpen(false)} 
+        onClose={() => {
+          setIsLoginOpen(false);
+          clearAuthNotice();
+        }} 
         onLoginSuccess={handleLoginSuccess}
       />
     </>

@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { setAuthToken, clearAuthSession, getAuthToken, apiGet } from '../api/client';
+import { usePolling } from '../hooks/usePolling';
 
 const AuthContext = createContext();
 
@@ -67,6 +68,15 @@ export function AuthProvider({ children }) {
       isMounted = false;
     };
   }, []);
+
+  // Periodic session validation (every 60s and on tab focus)
+  const pollSession = useCallback(async () => {
+    if (!user) return;
+    const res = await apiGet('/auth/me');
+    return res;
+  }, [user]);
+
+  usePolling(pollSession, 60000, !!user);
 
   useEffect(() => {
     const handleUnauthorized = (e) => {

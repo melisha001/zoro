@@ -59,6 +59,60 @@ export const clearAuthSession = () => {
   } catch (e) {}
 };
 
+export const parseJwt = (token) => {
+  if (!token || typeof token !== 'string') return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+};
+
+let isRefreshing = false;
+export const checkAndRefreshToken = async () => {
+  const token = getAuthToken();
+  if (!token || isRefreshing) return;
+  const payload = parseJwt(token);
+  if (!payload || !payload.exp || !payload.iat) return;
+  const now = Math.floor(Date.now() / 1000);
+  const total = payload.exp - payload.iat;
+  const elapsed = now - payload.iat;
+
+  // Silent renewal if > 50% lifetime has elapsed and token is still valid
+  if (elapsed > total * 0.5 && now < payload.exp) {
+    isRefreshing = true;
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data?.token) {
+          setAuthToken(json.data.token);
+        }
+      }
+    } catch (e) {
+      console.warn('Silent token renewal failed:', e);
+    } finally {
+      isRefreshing = false;
+    }
+  }
+};
+
 // Generic API response wrapper for backward compatibility
 export const apiResponse = (data, success = true, message = 'Success') => {
   return Promise.resolve({ success, data, message });
@@ -68,6 +122,11 @@ export const apiResponse = (data, success = true, message = 'Success') => {
 export const apiFetch = async (endpoint, options = {}) => {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${cleanEndpoint}`;
+
+  if (!cleanEndpoint.includes('/auth/refresh') && !cleanEndpoint.includes('/auth/login')) {
+    checkAndRefreshToken().catch(() => {});
+  }
+
   const token = getAuthToken();
 
   const headers = {
@@ -86,13 +145,22 @@ export const apiFetch = async (endpoint, options = {}) => {
     }
 
     if (res.status === 401) {
-      // Clear token and user session on 401 Unauthorized
-      clearAuthSession();
       const code = json?.code || 'UNAUTHORIZED';
       const message = json?.message || 'Session expired or unauthorized. Please log in.';
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code, message } }));
+
+      // Clear token and user session ONLY on structured 401 codes
+      const isTerminalAuthFailure = 
+        code === 'TOKEN_EXPIRED' || 
+        code === 'ACCOUNT_REMOVED' || 
+        code === 'ACCOUNT_DISABLED';
+
+      if (isTerminalAuthFailure) {
+        clearAuthSession();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code, message } }));
+        }
       }
+
       return {
         success: false,
         status: 401,

@@ -151,10 +151,10 @@ export const replaceTrainer = async (id, payload) => {
 };
 
 // --- AUTHENTICATION API ---
-export const authenticateUser = async (email, password) => {
+export const authenticateUser = async (email, password, rememberMe = false) => {
   const lowerEmail = (email || '').toLowerCase().trim();
   
-  const res = await apiPost('/auth/login', { email: lowerEmail, password });
+  const res = await apiPost('/auth/login', { email: lowerEmail, password, rememberMe });
   if (res.success && res.data && res.data.user) {
     if (res.data.token) {
       setAuthToken(res.data.token);
@@ -176,6 +176,15 @@ export const authenticateUser = async (email, password) => {
   }
 
   return { success: false, message: res.message || 'Invalid email or password.' };
+};
+
+export const refreshTokenApi = async () => {
+  const res = await apiPost('/auth/refresh');
+  if (res.success && res.data && res.data.token) {
+    setAuthToken(res.data.token);
+    return res.data;
+  }
+  return null;
 };
 
 // --- AUTO DETECT USER BY EMAIL / USERNAME ---

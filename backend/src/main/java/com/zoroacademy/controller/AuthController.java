@@ -25,6 +25,20 @@ public class AuthController {
         return ApiResponse.ok(response, "Login successful");
     }
 
+    @PostMapping("/refresh")
+    public ApiResponse<LoginResponse> refresh(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestBody(required = false) java.util.Map<String, String> body) {
+        String token = null;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7);
+        } else if (body != null && body.containsKey("token")) {
+            token = body.get("token");
+        }
+        LoginResponse response = authService.refreshToken(token);
+        return ApiResponse.ok(response, "Token refreshed successfully");
+    }
+
     @PostMapping("/register")
     public ApiResponse<UserDto> register(@RequestBody RegisterRequest request) {
         UserDto response = authService.register(request);

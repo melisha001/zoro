@@ -46,6 +46,11 @@ class AuthServiceTest {
             public String generateTokenFromUsername(String email, String userId, String role, String name) {
                 return "mock-jwt-token-for-" + email;
             }
+
+            @Override
+            public String generateToken(String userId, String email, String role, String name, boolean rememberMe) {
+                return generateTokenFromUsername(email, userId, role, name);
+            }
         };
 
         authService = new AuthService(fakeRepo, fakeEncoder, tokenProvider);
@@ -56,6 +61,7 @@ class AuthServiceTest {
         LoginRequest request = LoginRequest.builder()
                 .email("arjun@student.com")
                 .password("password123")
+                .rememberMe(true)
                 .build();
 
         LoginResponse response = authService.login(request);

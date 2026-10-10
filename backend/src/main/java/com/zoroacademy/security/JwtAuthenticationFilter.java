@@ -41,22 +41,44 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (StringUtils.hasText(jwt)) {
                 if (!tokenProvider.validateToken(jwt)) {
+                    if (isPublicRoute(request)) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     sendErrorResponse(response, "TOKEN_EXPIRED", "Token expired or invalid");
                     return;
                 }
 
+                String userId = tokenProvider.getUserIdFromJwt(jwt);
                 String username = tokenProvider.getUsernameFromJwt(jwt);
-                Optional<User> userOpt = userRepository.findByEmailIgnoreCase(username)
-                        .or(() -> userRepository.findByUsernameIgnoreCase(username))
-                        .or(() -> userRepository.findById(username));
+
+                Optional<User> userOpt = Optional.empty();
+                if (userId != null && !userId.isBlank()) {
+                    userOpt = userRepository.findById(userId)
+                            .or(() -> userRepository.findByEmailIgnoreCase(userId))
+                            .or(() -> userRepository.findByUsernameIgnoreCase(userId));
+                }
+                if (userOpt.isEmpty() && username != null && !username.isBlank()) {
+                    userOpt = userRepository.findByEmailIgnoreCase(username)
+                            .or(() -> userRepository.findByUsernameIgnoreCase(username))
+                            .or(() -> userRepository.findById(username));
+                }
 
                 if (userOpt.isEmpty()) {
+                    if (isPublicRoute(request)) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     sendErrorResponse(response, "ACCOUNT_REMOVED", "Account has been removed");
                     return;
                 }
 
                 User user = userOpt.get();
                 if (user.getStatus() != null && !"Active".equalsIgnoreCase(user.getStatus().trim())) {
+                    if (isPublicRoute(request)) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     sendErrorResponse(response, "ACCOUNT_DISABLED", "Account has been deactivated");
                     return;
                 }
@@ -73,6 +95,41 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isPublicRoute(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        if (path == null) {
+            return false;
+        }
+        String method = request.getMethod();
+
+        if (path.startsWith("/api/auth/")) {
+            return true;
+        }
+        if (path.startsWith("/api/enquiries")) {
+            return "POST".equalsIgnoreCase(method);
+        }
+        if (path.startsWith("/api/courses")) {
+            return "GET".equalsIgnoreCase(method);
+        }
+        if (path.startsWith("/api/files")) {
+            return "GET".equalsIgnoreCase(method);
+        }
+        if (path.startsWith("/api/website-settings")) {
+            return "GET".equalsIgnoreCase(method);
+        }
+        if (path.startsWith("/api/competitions")) {
+            if ("GET".equalsIgnoreCase(method)) return true;
+            if ("POST".equalsIgnoreCase(method) && path.contains("/registrations")) return true;
+        }
+        if (path.startsWith("/api/webhooks")) {
+            return "POST".equalsIgnoreCase(method);
+        }
+        if (path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")) {
+            return true;
+        }
+        return false;
     }
 
     private void sendErrorResponse(HttpServletResponse response, String code, String message) throws IOException {
