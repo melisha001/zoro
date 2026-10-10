@@ -75,9 +75,6 @@ export default function CoursePage({ onOpenEnquire }) {
                     <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
                       {selectedCourse.title}
                     </h1>
-                    <p className="text-slate-600 text-sm leading-relaxed">
-                      {selectedCourse.description}
-                    </p>
 
                     {/* Course Details Box */}
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/60 text-xs">
@@ -149,10 +146,12 @@ export default function CoursePage({ onOpenEnquire }) {
             )}
 
             {/* Course Overview Direct Render */}
-            {selectedCourse.id && (
+            {selectedCourse.id && Boolean((selectedCourse.description || selectedCourse.overview)?.trim()) && (
               <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md p-6 sm:p-8 space-y-4">
                 <h3 className="text-lg font-extrabold text-slate-900">Course Overview</h3>
-                <p className="text-slate-600 text-sm leading-relaxed">{selectedCourse.overview || selectedCourse.description}</p>
+                <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
+                  {selectedCourse.description || selectedCourse.overview}
+                </p>
               </div>
             )}
 
