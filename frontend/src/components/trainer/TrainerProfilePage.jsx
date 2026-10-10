@@ -143,7 +143,7 @@ export default function TrainerProfilePage() {
               <input
                 type="text"
                 value={profileData.name}
-                onChange={(e) => setFormData ? setFormData({...profileData, name: e.target.value}) : setProfileData({ ...profileData, name: e.target.value })}
+                onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-[#0F52BA]"
               />
             ) : (

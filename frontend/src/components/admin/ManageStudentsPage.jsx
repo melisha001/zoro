@@ -9,7 +9,7 @@ import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { logActivity } from '../../api/activityLogApi';
 import { exportToExcel } from '../../utils/excelExporter';
-import { validatePhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
+import { sanitizePhone, validatePhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
 import PhoneInput from '../common/PhoneInput';
 import ConfirmModal from '../common/ConfirmModal';
 import { useDialog } from '../../context/DialogContext';
