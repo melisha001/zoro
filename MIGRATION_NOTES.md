@@ -84,6 +84,52 @@ This document details the complete overhaul performed on Zoro English Academy, i
   - Implemented `POST /api/users/{id}/reset-password` allowing Admins to generate a secure single-use temporary password.
   - Integrated `ForceChangePasswordModal.jsx` blocking portal interactions until the password is changed.
 
+### `V15__competition_fields.sql` (Issue 5-7 Hardening)
+- **Objective**: Added persistent competition fields so admin-configured event details, banners, timings, venues, instructions, and PDFs are fully saved and rendered on public and admin pages without mock fallbacks.
+- **Key Changes**:
+  - Added columns to `competitions`:
+    - `reg_start_date VARCHAR(20)`
+    - `reg_end_date VARCHAR(20)`
+    - `start_time VARCHAR(20)`
+    - `end_time VARCHAR(20)`
+    - `venue VARCHAR(255)`
+    - `banner_url TEXT`
+    - `rules_pdf_url TEXT`
+    - `registration_form_url TEXT`
+    - `instructions TEXT`
+    - `contact_details TEXT`
+  - Updated `Competition.java` entity, service, controller, and frontend `competitionApi.js` to persist and return all fields.
+  - Removed all hardcoded fallbacks from `CompetitionPage.jsx` and `HomePage.jsx`.
+
+### `V16__refresh_tokens.sql` (Issue 8 Hardening)
+- **Objective**: Implemented standard session lifecycle with 1-hour access JWT and 7-day rotated refresh tokens, eliminating "Keep me signed in" checkboxes.
+- **Key Changes**:
+  - Created `refresh_tokens` table:
+    - `id VARCHAR(64) PRIMARY KEY`
+    - `user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE`
+    - `token_hash VARCHAR(64) NOT NULL UNIQUE`
+    - `expires_at TIMESTAMP NOT NULL`
+    - `revoked BOOLEAN NOT NULL DEFAULT FALSE`
+    - `created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+    - `user_agent VARCHAR(255)`
+  - Added indexes on `user_id` and `token_hash`.
+  - Added `POST /api/auth/refresh` with SHA-256 token hashing, token rotation, and reuse detection (revoking all tokens on reuse).
+  - Added `POST /api/auth/logout` revoking the refresh token.
+  - Configured `JWT_EXPIRATION_MS=3600000` (1 hour) and `REFRESH_TOKEN_EXPIRATION_DAYS=7` (7 days).
+
+### `V17__enquiry_course_id.sql` (Issue 9 Hardening)
+- **Objective**: Direct relational linking of visitor enquiries to active courses.
+- **Key Changes**:
+  - Added `course_id VARCHAR(128) REFERENCES courses(id) ON DELETE SET NULL` to `enquiries` table with index `idx_enquiries_course_id`.
+  - Updated `Enquiry.java` entity and `EnquiryService.java` to synchronize `courseId` and `courseInterest`.
+  - Restricted enquiry course dropdowns (`EnquireModal.jsx`, `ContactPage.jsx`) strictly to active admin-created courses returned by `GET /api/courses`.
+  - Removed "General enquiry" options and hardcoded course names.
+  - Admin Enquiry Details view surfaces course title and course ID.
+
+> [!NOTE]
+> **One-Time Data Repair Notice (Course Prices)**:
+> In earlier builds, admin forms sent `fee`/`fees` instead of `price`, causing Jackson to drop the field and store courses with price `0`. These existing courses cannot be recovered automatically. Administrators must re-enter course prices via the Admin Courses portal (`/admin/courses`).
+
 ---
 
 ## 3. Security Hardening & Session Lifecycle Management

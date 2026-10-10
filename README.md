@@ -24,6 +24,7 @@ Create a local PostgreSQL database:
 ```sql
 CREATE DATABASE zoro_academy;
 ```
+Flyway automatically applies all schema migrations (V1 through V17) on application startup. See `MIGRATION_NOTES.md` for migration details (including V15 competition fields, V16 refresh tokens, and V17 enquiry courses).
 
 ### 2. Backend Setup (`/backend`)
 
