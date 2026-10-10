@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { setAuthToken, clearAuthSession, getAuthToken, apiGet } from '../api/client';
+import { setAuthToken, clearAuthSession, getAuthToken, getRefreshToken, apiGet, apiPost } from '../api/client';
 import { usePolling } from '../hooks/usePolling';
 
 const AuthContext = createContext();
@@ -114,10 +114,15 @@ export function AuthProvider({ children }) {
     });
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      const refreshToken = getRefreshToken();
+      if (refreshToken) {
+        await apiPost('/auth/logout', { refreshToken });
+      }
+    } catch (e) {}
     setUser(null);
     setRole(null);
-    setAuthToken(null);
     clearAuthSession();
     setAuthNotice(null);
   };

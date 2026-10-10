@@ -20,23 +20,44 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<LoginResponse> login(@RequestBody LoginRequest request) {
-        LoginResponse response = authService.login(request);
+    public ApiResponse<LoginResponse> login(@RequestBody LoginRequest request, jakarta.servlet.http.HttpServletRequest httpRequest) {
+        String userAgent = httpRequest != null ? httpRequest.getHeader("User-Agent") : null;
+        LoginResponse response = authService.login(request, userAgent);
         return ApiResponse.ok(response, "Login successful");
     }
 
     @PostMapping("/refresh")
     public ApiResponse<LoginResponse> refresh(
             @RequestHeader(value = "Authorization", required = false) String authHeader,
-            @RequestBody(required = false) java.util.Map<String, String> body) {
+            @RequestBody(required = false) java.util.Map<String, String> body,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
         String token = null;
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            token = authHeader.substring(7);
+        if (body != null && body.containsKey("refreshToken")) {
+            token = body.get("refreshToken");
         } else if (body != null && body.containsKey("token")) {
             token = body.get("token");
+        } else if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7);
         }
-        LoginResponse response = authService.refreshToken(token);
+        String userAgent = httpRequest != null ? httpRequest.getHeader("User-Agent") : null;
+        LoginResponse response = authService.rotateRefreshToken(token, userAgent);
         return ApiResponse.ok(response, "Token refreshed successfully");
+    }
+
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(
+            @RequestBody(required = false) java.util.Map<String, String> body,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String refreshToken = null;
+        if (body != null && body.containsKey("refreshToken")) {
+            refreshToken = body.get("refreshToken");
+        } else if (body != null && body.containsKey("token")) {
+            refreshToken = body.get("token");
+        } else if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            refreshToken = authHeader.substring(7);
+        }
+        authService.logout(refreshToken);
+        return ApiResponse.ok(null, "Logged out successfully");
     }
 
     @PostMapping("/register")

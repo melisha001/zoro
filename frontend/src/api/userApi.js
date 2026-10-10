@@ -1,4 +1,4 @@
-import { apiResponse, apiGet, apiPost, apiPut, apiPatch, apiDelete, setAuthToken } from './client';
+import { apiResponse, apiGet, apiPost, apiPut, apiPatch, apiDelete, setAuthToken, setAuthTokens, getRefreshToken, clearAuthSession } from './client';
 
 /**
  * User & Authentication API
@@ -207,13 +207,15 @@ export const replaceTrainer = async (id, payload) => {
 };
 
 // --- AUTHENTICATION API ---
-export const authenticateUser = async (email, password, rememberMe = false) => {
+export const authenticateUser = async (email, password) => {
   const lowerEmail = (email || '').toLowerCase().trim();
   
-  const res = await apiPost('/auth/login', { email: lowerEmail, password, rememberMe });
+  const res = await apiPost('/auth/login', { email: lowerEmail, password });
   if (res.success && res.data && res.data.user) {
-    if (res.data.token) {
-      setAuthToken(res.data.token);
+    const accessToken = res.data.accessToken || res.data.token;
+    const refreshToken = res.data.refreshToken;
+    if (accessToken) {
+      setAuthTokens(accessToken, refreshToken);
     }
     const u = res.data.user;
     const roleUpper = (u.role || 'STUDENT').toUpperCase();
@@ -234,11 +236,29 @@ export const authenticateUser = async (email, password, rememberMe = false) => {
   return { success: false, message: res.message || 'Invalid email or password.' };
 };
 
+export const logoutUser = async () => {
+  const refreshToken = getRefreshToken();
+  try {
+    if (refreshToken) {
+      await apiPost('/auth/logout', { refreshToken });
+    }
+  } catch (e) {
+    // Ignore error on network or offline logout
+  }
+  clearAuthSession();
+};
+
 export const refreshTokenApi = async () => {
-  const res = await apiPost('/auth/refresh');
-  if (res.success && res.data && res.data.token) {
-    setAuthToken(res.data.token);
-    return res.data;
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+  const res = await apiPost('/auth/refresh', { refreshToken });
+  if (res.success && res.data) {
+    const accessToken = res.data.accessToken || res.data.token;
+    const newRefreshToken = res.data.refreshToken;
+    if (accessToken) {
+      setAuthTokens(accessToken, newRefreshToken || refreshToken);
+      return res.data;
+    }
   }
   return null;
 };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PhoneCall, LogIn, Menu, X, LayoutDashboard } from 'lucide-react';
+import { PhoneCall, LogIn, Menu, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -16,6 +16,14 @@ export default function PublicNavbar({ activeScreen, setActiveScreen, onOpenLogi
       navigate('/trainer');
     } else {
       navigate('/student');
+    }
+  };
+
+  const handleLoginClick = () => {
+    if (user) {
+      handleGoToDashboard();
+    } else {
+      onOpenLogin();
     }
   };
 
@@ -85,23 +93,13 @@ export default function PublicNavbar({ activeScreen, setActiveScreen, onOpenLogi
 
         {/* Desktop Action CTAs: Login & Enquire Now */}
         <div className="hidden md:flex items-center space-x-3">
-          {user ? (
-            <button 
-              onClick={handleGoToDashboard}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-extrabold text-sm shadow-md hover:shadow-lg transition-all flex items-center space-x-1.5 cursor-pointer"
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Go to Dashboard</span>
-            </button>
-          ) : (
-            <button 
-              onClick={onOpenLogin}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-extrabold text-sm shadow-md hover:shadow-lg transition-all flex items-center space-x-1.5 cursor-pointer"
-            >
-              <LogIn className="w-4 h-4" />
-              <span>Login</span>
-            </button>
-          )}
+          <button 
+            onClick={handleLoginClick}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-extrabold text-sm shadow-md hover:shadow-lg transition-all flex items-center space-x-1.5 cursor-pointer"
+          >
+            <LogIn className="w-4 h-4" />
+            <span>Login</span>
+          </button>
 
           <button 
             onClick={onOpenEnquire}
@@ -167,23 +165,13 @@ export default function PublicNavbar({ activeScreen, setActiveScreen, onOpenLogi
           </button>
 
           <div className="pt-2 grid grid-cols-2 gap-3">
-            {user ? (
-              <button 
-                onClick={() => { handleGoToDashboard(); setMobileMenuOpen(false); }}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-extrabold text-xs shadow flex items-center justify-center space-x-1 cursor-pointer"
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                <span>Go to Dashboard</span>
-              </button>
-            ) : (
-              <button 
-                onClick={() => { onOpenLogin(); setMobileMenuOpen(false); }}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-extrabold text-xs shadow flex items-center justify-center space-x-1 cursor-pointer"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Login</span>
-              </button>
-            )}
+            <button 
+              onClick={() => { handleLoginClick(); setMobileMenuOpen(false); }}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-extrabold text-xs shadow flex items-center justify-center space-x-1 cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>Login</span>
+            </button>
 
             <button 
               onClick={() => { onOpenEnquire(); setMobileMenuOpen(false); }}

@@ -50,7 +50,8 @@ admin:
 
 jwt:
   secret: ${JWT_SECRET}
-  expiration-ms: ${JWT_EXPIRATION_MS}
+  expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+  refresh-token-expiration-days: ${REFRESH_TOKEN_EXPIRATION_DAYS:7}
 
 cors:
   allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}

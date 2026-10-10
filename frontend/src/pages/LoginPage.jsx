@@ -7,7 +7,6 @@ export default function LoginPage({ setActiveScreen, onLoginSuccess }) {
   const { login, authNotice, clearAuthNotice } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [selectedRole, setSelectedRole] = useState('ADMIN');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -22,7 +21,7 @@ export default function LoginPage({ setActiveScreen, onLoginSuccess }) {
     setError('');
     clearAuthNotice();
 
-    const authResult = await authenticateUser(email, password, rememberMe);
+    const authResult = await authenticateUser(email, password);
     setLoading(false);
 
     if (!authResult.success) {
@@ -157,16 +156,7 @@ export default function LoginPage({ setActiveScreen, onLoginSuccess }) {
               />
             </div>
 
-            <div className="flex items-center justify-between text-xs">
-              <label className="flex items-center space-x-2 cursor-pointer select-none">
-                <input 
-                  type="checkbox" 
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
-                />
-                <span className="font-semibold text-slate-600">Keep me signed in (30 days)</span>
-              </label>
+            <div className="flex items-center justify-end text-xs">
               <a href="#" className="font-bold text-blue-600 hover:text-blue-800">Forgot password?</a>
             </div>
 

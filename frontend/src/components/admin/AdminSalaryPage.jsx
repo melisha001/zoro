@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Plus, Search, Eye, Edit2, Trash2, X } from 'lucide-react';
+import { Plus, Search, Eye, Edit2, Trash2, X } from 'lucide-react';
 import { getSalaryPayments, createSalaryPayment, updateSalaryPayment, deleteSalaryPayment, getSalaryStats } from '../../api/salaryApi';
 import { getTrainers } from '../../api/userApi';
 import ConfirmModal from '../common/ConfirmModal';

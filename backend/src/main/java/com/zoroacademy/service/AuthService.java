@@ -28,15 +28,27 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
+    private final RefreshTokenService refreshTokenService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider, RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
+        this.refreshTokenService = refreshTokenService;
     }
 
-    @Transactional(readOnly = true)
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider) {
+        this(userRepository, passwordEncoder, tokenProvider, null);
+    }
+
+    @Transactional
     public LoginResponse login(LoginRequest request) {
+        return login(request, null);
+    }
+
+    @Transactional
+    public LoginResponse login(LoginRequest request, String userAgent) {
         String identifier = request.getEmail() != null && !request.getEmail().isBlank() 
                 ? request.getEmail().trim() 
                 : request.getUsername();
@@ -59,68 +71,50 @@ public class AuthService {
             throw new IllegalArgumentException("Account is inactive. Please contact administrator.");
         }
 
-        boolean rememberMe = Boolean.TRUE.equals(request.getRememberMe());
-        String token = tokenProvider.generateToken(
-                user.getId(), user.getEmail(), user.getRole(), user.getName(), rememberMe);
+        String accessToken = tokenProvider.generateToken(
+                user.getId(), user.getEmail(), user.getRole(), user.getName());
+        String refreshToken = refreshTokenService != null ? refreshTokenService.createRefreshToken(user, userAgent) : null;
 
         return LoginResponse.builder()
-                .token(token)
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .token(accessToken)
                 .tokenType("Bearer")
                 .user(UserDto.fromEntity(user))
                 .build();
     }
 
-    @Transactional(readOnly = true)
-    public LoginResponse refreshToken(String token) {
-        if (token == null || token.isBlank()) {
-            throw new UnauthorizedException("Token is required for refresh");
+    @Transactional
+    public LoginResponse rotateRefreshToken(String rawRefreshToken, String userAgent) {
+        if (refreshTokenService == null) {
+            throw new UnauthorizedException("Refresh token service is not available");
         }
 
-        Claims claims;
-        try {
-            claims = tokenProvider.getClaimsEvenIfExpired(token);
-        } catch (Exception e) {
-            throw new UnauthorizedException("Invalid token: " + e.getMessage());
-        }
+        RefreshTokenService.RotationResult result = refreshTokenService.rotateRefreshToken(rawRefreshToken, userAgent);
+        User user = result.getUser();
 
-        Date exp = claims.getExpiration();
-        if (exp != null) {
-            long maxGraceMs = 7L * 24 * 60 * 60 * 1000L;
-            if (System.currentTimeMillis() - exp.getTime() > maxGraceMs) {
-                throw new UnauthorizedException("Token expired beyond allowed refresh window");
-            }
-        }
-
-        String rawUserId = claims.get("userId", String.class);
-        final String effectiveUserId = (rawUserId != null && !rawUserId.isBlank()) 
-                ? rawUserId 
-                : claims.getSubject();
-        final String effectiveEmail = claims.get("email", String.class);
-
-        Optional<User> userOpt = Optional.empty();
-        if (effectiveUserId != null && !effectiveUserId.isBlank()) {
-            userOpt = userRepository.findById(effectiveUserId)
-                    .or(() -> userRepository.findByEmailIgnoreCase(effectiveUserId));
-        }
-        if (userOpt.isEmpty() && effectiveEmail != null && !effectiveEmail.isBlank()) {
-            userOpt = userRepository.findByEmailIgnoreCase(effectiveEmail);
-        }
-
-        User user = userOpt.orElseThrow(() -> new UnauthorizedException("User account not found"));
-
-        if (user.getStatus() != null && !"Active".equalsIgnoreCase(user.getStatus().trim())) {
-            throw new UnauthorizedException("Account is inactive");
-        }
-
-        boolean rememberMe = Boolean.TRUE.equals(claims.get("rememberMe", Boolean.class));
-        String newToken = tokenProvider.generateToken(
-                user.getId(), user.getEmail(), user.getRole(), user.getName(), rememberMe);
+        String newAccessToken = tokenProvider.generateToken(
+                user.getId(), user.getEmail(), user.getRole(), user.getName());
 
         return LoginResponse.builder()
-                .token(newToken)
+                .accessToken(newAccessToken)
+                .refreshToken(result.getNewRefreshToken())
+                .token(newAccessToken)
                 .tokenType("Bearer")
                 .user(UserDto.fromEntity(user))
                 .build();
+    }
+
+    @Transactional
+    public LoginResponse refreshToken(String token) {
+        return rotateRefreshToken(token, null);
+    }
+
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        if (refreshTokenService != null && rawRefreshToken != null && !rawRefreshToken.isBlank()) {
+            refreshTokenService.revokeRefreshToken(rawRefreshToken);
+        }
     }
 
     @Transactional

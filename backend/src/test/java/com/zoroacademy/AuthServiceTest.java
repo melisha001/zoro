@@ -48,7 +48,7 @@ class AuthServiceTest {
             }
 
             @Override
-            public String generateToken(String userId, String email, String role, String name, boolean rememberMe) {
+            public String generateToken(String userId, String email, String role, String name) {
                 return generateTokenFromUsername(email, userId, role, name);
             }
         };
@@ -61,7 +61,6 @@ class AuthServiceTest {
         LoginRequest request = LoginRequest.builder()
                 .email("arjun@student.com")
                 .password("password123")
-                .rememberMe(true)
                 .build();
 
         LoginResponse response = authService.login(request);

@@ -32,12 +32,20 @@ export const getAuthToken = () => {
   }
 };
 
-export const setAuthToken = (token) => {
-  if (token) {
-    setItem('authToken', token);
+export const getRefreshToken = () => {
+  try {
+    return getItem('refreshToken') || localStorage.getItem('zoro_refresh_token') || localStorage.getItem('refreshToken') || null;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const setAuthTokens = (accessToken, refreshToken) => {
+  if (accessToken) {
+    setItem('authToken', accessToken);
     try {
-      localStorage.setItem('zoro_token', token);
-      localStorage.setItem('authToken', token);
+      localStorage.setItem('zoro_token', accessToken);
+      localStorage.setItem('authToken', accessToken);
     } catch (e) {}
   } else {
     try {
@@ -46,17 +54,47 @@ export const setAuthToken = (token) => {
       localStorage.removeItem('authToken');
     } catch (e) {}
   }
+
+  if (refreshToken) {
+    setItem('refreshToken', refreshToken);
+    try {
+      localStorage.setItem('zoro_refresh_token', refreshToken);
+      localStorage.setItem('refreshToken', refreshToken);
+    } catch (e) {}
+  } else if (refreshToken === null) {
+    try {
+      localStorage.removeItem(STORAGE_PREFIX + 'refreshToken');
+      localStorage.removeItem('zoro_refresh_token');
+      localStorage.removeItem('refreshToken');
+    } catch (e) {}
+  }
+};
+
+export const setAuthToken = (token, refreshToken) => {
+  setAuthTokens(token, refreshToken !== undefined ? refreshToken : getRefreshToken());
 };
 
 export const clearAuthSession = () => {
-  setAuthToken(null);
+  setAuthTokens(null, null);
   try {
     localStorage.removeItem(STORAGE_PREFIX + 'user');
     localStorage.removeItem(STORAGE_PREFIX + 'role');
     localStorage.removeItem(STORAGE_PREFIX + 'authToken');
+    localStorage.removeItem(STORAGE_PREFIX + 'refreshToken');
     localStorage.removeItem('zoro_token');
+    localStorage.removeItem('zoro_refresh_token');
     localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
   } catch (e) {}
+};
+
+export const notifySessionExpired = (message = 'Your session expired, please log in again') => {
+  clearAuthSession();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('auth:unauthorized', {
+      detail: { code: 'TOKEN_EXPIRED', message }
+    }));
+  }
 };
 
 export const parseJwt = (token) => {
@@ -78,37 +116,70 @@ export const parseJwt = (token) => {
   }
 };
 
-let isRefreshing = false;
-export const checkAndRefreshToken = async () => {
-  const token = getAuthToken();
-  if (!token || isRefreshing) return;
-  const payload = parseJwt(token);
-  if (!payload || !payload.exp || !payload.iat) return;
-  const now = Math.floor(Date.now() / 1000);
-  const total = payload.exp - payload.iat;
-  const elapsed = now - payload.iat;
+let activeRefreshPromise = null;
 
-  // Silent renewal if > 50% lifetime has elapsed and token is still valid
-  if (elapsed > total * 0.5 && now < payload.exp) {
-    isRefreshing = true;
+export const requestTokenRefresh = async () => {
+  if (activeRefreshPromise) {
+    return activeRefreshPromise;
+  }
+
+  const currentRefreshToken = getRefreshToken();
+  if (!currentRefreshToken) {
+    notifySessionExpired();
+    return null;
+  }
+
+  activeRefreshPromise = (async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: currentRefreshToken })
       });
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.data?.token) {
-          setAuthToken(json.data.token);
+
+      let json = null;
+      try {
+        json = await res.json();
+      } catch (e) {}
+
+      if (res.ok && json?.success && json?.data) {
+        const newAccessToken = json.data.accessToken || json.data.token;
+        const newRefreshToken = json.data.refreshToken;
+        if (newAccessToken) {
+          setAuthTokens(newAccessToken, newRefreshToken || currentRefreshToken);
+          return newAccessToken;
         }
       }
-    } catch (e) {
-      console.warn('Silent token renewal failed:', e);
+
+      // Refresh failed (expired/revoked/invalid)
+      const errMsg = json?.message || 'Your session expired, please log in again';
+      notifySessionExpired(errMsg);
+      return null;
+    } catch (err) {
+      notifySessionExpired('Your session expired, please log in again');
+      return null;
     } finally {
-      isRefreshing = false;
+      activeRefreshPromise = null;
+    }
+  })();
+
+  return activeRefreshPromise;
+};
+
+export const checkAndRefreshToken = async () => {
+  const token = getAuthToken();
+  if (!token || activeRefreshPromise) return;
+  const payload = parseJwt(token);
+  if (!payload || !payload.exp) return;
+  const now = Math.floor(Date.now() / 1000);
+  const remainingSeconds = payload.exp - now;
+
+  // Proactively refresh ~5 minutes (300 seconds) before access token expires
+  if (remainingSeconds <= 300 && remainingSeconds > 0) {
+    try {
+      await requestTokenRefresh();
+    } catch (e) {
+      console.warn('Proactive token renewal failed:', e);
     }
   }
 };
@@ -118,12 +189,12 @@ export const apiResponse = (data, success = true, message = 'Success') => {
   return Promise.resolve({ success, data, message });
 };
 
-// Live REST API fetch with automatic Authorization header and error recovery
-export const apiFetch = async (endpoint, options = {}) => {
+// Live REST API fetch with automatic Authorization header, single-flight refresh and retry
+export const apiFetch = async (endpoint, options = {}, isRetry = false) => {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${cleanEndpoint}`;
 
-  if (!cleanEndpoint.includes('/auth/refresh') && !cleanEndpoint.includes('/auth/login')) {
+  if (!cleanEndpoint.includes('/auth/refresh') && !cleanEndpoint.includes('/auth/login') && !cleanEndpoint.includes('/auth/logout')) {
     checkAndRefreshToken().catch(() => {});
   }
 
@@ -148,13 +219,21 @@ export const apiFetch = async (endpoint, options = {}) => {
       const code = json?.code || 'UNAUTHORIZED';
       const message = json?.message || 'Session expired or unauthorized. Please log in.';
 
-      // Clear token and user session ONLY on structured 401 codes
-      const isTerminalAuthFailure = 
-        code === 'TOKEN_EXPIRED' || 
-        code === 'ACCOUNT_REMOVED' || 
-        code === 'ACCOUNT_DISABLED';
+      // If token expired, single-flight refresh and retry original request
+      const isAuthEndpoint = cleanEndpoint.startsWith('/auth/');
+      if (!isRetry && !isAuthEndpoint && (code === 'TOKEN_EXPIRED' || token)) {
+        const newAccessToken = await requestTokenRefresh();
+        if (newAccessToken) {
+          const retryHeaders = {
+            ...headers,
+            'Authorization': `Bearer ${newAccessToken}`
+          };
+          return await apiFetch(endpoint, { ...options, headers: retryHeaders }, true);
+        }
+      }
 
-      if (isTerminalAuthFailure) {
+      // Terminal auth failure
+      if (code === 'ACCOUNT_REMOVED' || code === 'ACCOUNT_DISABLED' || code === 'TOKEN_EXPIRED') {
         clearAuthSession();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code, message } }));
@@ -187,6 +266,7 @@ export const apiFetch = async (endpoint, options = {}) => {
 
       return errorPayload;
     }
+
     return json;
   } catch (err) {
     const errorPayload = {

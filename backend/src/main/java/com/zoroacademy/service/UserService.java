@@ -35,6 +35,7 @@ public class UserService {
     private final StudentModuleProgressRepository studentModuleProgressRepository;
     private final EnrollmentRequestRepository enrollmentRequestRepository;
     private final CompetitionRegistrationRepository competitionRegistrationRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     public UserService(UserRepository userRepository,
@@ -55,7 +56,8 @@ public class UserService {
                        StudentProgressRepository studentProgressRepository,
                        StudentModuleProgressRepository studentModuleProgressRepository,
                        EnrollmentRequestRepository enrollmentRequestRepository,
-                       CompetitionRegistrationRepository competitionRegistrationRepository) {
+                       CompetitionRegistrationRepository competitionRegistrationRepository,
+                       RefreshTokenRepository refreshTokenRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.studentCourseBatchRepository = studentCourseBatchRepository;
@@ -75,6 +77,7 @@ public class UserService {
         this.studentModuleProgressRepository = studentModuleProgressRepository;
         this.enrollmentRequestRepository = enrollmentRequestRepository;
         this.competitionRegistrationRepository = competitionRegistrationRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
     }
 
     public UserService(UserRepository userRepository,
@@ -91,7 +94,7 @@ public class UserService {
         this(userRepository, passwordEncoder, studentCourseBatchRepository, enrollmentRepository,
              courseRepository, batchRepository, scheduleRepository, studentFeeRepository,
              enrollmentService, notificationService, activityLogService,
-             null, null, null, null, null, null, null, null);
+             null, null, null, null, null, null, null, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -513,6 +516,9 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(newPassword));
         user.setMustChangePassword(false);
         userRepository.save(user);
+        if (refreshTokenRepository != null) {
+            refreshTokenRepository.revokeAllByUserId(user.getId());
+        }
         return true;
     }
 
@@ -526,6 +532,10 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(tempPassword));
         user.setMustChangePassword(true);
         user = userRepository.save(user);
+
+        if (refreshTokenRepository != null) {
+            refreshTokenRepository.revokeAllByUserId(user.getId());
+        }
 
         UserDto dto = convertUserToDto(user);
         dto.setTemporaryPassword(tempPassword);
@@ -543,6 +553,11 @@ public class UserService {
 
         user.setStatus(status.trim());
         user = userRepository.save(user);
+
+        if (refreshTokenRepository != null && !"Active".equalsIgnoreCase(status.trim())) {
+            refreshTokenRepository.revokeAllByUserId(user.getId());
+        }
+
         return convertUserToDto(user);
     }
 
@@ -586,6 +601,10 @@ public class UserService {
                     throw new com.zoroacademy.exception.ConflictException("Cannot delete student with " + pendingFees.size() + " pending fee records.");
                 }
             }
+        }
+
+        if (refreshTokenRepository != null) {
+            refreshTokenRepository.revokeAllByUserId(user.getId());
         }
 
         // Cascaded removal of student's dependents in ONE transaction

@@ -73,7 +73,8 @@ CREATE DATABASE zoro_academy;
 | `ADMIN_EMAIL` | Spring | Bootstrap administrator account email |
 | `ADMIN_PASSWORD` | Spring | Bootstrap administrator account password |
 | `JWT_SECRET` | Spring | Secret key for signing and verifying JWT tokens |
-| `JWT_EXPIRATION_MS` | Spring | JWT token validity duration in milliseconds |
+| `JWT_EXPIRATION_MS` | Spring | JWT access token validity duration in milliseconds (default: 3600000 = 1 hour) |
+| `REFRESH_TOKEN_EXPIRATION_DAYS` | Spring | Refresh token validity in days (default: 7 days) |
 | `CORS_ORIGINS` | Spring | Comma-separated list of allowed CORS origins |
 | `RAZORPAY_KEY_ID` | Razorpay | Razorpay payment gateway API Key ID |
 | `RAZORPAY_KEY_SECRET` | Razorpay | Razorpay payment gateway API Key Secret |
@@ -122,4 +123,11 @@ CREATE DATABASE zoro_academy;
 - `/trainer/*`: Trainer portal (Protected by role check: `TRAINER`).
 - `/student/*`: Student portal (Protected by role check: `STUDENT`).
 
-Unauthenticated access to any protected route immediately redirects to the public landing page. Roles are strictly validated from authenticated JWT tokens retrieved via `/api/auth/me` on session restoration.
+### Session & Token Lifecycle
+- **Access JWT**: 1 hour validity (`JWT_EXPIRATION_MS=3600000`). Used for authenticating API requests.
+- **Refresh Token**: 7 days validity (`REFRESH_TOKEN_EXPIRATION_DAYS=7`). Random opaque 256-bit value stored as a SHA-256 hash in the `refresh_tokens` database table.
+- **Rotation & Reuse Detection**: Each call to `/api/auth/refresh` rotates the refresh token (revokes the presented token and issues a new 7-day token). If an already-revoked refresh token is presented (reuse attempt), all refresh tokens for that user are immediately revoked.
+- **Revocation**: Logging out (`/api/auth/logout`), deleting or disabling a user account, or resetting/changing passwords immediately revokes all refresh tokens.
+- **Storage Note**: Tokens are currently stored in browser `localStorage` (note the XSS trade-off; a future hardening enhancement can migrate refresh tokens to Secure httpOnly SameSite cookies).
+- **Navbar Behavior**: Public navigation always displays "Login" and "Enquire Now". Clicking "Login" while already having a valid active session immediately navigates to the user's role-specific dashboard.
+- Unauthenticated access to any protected route immediately redirects to the public landing page. Roles are strictly validated from authenticated JWT tokens retrieved via `/api/auth/me` on session restoration.

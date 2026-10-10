@@ -7,7 +7,6 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   const { login, authNotice, clearAuthNotice } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -26,7 +25,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
     clearAuthNotice();
 
     // Validate credentials against database
-    const authResult = await authenticateUser(email, password, rememberMe);
+    const authResult = await authenticateUser(email, password);
     setLoading(false);
 
     if (!authResult.success) {
@@ -139,18 +138,6 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-1">
-            <label className="flex items-center space-x-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              />
-              <span>Keep me signed in (30 days)</span>
-            </label>
           </div>
 
           <button

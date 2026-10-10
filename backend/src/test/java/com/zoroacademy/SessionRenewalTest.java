@@ -1,120 +1,253 @@
 package com.zoroacademy;
 
+import com.zoroacademy.dto.LoginRequest;
 import com.zoroacademy.dto.LoginResponse;
+import com.zoroacademy.entity.RefreshToken;
 import com.zoroacademy.entity.User;
 import com.zoroacademy.exception.UnauthorizedException;
+import com.zoroacademy.repository.RefreshTokenRepository;
 import com.zoroacademy.repository.UserRepository;
 import com.zoroacademy.security.JwtTokenProvider;
 import com.zoroacademy.service.AuthService;
+import com.zoroacademy.service.RefreshTokenService;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.util.Date;
-import java.util.Optional;
+import java.lang.reflect.Field;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 class SessionRenewalTest {
 
     private JwtTokenProvider tokenProvider;
     private UserRepository userRepository;
+    private RefreshTokenRepository refreshTokenRepository;
     private PasswordEncoder passwordEncoder;
+    private RefreshTokenService refreshTokenService;
     private AuthService authService;
+
+    private final Map<String, RefreshToken> tokenStorage = new ConcurrentHashMap<>();
+    private User testUser;
 
     @BeforeEach
     void setUp() throws Exception {
         tokenProvider = new JwtTokenProvider();
-        java.lang.reflect.Field secretField = JwtTokenProvider.class.getDeclaredField("jwtSecret");
+        Field secretField = JwtTokenProvider.class.getDeclaredField("jwtSecret");
         secretField.setAccessible(true);
         secretField.set(tokenProvider, "Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=");
 
-        java.lang.reflect.Field expField = JwtTokenProvider.class.getDeclaredField("jwtExpirationMs");
+        Field expField = JwtTokenProvider.class.getDeclaredField("jwtExpirationMs");
         expField.setAccessible(true);
-        expField.set(tokenProvider, 28800000L); // 8 hours
+        expField.set(tokenProvider, 3600000L); // 1 hour
 
         tokenProvider.init();
 
-        userRepository = mock(UserRepository.class);
-        passwordEncoder = mock(PasswordEncoder.class);
-        authService = new AuthService(userRepository, passwordEncoder, tokenProvider);
-    }
-
-    @Test
-    void testTokenSubjectIsUserIdAndRememberMeSetsLongerExpiration() {
-        String shortToken = tokenProvider.generateToken("user-101", "student@zoro.com", "STUDENT", "Student User", false);
-        String longToken = tokenProvider.generateToken("user-101", "student@zoro.com", "STUDENT", "Student User", true);
-
-        assertEquals("user-101", tokenProvider.getUserIdFromJwt(shortToken));
-        assertEquals("student@zoro.com", tokenProvider.getUsernameFromJwt(shortToken));
-
-        Claims shortClaims = tokenProvider.getClaimsFromJwt(shortToken);
-        Claims longClaims = tokenProvider.getClaimsFromJwt(longToken);
-
-        assertEquals("user-101", shortClaims.getSubject());
-        assertEquals("student@zoro.com", shortClaims.get("email"));
-        assertEquals(false, shortClaims.get("rememberMe"));
-        assertEquals(true, longClaims.get("rememberMe"));
-
-        Date shortExp = shortClaims.getExpiration();
-        Date longExp = longClaims.getExpiration();
-
-        long shortDurationMs = shortExp.getTime() - shortClaims.getIssuedAt().getTime();
-        long longDurationMs = longExp.getTime() - longClaims.getIssuedAt().getTime();
-
-        assertTrue(shortDurationMs <= 28805000L); // ~8 hours
-        assertTrue(longDurationMs >= 2591000000L); // ~30 days
-    }
-
-    @Test
-    void testRefreshTokenSuccess() {
-        String token = tokenProvider.generateToken("user-202", "trainer@zoro.com", "TRAINER", "Trainer Zoro", true);
-
-        User activeTrainer = User.builder()
-                .id("user-202")
-                .email("trainer@zoro.com")
-                .name("Trainer Zoro")
-                .role("TRAINER")
+        testUser = User.builder()
+                .id("usr_test_123")
+                .email("student@zoro.com")
+                .name("Test Student")
+                .role("STUDENT")
                 .status("Active")
                 .password("encoded_pass")
                 .build();
 
-        when(userRepository.findById("user-202")).thenReturn(Optional.of(activeTrainer));
+        userRepository = mock(UserRepository.class);
+        when(userRepository.findById("usr_test_123")).thenReturn(Optional.of(testUser));
+        when(userRepository.findByEmailIgnoreCase("student@zoro.com")).thenReturn(Optional.of(testUser));
 
-        LoginResponse refreshResponse = authService.refreshToken(token);
+        passwordEncoder = mock(PasswordEncoder.class);
+        when(passwordEncoder.matches("password123", "encoded_pass")).thenReturn(true);
 
-        assertNotNull(refreshResponse);
-        assertNotNull(refreshResponse.getToken());
-        assertEquals("user-202", refreshResponse.getUser().getId());
-        assertEquals("trainer@zoro.com", refreshResponse.getUser().getEmail());
+        tokenStorage.clear();
+        refreshTokenRepository = mock(RefreshTokenRepository.class);
 
-        Claims refreshedClaims = tokenProvider.getClaimsFromJwt(refreshResponse.getToken());
-        assertEquals(true, refreshedClaims.get("rememberMe"));
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> {
+            RefreshToken rt = invocation.getArgument(0);
+            tokenStorage.put(rt.getTokenHash(), rt);
+            return rt;
+        });
+
+        when(refreshTokenRepository.findByTokenHash(anyString())).thenAnswer(invocation -> {
+            String hash = invocation.getArgument(0);
+            return Optional.ofNullable(tokenStorage.get(hash));
+        });
+
+        when(refreshTokenRepository.revokeAllByUserId(anyString())).thenAnswer(invocation -> {
+            String uid = invocation.getArgument(0);
+            int count = 0;
+            for (RefreshToken rt : tokenStorage.values()) {
+                if (uid.equals(rt.getUserId()) && !Boolean.TRUE.equals(rt.getRevoked())) {
+                    rt.setRevoked(true);
+                    count++;
+                }
+            }
+            return count;
+        });
+
+        refreshTokenService = new RefreshTokenService(refreshTokenRepository, userRepository);
+        authService = new AuthService(userRepository, passwordEncoder, tokenProvider, refreshTokenService);
     }
 
     @Test
-    void testRefreshTokenFailsWhenAccountDeactivated() {
-        String token = tokenProvider.generateToken("user-303", "deactivated@zoro.com", "STUDENT", "Deactivated Student", false);
-
-        User disabledStudent = User.builder()
-                .id("user-303")
-                .email("deactivated@zoro.com")
-                .name("Deactivated Student")
-                .role("STUDENT")
-                .status("Inactive")
-                .password("encoded_pass")
+    void testLoginReturnsBothTokens() {
+        LoginRequest request = LoginRequest.builder()
+                .email("student@zoro.com")
+                .password("password123")
                 .build();
 
-        when(userRepository.findById("user-303")).thenReturn(Optional.of(disabledStudent));
+        LoginResponse response = authService.login(request, "JUnit-Agent");
 
-        assertThrows(UnauthorizedException.class, () -> authService.refreshToken(token));
+        assertNotNull(response);
+        assertNotNull(response.getAccessToken(), "Login must return an accessToken");
+        assertNotNull(response.getRefreshToken(), "Login must return a refreshToken");
+        assertEquals("Bearer", response.getTokenType());
+        assertEquals("usr_test_123", response.getUser().getId());
+
+        // Validate access token claims
+        Claims claims = tokenProvider.getClaimsFromJwt(response.getAccessToken());
+        assertEquals("usr_test_123", claims.getSubject());
+        assertEquals("student@zoro.com", claims.get("email"));
+        assertEquals("STUDENT", claims.get("role"));
+        assertNull(claims.get("rememberMe"), "rememberMe claim must be removed");
+
+        // Validate refresh token is 256-bit (64 hex characters) and persisted hashed
+        assertEquals(64, response.getRefreshToken().length());
+        String tokenHash = RefreshTokenService.hashToken(response.getRefreshToken());
+        assertTrue(tokenStorage.containsKey(tokenHash));
+        assertFalse(tokenStorage.get(tokenHash).getRevoked());
     }
 
     @Test
-    void testRefreshTokenFailsWhenNullOrEmpty() {
-        assertThrows(UnauthorizedException.class, () -> authService.refreshToken(null));
-        assertThrows(UnauthorizedException.class, () -> authService.refreshToken("   "));
+    void testRefreshRotatesTokens() {
+        LoginRequest request = LoginRequest.builder()
+                .email("student@zoro.com")
+                .password("password123")
+                .build();
+
+        LoginResponse loginResponse = authService.login(request);
+        String initialRefreshToken = loginResponse.getRefreshToken();
+        String initialTokenHash = RefreshTokenService.hashToken(initialRefreshToken);
+
+        // Perform rotation
+        LoginResponse rotated = authService.rotateRefreshToken(initialRefreshToken, "JUnit-Agent-Rotate");
+
+        assertNotNull(rotated.getAccessToken());
+        assertNotNull(rotated.getRefreshToken());
+        assertNotEquals(initialRefreshToken, rotated.getRefreshToken(), "Rotated refresh token must be a new opaque token");
+
+        // Old token must be revoked
+        RefreshToken oldRecord = tokenStorage.get(initialTokenHash);
+        assertNotNull(oldRecord);
+        assertTrue(oldRecord.getRevoked(), "Old refresh token must be revoked on rotation");
+
+        // New token must be active
+        String newTokenHash = RefreshTokenService.hashToken(rotated.getRefreshToken());
+        RefreshToken newRecord = tokenStorage.get(newTokenHash);
+        assertNotNull(newRecord);
+        assertFalse(newRecord.getRevoked(), "New refresh token must be active");
+    }
+
+    @Test
+    void testReuseOfOldRefreshTokenIsRejectedAndRevokesAll() {
+        LoginRequest request = LoginRequest.builder()
+                .email("student@zoro.com")
+                .password("password123")
+                .build();
+
+        LoginResponse loginResponse = authService.login(request);
+        String initialRefreshToken = loginResponse.getRefreshToken();
+
+        // 1st rotation - valid
+        LoginResponse rotatedResponse = authService.rotateRefreshToken(initialRefreshToken, "JUnit");
+        String activeRefreshToken = rotatedResponse.getRefreshToken();
+
+        // Reusing the initial refresh token should trigger reuse detection
+        UnauthorizedException ex = assertThrows(UnauthorizedException.class, () ->
+                authService.rotateRefreshToken(initialRefreshToken, "Attacker-Agent")
+        );
+        assertTrue(ex.getMessage().contains("Revoked refresh token reused"),
+                "Exception message must identify token reuse");
+
+        // Active token of user must now be revoked due to reuse detection
+        String activeHash = RefreshTokenService.hashToken(activeRefreshToken);
+        assertTrue(tokenStorage.get(activeHash).getRevoked(),
+                "All tokens for user must be revoked upon reuse detection");
+    }
+
+    @Test
+    void testRefreshAfterUserDeletionFails() {
+        LoginRequest request = LoginRequest.builder()
+                .email("student@zoro.com")
+                .password("password123")
+                .build();
+
+        LoginResponse loginResponse = authService.login(request);
+        String refreshToken = loginResponse.getRefreshToken();
+
+        // Simulate user deletion
+        when(userRepository.findById("usr_test_123")).thenReturn(Optional.empty());
+
+        assertThrows(UnauthorizedException.class, () ->
+                authService.rotateRefreshToken(refreshToken, "JUnit")
+        );
+    }
+
+    @Test
+    void testAccessTokenExpiryAfter1Hour() throws Exception {
+        // Normal 1 hour token
+        String token = tokenProvider.generateToken("usr_test_123", "student@zoro.com", "STUDENT", "Student");
+        assertTrue(tokenProvider.validateToken(token));
+
+        Claims claims = tokenProvider.getClaimsFromJwt(token);
+        long durationMs = claims.getExpiration().getTime() - claims.getIssuedAt().getTime();
+        assertEquals(3600000L, durationMs, 5000L, "Token duration must be 1 hour (3600000 ms)");
+
+        // Token generated with clock in the past (expired)
+        JwtTokenProvider shortClockProvider = new JwtTokenProvider();
+        Field secretField = JwtTokenProvider.class.getDeclaredField("jwtSecret");
+        secretField.setAccessible(true);
+        secretField.set(shortClockProvider, "Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=");
+
+        Field expField = JwtTokenProvider.class.getDeclaredField("jwtExpirationMs");
+        expField.setAccessible(true);
+        expField.set(shortClockProvider, 100L); // 100 ms
+
+        shortClockProvider.init();
+
+        String fastExpiringToken = shortClockProvider.generateToken("usr_test_123", "student@zoro.com", "STUDENT", "Student");
+        Thread.sleep(150);
+
+        assertFalse(shortClockProvider.validateToken(fastExpiringToken), "Token must expire after expiration window");
+    }
+
+    @Test
+    void testLogoutRevokesRefreshToken() {
+        LoginRequest request = LoginRequest.builder()
+                .email("student@zoro.com")
+                .password("password123")
+                .build();
+
+        LoginResponse loginResponse = authService.login(request);
+        String refreshToken = loginResponse.getRefreshToken();
+        String tokenHash = RefreshTokenService.hashToken(refreshToken);
+
+        assertFalse(tokenStorage.get(tokenHash).getRevoked());
+
+        authService.logout(refreshToken);
+
+        assertTrue(tokenStorage.get(tokenHash).getRevoked(), "Refresh token must be revoked on logout");
+
+        // Subsequent refresh with revoked token should fail
+        assertThrows(UnauthorizedException.class, () ->
+                authService.rotateRefreshToken(refreshToken, "JUnit")
+        );
     }
 }

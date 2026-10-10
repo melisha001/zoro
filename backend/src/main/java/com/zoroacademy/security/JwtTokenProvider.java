@@ -18,7 +18,7 @@ public class JwtTokenProvider {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    @Value("${jwt.expiration-ms:${jwt.expiration:604800000}}")
+    @Value("${jwt.expiration-ms:${jwt.expiration:3600000}}")
     private long jwtExpirationMs;
 
     private SecretKey signingKey;
@@ -47,19 +47,13 @@ public class JwtTokenProvider {
     }
 
     public String generateToken(Authentication authentication) {
-        return generateToken(authentication, false);
-    }
-
-    public String generateToken(Authentication authentication, boolean rememberMe) {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
-        return generateToken(userPrincipal.getId(), userPrincipal.getEmail(), userPrincipal.getRole(), userPrincipal.getName(), rememberMe);
+        return generateToken(userPrincipal.getId(), userPrincipal.getEmail(), userPrincipal.getRole(), userPrincipal.getName());
     }
 
-    public String generateToken(String userId, String email, String role, String name, boolean rememberMe) {
+    public String generateToken(String userId, String email, String role, String name) {
         Date now = new Date();
-        long duration = rememberMe 
-                ? (30L * 24 * 60 * 60 * 1000L) 
-                : (jwtExpirationMs > 0 ? jwtExpirationMs : (8L * 60 * 60 * 1000L));
+        long duration = jwtExpirationMs > 0 ? jwtExpirationMs : 3600000L;
         Date expiryDate = new Date(now.getTime() + duration);
 
         return Jwts.builder()
@@ -68,7 +62,6 @@ public class JwtTokenProvider {
                 .claim("email", email)
                 .claim("role", role)
                 .claim("name", name)
-                .claim("rememberMe", rememberMe)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey(), Jwts.SIG.HS256)
@@ -76,7 +69,7 @@ public class JwtTokenProvider {
     }
 
     public String generateTokenFromUsername(String email, String userId, String role, String name) {
-        return generateToken(userId, email, role, name, false);
+        return generateToken(userId, email, role, name);
     }
 
     public Claims getClaimsFromJwt(String token) {
