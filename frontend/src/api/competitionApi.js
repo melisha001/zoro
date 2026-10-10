@@ -6,21 +6,27 @@ export const getCompetitions = async () => {
   if (res && res.success && Array.isArray(res.data)) {
     const normalized = res.data.map(c => ({
       id: c.id,
-      name: c.title || c.name || 'Competition',
-      title: c.title || c.name || 'Competition',
+      title: c.title || 'Competition',
+      name: c.title || 'Competition',
       category: c.category || 'Academic',
       description: c.description || '',
       startDate: c.startDate || '',
       endDate: c.endDate || '',
-      date: c.startDate || '',
-      fee: parseFloat(c.registrationFee || 0),
-      registrationFee: parseFloat(c.registrationFee || 0),
+      regStartDate: c.regStartDate || '',
+      regEndDate: c.regEndDate || '',
+      startTime: c.startTime || '',
+      endTime: c.endTime || '',
+      venue: c.venue || '',
+      bannerUrl: c.bannerUrl || '',
+      rulesPdfUrl: c.rulesPdfUrl || '',
+      registrationFormUrl: c.registrationFormUrl || '',
+      instructions: c.instructions || '',
       rules: c.rules || '',
+      contactDetails: c.contactDetails || '',
+      registrationFee: parseFloat(c.registrationFee || 0),
       status: c.status || 'Active',
       modules: c.modules || [],
-      registrations: c.registrations || [],
-      venue: 'Online (Zoro Portal)',
-      instructions: c.rules || ''
+      registrations: c.registrations || []
     }));
     return apiResponse(normalized);
   }
@@ -32,13 +38,23 @@ export const createCompetition = async (newCompData) => {
     return apiResponse(null, false, 'Competition title is required');
   }
   const payload = {
-    title: newCompData.title || newCompData.name,
+    title: (newCompData.title || newCompData.name || '').trim(),
     category: newCompData.category || 'Academic',
-    startDate: newCompData.startDate || newCompData.date || '',
-    endDate: newCompData.endDate || newCompData.date || '',
-    registrationFee: parseFloat(newCompData.registrationFee || newCompData.fee || 0),
     description: newCompData.description || '',
-    rules: newCompData.rules || newCompData.instructions || '',
+    startDate: newCompData.startDate || '',
+    endDate: newCompData.endDate || '',
+    regStartDate: newCompData.regStartDate || '',
+    regEndDate: newCompData.regEndDate || '',
+    startTime: newCompData.startTime || '',
+    endTime: newCompData.endTime || '',
+    venue: newCompData.venue || '',
+    bannerUrl: newCompData.bannerUrl || '',
+    rulesPdfUrl: newCompData.rulesPdfUrl || '',
+    registrationFormUrl: newCompData.registrationFormUrl || '',
+    instructions: newCompData.instructions || '',
+    rules: newCompData.rules || '',
+    contactDetails: newCompData.contactDetails || '',
+    registrationFee: parseFloat(newCompData.registrationFee || 0),
     status: newCompData.status || 'Active'
   };
 
@@ -55,13 +71,23 @@ export const updateCompetition = async (id, updatedData) => {
     return apiResponse(null, false, 'Competition ID is required');
   }
   const payload = {
-    title: updatedData.title || updatedData.name,
+    title: (updatedData.title || updatedData.name || '').trim(),
     category: updatedData.category || 'Academic',
-    startDate: updatedData.startDate || updatedData.date,
-    endDate: updatedData.endDate || updatedData.date,
-    registrationFee: parseFloat(updatedData.registrationFee || updatedData.fee || 0),
-    description: updatedData.description,
-    rules: updatedData.rules || updatedData.instructions,
+    description: updatedData.description || '',
+    startDate: updatedData.startDate || '',
+    endDate: updatedData.endDate || '',
+    regStartDate: updatedData.regStartDate || '',
+    regEndDate: updatedData.regEndDate || '',
+    startTime: updatedData.startTime || '',
+    endTime: updatedData.endTime || '',
+    venue: updatedData.venue || '',
+    bannerUrl: updatedData.bannerUrl || '',
+    rulesPdfUrl: updatedData.rulesPdfUrl || '',
+    registrationFormUrl: updatedData.registrationFormUrl || '',
+    instructions: updatedData.instructions || '',
+    rules: updatedData.rules || '',
+    contactDetails: updatedData.contactDetails || '',
+    registrationFee: parseFloat(updatedData.registrationFee || 0),
     status: updatedData.status || 'Active'
   };
 

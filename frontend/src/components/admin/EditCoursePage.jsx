@@ -34,7 +34,6 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
             title: '',
             description: '',
             duration: '3 Months',
-            price: '',
             mode: 'Online',
             trainerId: c.trainerId || matchedTrainer?.id || '',
             assignedTrainer: c.assignedTrainer || matchedTrainer?.name || '',

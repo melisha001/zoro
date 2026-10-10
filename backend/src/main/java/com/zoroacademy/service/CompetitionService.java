@@ -128,6 +128,16 @@ public class CompetitionService {
         if (updated.getCategory() != null) comp.setCategory(updated.getCategory());
         if (updated.getStartDate() != null) comp.setStartDate(updated.getStartDate());
         if (updated.getEndDate() != null) comp.setEndDate(updated.getEndDate());
+        if (updated.getRegStartDate() != null) comp.setRegStartDate(updated.getRegStartDate());
+        if (updated.getRegEndDate() != null) comp.setRegEndDate(updated.getRegEndDate());
+        if (updated.getStartTime() != null) comp.setStartTime(updated.getStartTime());
+        if (updated.getEndTime() != null) comp.setEndTime(updated.getEndTime());
+        if (updated.getVenue() != null) comp.setVenue(updated.getVenue());
+        if (updated.getBannerUrl() != null) comp.setBannerUrl(updated.getBannerUrl());
+        if (updated.getRulesPdfUrl() != null) comp.setRulesPdfUrl(updated.getRulesPdfUrl());
+        if (updated.getRegistrationFormUrl() != null) comp.setRegistrationFormUrl(updated.getRegistrationFormUrl());
+        if (updated.getInstructions() != null) comp.setInstructions(updated.getInstructions());
+        if (updated.getContactDetails() != null) comp.setContactDetails(updated.getContactDetails());
         if (updated.getRegistrationFee() != null) comp.setRegistrationFee(updated.getRegistrationFee());
         if (updated.getDescription() != null) comp.setDescription(updated.getDescription());
         if (updated.getRules() != null) comp.setRules(updated.getRules());

@@ -4,6 +4,7 @@ import { getCourses } from '../../api/courseApi';
 import { getCompetitions } from '../../api/competitionApi';
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 import { resolveFileUrl } from '../../api/fileApi';
+import { formatDate } from '../../utils/dateFormatter';
 
 export default function HomePage({ setActiveScreen, onOpenEnquire }) {
   const [courses, setCourses] = useState([]);
@@ -186,59 +187,86 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
       </section>
       )}
 
-      {/* NATIONAL COMPETITION SPOTLIGHT - Dynamic Sync (Requirement #7 & #8) */}
-      {featuredComp && (
-        <section className="bg-slate-900 text-white py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="space-y-4">
-              <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider">
-                {featuredComp.status || 'Active Event'}
-              </span>
-              <h2 className="text-3xl font-black">{featuredComp.name}</h2>
-              <p className="text-slate-300 text-sm max-w-xl line-clamp-3">{featuredComp.description}</p>
-              <div className="flex flex-wrap items-center gap-6 text-xs text-slate-300 pt-2">
-                <div>
-                  <strong className="text-blue-300 block text-sm sm:text-base font-bold">
-                    {featuredComp.regStartDate || '01/10/2026'} – {featuredComp.regEndDate || featuredComp.deadline || '08/10/2026'}
-                  </strong> 
-                  Registration Dates
+      {/* NATIONAL COMPETITION SPOTLIGHT - Dynamic Sync */}
+      {featuredComp && (() => {
+        const compTitle = featuredComp.title || featuredComp.name || 'Competition';
+        const compFee = Number(featuredComp.registrationFee || 0);
+
+        return (
+          <section className="bg-slate-900 text-white py-16">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-8">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider">
+                    {featuredComp.status || 'Active Event'}
+                  </span>
+                  {featuredComp.category && (
+                    <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider">
+                      {featuredComp.category}
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <strong className="text-white block text-sm sm:text-base font-bold">
-                    {featuredComp.startDate || featuredComp.date}
-                    {featuredComp.endDate && featuredComp.endDate !== (featuredComp.startDate || featuredComp.date) ? ` – ${featuredComp.endDate}` : ''}
-                  </strong> 
-                  Competition Dates
-                </div>
-                <div>
-                  <strong className="text-white block text-sm sm:text-base font-bold">
-                    {featuredComp.startTime || '10:00 AM'} - {featuredComp.endTime || '01:00 PM'}
-                  </strong> 
-                  Timing
-                </div>
-                <div>
-                  <strong className="text-emerald-400 block text-sm sm:text-base font-black">
-                    {Number(featuredComp.registrationFee ?? featuredComp.fee ?? 0) > 0 ? `₹${featuredComp.registrationFee ?? featuredComp.fee}` : 'FREE'}
-                  </strong> 
-                  Fee
-                </div>
-                <div>
-                  <strong className="text-white block text-sm sm:text-base">
-                    {featuredComp.venue || 'Online'}
-                  </strong> 
-                  Venue
+
+                <h2 className="text-3xl font-black">{compTitle}</h2>
+                {featuredComp.description && (
+                  <p className="text-slate-300 text-sm max-w-xl line-clamp-3">{featuredComp.description}</p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-6 text-xs text-slate-300 pt-2">
+                  {(featuredComp.regStartDate || featuredComp.regEndDate) && (
+                    <div>
+                      <strong className="text-blue-300 block text-sm sm:text-base font-bold">
+                        {formatDate(featuredComp.regStartDate)}{featuredComp.regEndDate ? ` – ${formatDate(featuredComp.regEndDate)}` : ''}
+                      </strong> 
+                      Registration Dates
+                    </div>
+                  )}
+
+                  {(featuredComp.startDate || featuredComp.endDate) && (
+                    <div>
+                      <strong className="text-white block text-sm sm:text-base font-bold">
+                        {formatDate(featuredComp.startDate)}{featuredComp.endDate && featuredComp.endDate !== featuredComp.startDate ? ` – ${formatDate(featuredComp.endDate)}` : ''}
+                      </strong> 
+                      Competition Dates
+                    </div>
+                  )}
+
+                  {(featuredComp.startTime || featuredComp.endTime) && (
+                    <div>
+                      <strong className="text-white block text-sm sm:text-base font-bold">
+                        {featuredComp.startTime}{featuredComp.endTime ? ` - ${featuredComp.endTime}` : ''}
+                      </strong> 
+                      Timing
+                    </div>
+                  )}
+
+                  <div>
+                    <strong className="text-emerald-400 block text-sm sm:text-base font-black">
+                      {compFee > 0 ? `₹${compFee.toLocaleString('en-IN')}` : 'FREE'}
+                    </strong> 
+                    Fee
+                  </div>
+
+                  {featuredComp.venue && (
+                    <div>
+                      <strong className="text-white block text-sm sm:text-base font-bold">
+                        {featuredComp.venue}
+                      </strong> 
+                      Venue
+                    </div>
+                  )}
                 </div>
               </div>
+              <button
+                onClick={() => setActiveScreen('public-competition')}
+                className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-8 py-4 rounded-xl text-base shadow-lg transition-transform transform hover:scale-105 shrink-0 cursor-pointer"
+              >
+                Explore Competition
+              </button>
             </div>
-            <button
-              onClick={() => setActiveScreen('public-competition')}
-              className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-8 py-4 rounded-xl text-base shadow-lg transition-transform transform hover:scale-105 shrink-0 cursor-pointer"
-            >
-              Explore Competition
-            </button>
-          </div>
-        </section>
-      )}
+          </section>
+        );
+      })()}
 
       {/* ABOUT SECTION (Database-backed from website settings) */}
       <section id="about" className="py-20 bg-slate-50 border-t border-slate-200">

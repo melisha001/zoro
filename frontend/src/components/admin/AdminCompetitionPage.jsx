@@ -1,22 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Trophy, Plus, Search, Filter, Calendar, Clock, MapPin, 
-  FileText, Download, Edit, Trash2, Eye, X, CheckCircle2, AlertCircle, 
-  Image, FileCheck, Users, Upload, Layers
+  Trophy, Plus, Search, Calendar, Clock, MapPin, 
+  FileText, Download, Edit, Trash2, Eye, X,
+  FileCheck, Layers, Phone
 } from 'lucide-react';
 import { getCompetitions, createCompetition, updateCompetition, deleteCompetition } from '../../api/competitionApi';
 import { uploadFile, resolveFileUrl } from '../../api/fileApi';
-import { getCourses } from '../../api/courseApi';
-import { getBatches } from '../../api/batchApi';
 import ConfirmModal from '../common/ConfirmModal';
 import MoneyInput from '../common/MoneyInput';
+import { formatDate } from '../../utils/dateFormatter';
 import { useDialog } from '../../context/DialogContext';
 
-export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompIdForModules }) {
+export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
   const navigate = useNavigate();
-  const { showError, showWarning, showSuccess } = useDialog();
-  const todayStr = new Date().toISOString().split('T')[0];
+  const { showError, showWarning } = useDialog();
 
   const [competitions, setCompetitions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,24 +30,24 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
   const [regDocFileName, setRegDocFileName] = useState('');
 
   const [formData, setFormData] = useState({
-    name: '',
+    title: '',
     description: '',
     category: 'Academic',
-    date: todayStr,
-    startTime: '10:00 AM',
-    endTime: '01:00 PM',
-    regStartDate: todayStr,
-    regEndDate: todayStr,
-    deadline: todayStr,
-    venue: 'Online (Google Meet & Zoro Portal)',
+    startDate: '',
+    endDate: '',
+    startTime: '',
+    endTime: '',
+    regStartDate: '',
+    regEndDate: '',
+    venue: '',
     status: 'Active',
     registrationFee: '',
-    fee: '',
     instructions: '',
-    contactDetails: '+91 98765 43210 | competition@zoro.com',
-    banner: '',
-    rulesPdf: null,
-    registrationDocPdf: null
+    rules: '',
+    contactDetails: '',
+    bannerUrl: '',
+    rulesPdfUrl: '',
+    registrationFormUrl: ''
   });
 
   const loadData = async () => {
@@ -67,24 +65,24 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
 
   const resetForm = () => {
     setFormData({
-      name: '',
+      title: '',
       description: '',
       category: 'Academic',
-      date: todayStr,
-      startTime: '10:00 AM',
-      endTime: '01:00 PM',
-      regStartDate: todayStr,
-      regEndDate: todayStr,
-      deadline: todayStr,
-      venue: 'Online (Google Meet & Zoro Portal)',
+      startDate: '',
+      endDate: '',
+      startTime: '',
+      endTime: '',
+      regStartDate: '',
+      regEndDate: '',
+      venue: '',
       status: 'Active',
       registrationFee: '',
-      fee: '',
-      instructions: 'Participants must follow standard competition guidelines. Webcams required for online rounds.',
-      contactDetails: '+91 98765 43210 | competition@zoro.com',
-      banner: '',
-      rulesPdf: null,
-      registrationDocPdf: null
+      instructions: '',
+      rules: '',
+      contactDetails: '',
+      bannerUrl: '',
+      rulesPdfUrl: '',
+      registrationFormUrl: ''
     });
     setBannerPreview('');
     setRulesFileName('');
@@ -92,7 +90,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
   };
 
   const handleBannerUpload = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
         showWarning('Banner image size must be under 5MB.', 'File Too Large');
@@ -101,7 +99,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
       try {
         const res = await uploadFile(file, 'banner');
         setBannerPreview(res.url);
-        setFormData(prev => ({ ...prev, banner: res.url }));
+        setFormData(prev => ({ ...prev, bannerUrl: res.url }));
       } catch (err) {
         showError(err.message || 'Banner upload failed', 'Upload Error');
       }
@@ -109,19 +107,16 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
   };
 
   const handleRulesPdfUpload = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) {
-      if (!file.name.endsWith('.pdf')) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
         showWarning('Rules document must be a PDF file.', 'Invalid File Type');
         return;
       }
       try {
         const res = await uploadFile(file, 'document');
         setRulesFileName(file.name);
-        setFormData(prev => ({
-          ...prev,
-          rulesPdf: { name: file.name, size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`, url: res.url }
-        }));
+        setFormData(prev => ({ ...prev, rulesPdfUrl: res.url }));
       } catch (err) {
         showError(err.message || 'Rules document upload failed', 'Upload Error');
       }
@@ -129,19 +124,16 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
   };
 
   const handleRegDocPdfUpload = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) {
-      if (!file.name.endsWith('.pdf')) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
         showWarning('Registration form document must be a PDF file.', 'Invalid File Type');
         return;
       }
       try {
         const res = await uploadFile(file, 'document');
         setRegDocFileName(file.name);
-        setFormData(prev => ({
-          ...prev,
-          registrationDocPdf: { name: file.name, size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`, url: res.url }
-        }));
+        setFormData(prev => ({ ...prev, registrationFormUrl: res.url }));
       } catch (err) {
         showError(err.message || 'Registration form upload failed', 'Upload Error');
       }
@@ -150,85 +142,83 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) return;
+    if (!formData.title.trim()) return;
 
     const payload = {
       ...formData,
-      registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0,
-      fee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0
+      registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0
     };
     await createCompetition(payload);
     setShowAddModal(false);
     resetForm();
-    loadData();
+    await loadData();
   };
 
   const handleUpdateSubmit = async (e) => {
     e.preventDefault();
-    if (!editingComp || !formData.name.trim()) return;
+    if (!editingComp || !formData.title.trim()) return;
 
     const payload = {
       ...formData,
-      registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0,
-      fee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0
+      registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0
     };
     await updateCompetition(editingComp.id, payload);
     setEditingComp(null);
     resetForm();
-    loadData();
+    await loadData();
   };
 
   const handleConfirmDelete = async () => {
     if (deleteId) {
       await deleteCompetition(deleteId);
       setDeleteId(null);
-      loadData();
+      await loadData();
     }
   };
 
   const openEdit = (comp) => {
     setEditingComp(comp);
     setFormData({
-      name: comp.name || '',
+      title: comp.title || comp.name || '',
       description: comp.description || '',
       category: comp.category || 'Academic',
-      startDate: comp.startDate || comp.date || todayStr,
-      endDate: comp.endDate || comp.startDate || comp.date || todayStr,
-      date: comp.date || comp.startDate || todayStr,
-      startTime: comp.startTime || '10:00 AM',
-      endTime: comp.endTime || '01:00 PM',
-      regStartDate: comp.regStartDate || todayStr,
-      regEndDate: comp.regEndDate || todayStr,
-      deadline: comp.deadline || comp.regEndDate || todayStr,
-      venue: comp.venue || 'Online',
+      startDate: comp.startDate || comp.date || '',
+      endDate: comp.endDate || comp.startDate || comp.date || '',
+      startTime: comp.startTime || '',
+      endTime: comp.endTime || '',
+      regStartDate: comp.regStartDate || '',
+      regEndDate: comp.regEndDate || comp.deadline || '',
+      venue: comp.venue || '',
       status: comp.status === 'Registration Open' ? 'Active' : (comp.status || 'Active'),
-      registrationFee: comp.registrationFee !== null && comp.registrationFee !== undefined ? String(comp.registrationFee) : (comp.fee !== null && comp.fee !== undefined ? String(comp.fee) : ''),
-      fee: comp.registrationFee !== null && comp.registrationFee !== undefined ? String(comp.registrationFee) : (comp.fee !== null && comp.fee !== undefined ? String(comp.fee) : ''),
+      registrationFee: comp.registrationFee !== null && comp.registrationFee !== undefined ? String(comp.registrationFee) : '',
       instructions: comp.instructions || '',
+      rules: comp.rules || '',
       contactDetails: comp.contactDetails || '',
-      banner: comp.banner || '',
-      rulesPdf: comp.rulesPdf || null,
-      registrationDocPdf: comp.registrationDocPdf || null
+      bannerUrl: comp.bannerUrl || comp.banner || '',
+      rulesPdfUrl: comp.rulesPdfUrl || comp.rulesPdf?.url || '',
+      registrationFormUrl: comp.registrationFormUrl || comp.registrationDocPdf?.url || ''
     });
-    setBannerPreview(comp.banner || '');
-    setRulesFileName(comp.rulesPdf?.name || '');
-    setRegDocFileName(comp.registrationDocPdf?.name || '');
+    setBannerPreview(comp.bannerUrl || comp.banner || '');
+    setRulesFileName(comp.rulesPdfUrl || comp.rulesPdf?.url ? 'Saved Rules PDF' : '');
+    setRegDocFileName(comp.registrationFormUrl || comp.registrationDocPdf?.url ? 'Saved Registration Doc' : '');
   };
 
   const filteredCompetitions = competitions.filter(comp => {
+    const title = comp.title || comp.name || '';
+    const desc = comp.description || '';
+    const cat = comp.category || '';
     const matchesSearch = !searchTerm || (
-      comp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      comp.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      comp.category?.toLowerCase().includes(searchTerm.toLowerCase())
+      title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      desc.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cat.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const matchesStatus = selectedStatusFilter === 'All' || comp.status === selectedStatusFilter;
-
     return matchesSearch && matchesStatus;
   });
 
   const totalCount = competitions.length;
-  const activeCount = competitions.filter(c => c.status === 'Registration Open' || c.status === 'Active').length;
+  const activeCount = competitions.filter(c => c.status === 'Active' || c.status === 'Registration Open').length;
   const upcomingCount = competitions.filter(c => c.status === 'Upcoming').length;
   const completedCount = competitions.filter(c => c.status === 'Completed').length;
 
@@ -266,7 +256,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
           <div className="text-2xl font-black text-slate-900 mt-1">{totalCount} Contests</div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="text-xs text-emerald-600 font-semibold">Registration Open</div>
+          <div className="text-xs text-emerald-600 font-semibold">Active Contests</div>
           <div className="text-2xl font-black text-emerald-600 mt-1">{activeCount} Active</div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
@@ -302,7 +292,6 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
               <option value="All">All Statuses</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
-              <option value="Registration Open">Registration Open</option>
               <option value="Upcoming">Upcoming</option>
               <option value="Completed">Completed</option>
             </select>
@@ -320,23 +309,25 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
           </div>
         ) : (
           filteredCompetitions.map((comp) => {
-            const isOpen = comp.status === 'Registration Open';
-            const isUpcoming = comp.status === 'Upcoming';
+            const bannerSrc = comp.bannerUrl || comp.banner;
+            const compTitle = comp.title || comp.name || 'Competition';
+            const compFee = Number(comp.registrationFee || 0);
 
             return (
               <div key={comp.id} className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden flex flex-col justify-between hover:shadow-lg transition-shadow">
                 <div>
                   {/* Banner Header */}
                   <div className="relative h-44 bg-slate-900 overflow-hidden">
-                    {comp.banner ? (
-                      <img src={resolveFileUrl(comp.banner)} alt={comp.name} className="w-full h-full object-cover" />
+                    {bannerSrc ? (
+                      <img src={resolveFileUrl(bannerSrc)} alt={compTitle} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-blue-900 to-indigo-900 flex items-center justify-center text-white/20">
-                        <Trophy className="w-20 h-20" />
+                      <div className="w-full h-full bg-gradient-to-br from-slate-800 to-indigo-950 flex flex-col items-center justify-center text-white/30 p-4 text-center">
+                        <Trophy className="w-12 h-12 mb-2" />
+                        <span className="text-xs font-bold text-white/70 line-clamp-1">{compTitle}</span>
                       </div>
                     )}
                     <span className={`absolute top-3 right-3 text-[10px] font-black px-3 py-1 rounded-full shadow-md ${
-                      isOpen ? 'bg-emerald-500 text-white' : isUpcoming ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300'
+                      comp.status === 'Active' ? 'bg-emerald-500 text-white' : comp.status === 'Upcoming' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300'
                     }`}>
                       {comp.status}
                     </span>
@@ -345,35 +336,61 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                   {/* Body Content */}
                   <div className="p-5 space-y-3 text-xs">
                     <div>
-                      <div className="text-[10px] font-bold uppercase text-[#0F52BA] tracking-wider">{comp.category || 'Academic Competition'}</div>
-                      <h3 className="text-base font-black text-slate-900 mt-0.5 line-clamp-1">{comp.name}</h3>
-                      <p className="text-slate-500 text-xs mt-1 line-clamp-2">{comp.description}</p>
+                      {comp.category && (
+                        <div className="text-[10px] font-bold uppercase text-[#0F52BA] tracking-wider">{comp.category}</div>
+                      )}
+                      <h3 className="text-base font-black text-slate-900 mt-0.5 line-clamp-1">{compTitle}</h3>
+                      {comp.description && (
+                        <p className="text-slate-500 text-xs mt-1 line-clamp-2">{comp.description}</p>
+                      )}
                     </div>
 
                     <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1.5 font-medium text-slate-700">
-                      <div className="flex items-center space-x-2">
-                        <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        <span>Date: <strong className="text-slate-900">{comp.date}</strong> ({comp.startTime} - {comp.endTime})</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        <span>Reg Ends: <strong className="text-slate-900">{comp.regEndDate || comp.deadline}</strong></span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                        <span className="truncate">Venue: <strong className="text-slate-900">{comp.venue}</strong></span>
+                      {(comp.startDate || comp.date) && (
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          <span>Dates: <strong className="text-slate-900">{formatDate(comp.startDate || comp.date)}{comp.endDate && comp.endDate !== (comp.startDate || comp.date) ? ` – ${formatDate(comp.endDate)}` : ''}</strong></span>
+                        </div>
+                      )}
+
+                      {(comp.startTime || comp.endTime) && (
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span>Timing: <strong className="text-slate-900">{comp.startTime}{comp.endTime ? ` – ${comp.endTime}` : ''}</strong></span>
+                        </div>
+                      )}
+
+                      {(comp.regStartDate || comp.regEndDate || comp.deadline) && (
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span>Registration: <strong className="text-slate-900">{formatDate(comp.regStartDate || '')}{comp.regEndDate || comp.deadline ? ` – ${formatDate(comp.regEndDate || comp.deadline)}` : ''}</strong></span>
+                        </div>
+                      )}
+
+                      {comp.venue && (
+                        <div className="flex items-center space-x-2">
+                          <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          <span className="truncate">Venue: <strong className="text-slate-900">{comp.venue}</strong></span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-xs">
+                        <span className="text-slate-500 font-bold">Fee:</span>
+                        <span className="font-black text-emerald-700">
+                          {compFee > 0 ? `₹${compFee.toLocaleString('en-IN')}` : 'FREE'}
+                        </span>
                       </div>
                     </div>
 
                     {/* Attached Files Badges */}
                     <div className="flex flex-wrap gap-2 text-[10px] font-bold">
-                      {comp.rulesPdf && (
+                      {(comp.rulesPdfUrl || comp.rulesPdf) && (
                         <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-lg flex items-center gap-1">
                           <FileText className="w-3 h-3 text-amber-600" />
-                          Rules PDF ({comp.rulesPdf.size || 'Attached'})
+                          Rules PDF
                         </span>
                       )}
-                      {comp.registrationDocPdf && (
+                      {(comp.registrationFormUrl || comp.registrationDocPdf) && (
                         <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-1 rounded-lg flex items-center gap-1">
                           <FileCheck className="w-3 h-3 text-blue-600" />
                           Reg Form PDF
@@ -446,16 +463,16 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
 
             <form onSubmit={editingComp ? handleUpdateSubmit : handleCreateSubmit} className="space-y-4">
               
-              {/* Competition Name & Category Row */}
+              {/* Competition Title & Category Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Competition Title *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. National Public Speaking Championship"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g. National Abacus Championship"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none"
                   />
                 </div>
@@ -464,7 +481,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                   <label className="block font-bold text-slate-700 mb-1">Category / Topic</label>
                   <input
                     type="text"
-                    placeholder="e.g. Academic, Oratory, Spelling"
+                    placeholder="e.g. Academic, Oratory, Abacus"
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none"
@@ -484,16 +501,16 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                     <option value="Active">Active (Public on Landing Page)</option>
                     <option value="Inactive">Inactive (Hidden)</option>
                     <option value="Upcoming">Upcoming (Scheduled)</option>
+                    <option value="Completed">Completed</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Registration Fee (₹) *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Registration Fee (₹)</label>
                   <MoneyInput
-                    required
                     placeholder="e.g. 500"
-                    value={formData.registrationFee ?? formData.fee ?? ''}
-                    onChange={(e) => setFormData({ ...formData, registrationFee: e.target.value, fee: e.target.value })}
+                    value={formData.registrationFee}
+                    onChange={(e) => setFormData({ ...formData, registrationFee: e.target.value })}
                     className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white"
                   />
                 </div>
@@ -502,10 +519,9 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
               {/* Dates Grid: Registration Start/End & Competition Start/End */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Reg Start Date *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Reg Start Date</label>
                   <input
                     type="date"
-                    required
                     value={formData.regStartDate}
                     onChange={(e) => setFormData({ ...formData, regStartDate: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
@@ -513,33 +529,30 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Reg End Date *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Reg End Date</label>
                   <input
                     type="date"
-                    required
                     value={formData.regEndDate}
-                    onChange={(e) => setFormData({ ...formData, regEndDate: e.target.value, deadline: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, regEndDate: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Comp Start Date *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Comp Start Date</label>
                   <input
                     type="date"
-                    required
-                    value={formData.startDate || formData.date}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value, date: e.target.value })}
+                    value={formData.startDate}
+                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Comp End Date *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Comp End Date</label>
                   <input
                     type="date"
-                    required
-                    value={formData.endDate || formData.startDate || formData.date}
+                    value={formData.endDate}
                     onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
                   />
@@ -580,6 +593,18 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
                   />
                 </div>
+              </div>
+
+              {/* Contact Details */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Contact Details / Helpline</label>
+                <input
+                  type="text"
+                  placeholder="e.g. +91 98765 43210 | info@zoroacademy.com"
+                  value={formData.contactDetails}
+                  onChange={(e) => setFormData({ ...formData, contactDetails: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
+                />
               </div>
 
               {/* Description & Instructions */}
@@ -623,9 +648,9 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                     <input
                       type="text"
                       placeholder="Image URL"
-                      value={formData.banner}
+                      value={formData.bannerUrl}
                       onChange={(e) => {
-                        setFormData({ ...formData, banner: e.target.value });
+                        setFormData({ ...formData, bannerUrl: e.target.value });
                         setBannerPreview(e.target.value);
                       }}
                       className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium"
@@ -674,88 +699,124 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
       )}
 
       {/* VIEW DETAILS MODAL */}
-      {viewingComp && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto text-xs">
-            <button
-              onClick={() => setViewingComp(null)}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
+      {viewingComp && (() => {
+        const title = viewingComp.title || viewingComp.name || 'Competition';
+        const fee = Number(viewingComp.registrationFee || 0);
+        const rulesUrl = viewingComp.rulesPdfUrl || viewingComp.rulesPdf?.url;
+        const formUrl = viewingComp.registrationFormUrl || viewingComp.registrationDocPdf?.url;
 
-            <div className="space-y-3">
-              <span className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-3 py-1 rounded-full">
-                {viewingComp.status}
-              </span>
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto text-xs">
+              <button
+                onClick={() => setViewingComp(null)}
+                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
 
-              <h2 className="text-xl font-black text-slate-900">{viewingComp.name}</h2>
-              
-              <div className="text-slate-500 font-medium">{viewingComp.description}</div>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-3 py-1 rounded-full">
+                    {viewingComp.status || 'Active'}
+                  </span>
+                  {viewingComp.category && (
+                    <span className="bg-blue-100 text-blue-800 font-extrabold text-[10px] px-3 py-1 rounded-full">
+                      {viewingComp.category}
+                    </span>
+                  )}
+                </div>
 
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-slate-700 font-semibold">
-                <div><strong>Course & Batch:</strong> {viewingComp.courseName} ({viewingComp.eligibleBatch})</div>
-                <div><strong>Competition Date:</strong> {viewingComp.date} ({viewingComp.startTime} - {viewingComp.endTime})</div>
-                <div><strong>Registration Deadline:</strong> {viewingComp.regEndDate || viewingComp.deadline}</div>
-                <div><strong>Venue / Link:</strong> {viewingComp.venue}</div>
-                <div><strong>Contact Details:</strong> {viewingComp.contactDetails}</div>
-              </div>
+                <h2 className="text-xl font-black text-slate-900">{title}</h2>
+                
+                {viewingComp.description && (
+                  <div className="text-slate-600 font-medium leading-relaxed">{viewingComp.description}</div>
+                )}
 
-              {viewingComp.instructions && (
-                <div>
-                  <h4 className="font-bold text-slate-900 mb-1">Instructions & Guidelines:</h4>
-                  <div className="p-3 bg-amber-50 text-amber-900 border border-amber-200 rounded-xl text-xs font-medium">
-                    {viewingComp.instructions}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-slate-700 font-semibold">
+                  <div>
+                    <strong>Registration Fee:</strong>{' '}
+                    <span className="text-emerald-700 font-black">
+                      {fee > 0 ? `₹${fee.toLocaleString('en-IN')}` : 'FREE'}
+                    </span>
                   </div>
-                </div>
-              )}
 
-              {/* Downloadable Files */}
-              <div className="space-y-2 pt-2">
-                <h4 className="font-bold text-slate-900">Official Attachments:</h4>
-                <div className="flex flex-wrap gap-2">
-                  {viewingComp.rulesPdf && (
-                    <a
-                      href={resolveFileUrl(viewingComp.rulesPdf.url) || '#'}
-                      target={viewingComp.rulesPdf.url ? '_blank' : undefined}
-                      rel="noreferrer"
-                      onClick={(e) => {
-                        if (!viewingComp.rulesPdf.url) {
-                          e.preventDefault();
-                          showSuccess(`Rules document: ${viewingComp.rulesPdf.name}`);
-                        }
-                      }}
-                      className="px-3 py-2 bg-amber-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-amber-700"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Rules PDF ({viewingComp.rulesPdf.name})</span>
-                    </a>
+                  {(viewingComp.regStartDate || viewingComp.regEndDate) && (
+                    <div>
+                      <strong>Registration Period:</strong>{' '}
+                      {formatDate(viewingComp.regStartDate)}{viewingComp.regEndDate ? ` – ${formatDate(viewingComp.regEndDate)}` : ''}
+                    </div>
                   )}
 
-                  {viewingComp.registrationDocPdf && (
-                    <a
-                      href={resolveFileUrl(viewingComp.registrationDocPdf.url) || '#'}
-                      target={viewingComp.registrationDocPdf.url ? '_blank' : undefined}
-                      rel="noreferrer"
-                      onClick={(e) => {
-                        if (!viewingComp.registrationDocPdf.url) {
-                          e.preventDefault();
-                          showSuccess(`Registration form: ${viewingComp.registrationDocPdf.name}`);
-                        }
-                      }}
-                      className="px-3 py-2 bg-blue-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-blue-700"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Registration Doc ({viewingComp.registrationDocPdf.name})</span>
-                    </a>
+                  {(viewingComp.startDate || viewingComp.endDate) && (
+                    <div>
+                      <strong>Competition Dates:</strong>{' '}
+                      {formatDate(viewingComp.startDate)}{viewingComp.endDate && viewingComp.endDate !== viewingComp.startDate ? ` – ${formatDate(viewingComp.endDate)}` : ''}
+                    </div>
+                  )}
+
+                  {(viewingComp.startTime || viewingComp.endTime) && (
+                    <div>
+                      <strong>Time:</strong>{' '}
+                      {viewingComp.startTime}{viewingComp.endTime ? ` – ${viewingComp.endTime}` : ''}
+                    </div>
+                  )}
+
+                  {viewingComp.venue && (
+                    <div><strong>Venue:</strong> {viewingComp.venue}</div>
+                  )}
+
+                  {viewingComp.contactDetails && (
+                    <div><strong>Contact Details:</strong> {viewingComp.contactDetails}</div>
                   )}
                 </div>
+
+                {viewingComp.instructions && (
+                  <div>
+                    <h4 className="font-bold text-slate-900 mb-1">Instructions & Guidelines:</h4>
+                    <div className="p-3 bg-amber-50 text-amber-900 border border-amber-200 rounded-xl text-xs font-medium whitespace-pre-line">
+                      {viewingComp.instructions}
+                    </div>
+                  </div>
+                )}
+
+                {/* Downloadable Files */}
+                {(rulesUrl || formUrl) && (
+                  <div className="space-y-2 pt-2">
+                    <h4 className="font-bold text-slate-900">Official Attachments:</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {rulesUrl && (
+                        <a
+                          href={resolveFileUrl(rulesUrl)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-2 bg-amber-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-amber-700 transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Rules PDF</span>
+                        </a>
+                      )}
+
+                      {formUrl && (
+                        <a
+                          href={resolveFileUrl(formUrl)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-2 bg-blue-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-blue-700 transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Registration Form PDF</span>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               </div>
-
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* DELETE CONFIRMATION MODAL */}
       <ConfirmModal

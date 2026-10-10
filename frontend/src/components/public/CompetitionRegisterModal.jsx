@@ -3,6 +3,7 @@ import { X, Trophy, CheckCircle2, AlertCircle, CreditCard, ShieldCheck, User, Ma
 import { createCompetitionRegistration, checkDuplicateRegistration } from '../../api/competitionRegistrationApi';
 import { initiateRazorpayPayment } from '../../utils/razorpay';
 import { createNotification } from '../../api/notificationApi';
+import { formatDate } from '../../utils/dateFormatter';
 import { sanitizePhone, validatePhone } from '../../utils/phoneValidator';
 
 export default function CompetitionRegisterModal({ competition, isOpen, onClose, currentUser, onSuccess }) {
@@ -139,14 +140,14 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
       if (formData.studentEmail) {
         await createNotification({
           trainerName: '',
-          title: `Registration Confirmed: ${competition.name}`,
-          desc: `Your registration for ${competition.name} is confirmed. Date: ${competition.date || competition.startDate}. Venue: ${competition.venue || 'Online'}`,
+          title: `Registration Confirmed: ${competition.name || competition.title}`,
+          desc: `Your registration for ${competition.name || competition.title} is confirmed.${(competition.startDate || competition.date) ? ` Date: ${formatDate(competition.startDate || competition.date)}.` : ''}${competition.venue ? ` Venue: ${competition.venue}` : ''}`,
           studentEmail: formData.studentEmail,
           type: 'competition_reg'
         });
       }
 
-      setSuccessMsg(`Registration Confirmed for ${competition.name}!`);
+      setSuccessMsg(`Registration Confirmed for ${competition.name || competition.title}!`);
       setTimeout(() => {
         if (onSuccess) onSuccess(res.data);
         onClose();
@@ -178,24 +179,30 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
           </div>
           <div>
             <h3 className="text-xl font-black text-slate-900">Register for Competition</h3>
-            <p className="text-slate-500 text-xs font-semibold">{competition.name}</p>
+            <p className="text-slate-500 text-xs font-semibold">{competition.name || competition.title}</p>
           </div>
         </div>
 
         {/* Summary Card */}
         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-slate-700 font-semibold">
-          <div className="flex justify-between">
-            <span className="text-slate-500">Date & Time:</span>
-            <span className="text-slate-900 font-bold">{competition.date || competition.startDate} ({competition.startTime || '10:00 AM'})</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">Venue:</span>
-            <span className="text-slate-900 font-bold">{competition.venue || 'Online'}</span>
-          </div>
+          {(competition.startDate || competition.date) && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Date & Time:</span>
+              <span className="text-slate-900 font-bold">
+                {formatDate(competition.startDate || competition.date)}{competition.startTime ? ` (${competition.startTime})` : ''}
+              </span>
+            </div>
+          )}
+          {competition.venue && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Venue:</span>
+              <span className="text-slate-900 font-bold">{competition.venue}</span>
+            </div>
+          )}
           <div className="flex justify-between border-t border-slate-200 pt-2 text-sm">
             <span className="text-slate-800 font-black">Registration Fee:</span>
             <span className="text-emerald-700 font-black">
-              {regFee > 0 ? `₹${regFee}` : 'FREE (₹0)'}
+              {regFee > 0 ? `₹${regFee.toLocaleString('en-IN')}` : 'FREE (₹0)'}
             </span>
           </div>
         </div>
