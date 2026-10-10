@@ -441,20 +441,16 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                 <div key={course.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
                   <div className="p-5 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="bg-blue-50 text-blue-700 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase">
-                        {course.ageGroup || 'All Ages'}
+                      <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg">
+                        Mode: {modeVal}
                       </span>
                       <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">
-                        Fee: ₹{Number(course.fee || course.fees || 15000).toLocaleString()}
+                        {course.price != null && Number(course.price) > 0 ? `Fee: ₹${Number(course.price).toLocaleString('en-IN')}` : 'Free'}
                       </span>
                     </div>
 
                     <h3 className="text-lg font-bold text-slate-900">{course.title}</h3>
                     <p className="text-xs text-slate-500 line-clamp-2">{course.description}</p>
-                    
-                    <div className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg inline-block">
-                      Mode: {modeVal}
-                    </div>
                   </div>
 
                   <div className="p-5 pt-0 border-t border-slate-100 mt-4 pt-4">

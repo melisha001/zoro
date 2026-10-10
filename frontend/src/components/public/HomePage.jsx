@@ -157,12 +157,14 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
                         e.target.src = defaultThumbnailFallback;
                       }}
                     />
-                    <span className="absolute top-3 right-3 bg-blue-600 text-white text-xs font-extrabold px-3 py-1 rounded-full shadow">
-                      {course.ageGroup || 'Kids'}
-                    </span>
                   </div>
                   <div className="p-6">
-                    <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">{course.duration || '3 Months'} • {course.mode || 'Online'}</div>
+                    <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider">
+                      <span className="text-blue-600">{course.duration || '3 Months'} • {course.mode || 'Online'}</span>
+                      <span className="text-emerald-600 font-black">
+                        {course.price != null && Number(course.price) > 0 ? `₹${Number(course.price).toLocaleString('en-IN')}` : 'Free'}
+                      </span>
+                    </div>
                     <h3 className="text-xl font-bold text-slate-900 mt-1">{course.title}</h3>
                     <p className="text-slate-500 text-xs mt-2 line-clamp-2">{course.description}</p>
                   </div>

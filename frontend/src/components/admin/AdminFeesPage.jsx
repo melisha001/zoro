@@ -55,20 +55,22 @@ export default function AdminFeesPage() {
     cBatches.forEach(cb => {
       const cTitle = typeof cb === 'string' ? cb : cb.course;
       const matchedCourse = coursesList.find(c => c.title?.toLowerCase().trim() === cTitle?.toLowerCase().trim() || c.id === cTitle);
-      const feeVal = matchedCourse ? Number(matchedCourse.fee || matchedCourse.fees || 15000) : 15000;
+      const feeVal = matchedCourse && matchedCourse.price != null && Number(matchedCourse.price) > 0 ? Number(matchedCourse.price) : 0;
       initialMap[cTitle] = feeVal;
     });
 
     setSelectedFeeCourses(initialMap);
   };
 
-  const handleToggleFeeCourse = (cTitle, defaultFee = 15000) => {
+  const handleToggleFeeCourse = (cTitle, defaultFee = null) => {
     setSelectedFeeCourses(prev => {
       const updated = { ...prev };
       if (updated[cTitle] !== undefined) {
         delete updated[cTitle];
       } else {
-        updated[cTitle] = defaultFee;
+        const matchedCourse = coursesList.find(c => c.title?.toLowerCase().trim() === cTitle?.toLowerCase().trim() || c.id === cTitle);
+        const resolvedFee = defaultFee !== null ? defaultFee : (matchedCourse?.price != null ? Number(matchedCourse.price) : 0);
+        updated[cTitle] = resolvedFee;
       }
       return updated;
     });

@@ -252,8 +252,10 @@ export default function TrainerCoursesPage() {
                     {/* Fee & Mode Specs */}
                     <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200/60 text-xs">
                       <div>
-                        <div className="text-slate-400 font-semibold text-[10px]">Fee</div>
-                        <div className="font-extrabold text-emerald-600 text-xs mt-0.5">₹{Number(course.fee || course.fees || 0).toLocaleString()}</div>
+                        <div className="text-slate-400 font-semibold text-[10px]">Course Fee</div>
+                        <div className="font-extrabold text-emerald-600 text-xs mt-0.5">
+                          {course.price != null && Number(course.price) > 0 ? `₹${Number(course.price).toLocaleString('en-IN')}` : 'Free'}
+                        </div>
                       </div>
                       <div>
                         <div className="text-slate-400 font-semibold text-[10px]">Mode</div>

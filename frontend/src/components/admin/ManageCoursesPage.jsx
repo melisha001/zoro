@@ -52,8 +52,7 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
       (course.assignedTrainer && course.assignedTrainer.toLowerCase().includes(query)) ||
       (course.mode && course.mode.toLowerCase().includes(query)) ||
       (course.duration && course.duration.toLowerCase().includes(query)) ||
-      (course.fee && String(course.fee).includes(query)) ||
-      (course.fees && String(course.fees).includes(query))
+      (course.price != null && String(course.price).includes(query))
     );
   });
 
@@ -111,7 +110,7 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredCourses.map((course) => {
-            const courseFee = course.fee || course.fees || 15000;
+            const coursePrice = course.price != null && Number(course.price) > 0 ? Number(course.price) : 0;
             const isTrainerCourse = course.audience === 'trainer';
             return (
               <div key={course.id} className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden flex flex-col justify-between group">
@@ -129,7 +128,7 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
                       {course.mode}
                     </div>
                     <div className="absolute bottom-3 left-3 bg-emerald-600 text-white text-xs font-black px-3 py-1 rounded-xl shadow flex items-center space-x-1">
-                      <span>₹{Number(courseFee).toLocaleString()}</span>
+                      <span>{coursePrice > 0 ? `₹${coursePrice.toLocaleString('en-IN')}` : 'Free'}</span>
                     </div>
                   </div>
 

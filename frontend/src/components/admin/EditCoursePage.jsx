@@ -33,11 +33,8 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
             title: '',
             description: '',
             duration: '3 Months',
-            fee: '15000',
-            fees: '15000',
+            price: c.price != null && Number(c.price) > 0 ? String(c.price) : '',
             mode: 'Online',
-            ageGroup: '7-12 Years',
-            certificate: 'Yes',
             trainerId: c.trainerId || matchedTrainer?.id || '',
             assignedTrainer: c.assignedTrainer || matchedTrainer?.name || '',
             googleMeetUrl: '',
@@ -47,7 +44,8 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
             youtubeUrl: '',
             overview: '',
             thumbnail: '',
-            ...c
+            ...c,
+            price: c.price != null && Number(c.price) > 0 ? String(c.price) : ''
           });
         }
       }).catch(err => {
@@ -79,12 +77,12 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
     }
     setErrorMsg('');
     setSaving(true);
+    const submitPrice = formData.price !== '' ? Number(formData.price) : 0;
     await updateCourse(courseId, {
       ...formData,
+      price: submitPrice,
       trainerId: formData.trainerId || null,
-      assignedTrainer: formData.assignedTrainer || (formData.mode === 'Recorded' ? 'None (Self-Paced)' : ''),
-      fee: Number(formData.fee || formData.fees || 15000),
-      fees: Number(formData.fee || formData.fees || 15000)
+      assignedTrainer: formData.assignedTrainer || (formData.mode === 'Recorded' ? 'None (Self-Paced)' : '')
     });
     setSaving(false);
     if (setActiveScreen) setActiveScreen('admin-manage-courses');
@@ -175,11 +173,17 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Course Fee (₹)</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Course Fee (₹) *</label>
               <input
-                type="number"
-                value={formData.fee || formData.fees || ''}
-                onChange={(e) => setFormData({ ...formData, fee: e.target.value, fees: e.target.value })}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="e.g. 2500"
+                value={formData.price || ''}
+                onChange={(e) => {
+                  const clean = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                  setFormData({ ...formData, price: clean });
+                }}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600"
               />
             </div>

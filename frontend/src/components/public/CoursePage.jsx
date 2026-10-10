@@ -77,10 +77,14 @@ export default function CoursePage({ onOpenEnquire }) {
                     </h1>
 
                     {/* Course Details Box */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/60 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/60 text-xs">
                       <div>
-                        <div className="text-slate-400 font-semibold">Base Fee</div>
-                        <div className="font-black text-emerald-600 text-sm mt-0.5">₹{Number(selectedCourse.fee || selectedCourse.fees || 0).toLocaleString()}</div>
+                        <div className="text-slate-400 font-semibold">Course Fee</div>
+                        <div className="font-black text-emerald-600 text-sm mt-0.5">
+                          {selectedCourse.price != null && Number(selectedCourse.price) > 0 
+                            ? `₹${Number(selectedCourse.price).toLocaleString('en-IN')}` 
+                            : 'Contact us'}
+                        </div>
                       </div>
                       <div>
                         <div className="text-slate-400 font-semibold">Duration</div>
@@ -89,14 +93,6 @@ export default function CoursePage({ onOpenEnquire }) {
                       <div>
                         <div className="text-slate-400 font-semibold">Mode</div>
                         <div className="font-extrabold text-slate-800 text-sm mt-0.5">{selectedCourse.mode || 'Online'}</div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400 font-semibold">Age Group</div>
-                        <div className="font-extrabold text-slate-800 text-sm mt-0.5">{selectedCourse.ageGroup || 'Kids'}</div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400 font-semibold">Certificate</div>
-                        <div className="font-extrabold text-slate-800 text-sm mt-0.5">{selectedCourse.certificate || 'Certified'}</div>
                       </div>
                     </div>
 

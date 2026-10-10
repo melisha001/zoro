@@ -80,7 +80,7 @@ export default function AdminDashboard({ setActiveScreen }) {
             })),
             monthlyCollections: (d.monthlyCollections || []).map(c => ({
               month: c.month,
-              amount: parseFloat(c.fees || 0)
+              amount: parseFloat(c.price || c.amount || c.fees || 0)
             }))
           });
         }

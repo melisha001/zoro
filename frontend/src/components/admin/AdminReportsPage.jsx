@@ -102,7 +102,7 @@ export default function AdminReportsPage() {
     csvRows.push(['COURSE CATALOG']);
     csvRows.push(['ID', 'Title', 'Fee (INR)', 'Mode', 'Enrolled Count']);
     courses.forEach(c => {
-      csvRows.push([c.id, c.title, c.fee || c.fees || 15000, c.mode || 'Online', c.enrolled || 0]);
+      csvRows.push([c.id, c.title, c.price != null && Number(c.price) > 0 ? Number(c.price) : 0, c.mode || 'Online', c.enrolled || 0]);
     });
     csvRows.push([]);
 
@@ -248,7 +248,7 @@ export default function AdminReportsPage() {
             <div key={item.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-900 text-sm">{item.title}</span>
-                <span className="text-xs font-extrabold text-[#0F52BA] bg-blue-100 px-2.5 py-0.5 rounded-full">₹{item.fee || 3500}</span>
+                <span className="text-xs font-extrabold text-[#0F52BA] bg-blue-100 px-2.5 py-0.5 rounded-full">{item.price != null && Number(item.price) > 0 ? `₹${Number(item.price).toLocaleString('en-IN')}` : 'Free'}</span>
               </div>
               <div className="grid grid-cols-3 gap-2 pt-2 text-xs border-t border-slate-200/60">
                 <div>
