@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Clock, Video, Users, User, Search, Filter, CheckCircle2, Edit2, Trash2, X, AlertTriangle, RefreshCw, Send, Check, FileText, Download, AlertCircle, Eye, Upload } from 'lucide-react';
+import { Plus, User, CheckCircle2, Edit2, Trash2, X, AlertTriangle, RefreshCw, Eye, Upload } from 'lucide-react';
 import { getSchedules, createSchedule, updateSchedule, deleteSchedule } from '../../api/scheduleApi';
 import { uploadFile } from '../../api/fileApi';
 import { getTrainers } from '../../api/userApi';

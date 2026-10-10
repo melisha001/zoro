@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, Play, FileText, BookOpen, PlusCircle, Sparkles, ExternalLink, Calendar, Clock, Video, Lock, Layers, CheckCircle2, ShieldCheck, Download, Eye, Upload, Send, Award, MessageSquare } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Play, FileText, BookOpen, PlusCircle, Sparkles, ExternalLink, Calendar, Clock, Video, Lock, Layers, CheckCircle2, ShieldCheck, Eye, Send, Award } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { createEnquiry, getEnquiries } from '../../api/enquiryApi';
@@ -13,7 +13,7 @@ import SecureVideoPlayer from '../common/SecureVideoPlayer';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 import { useDialog } from '../../context/DialogContext';
 
-export default function CourseLearningPage({ courseId: initialCourseId, setActiveScreen }) {
+export default function CourseLearningPage({ courseId: initialCourseId, _setActiveScreen }) {
   const { user } = useAuth();
   const { showError } = useDialog();
   const [activeTab, setActiveTab] = useState('my-courses'); // 'my-courses' | 'explore' | 'learn'

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Filter, Download, Users, CheckCircle2, XCircle, TrendingUp, RefreshCw, X, BookOpen, Layers, User, MessageSquare, Save, Trophy } from 'lucide-react';
+import { ArrowLeft, Filter, Users, XCircle, TrendingUp, RefreshCw, X, BookOpen, Layers, User, MessageSquare, Save, Trophy } from 'lucide-react';
 import { getAttendanceRecords, getAttendanceRemarks, saveAttendanceRemark } from '../../api/attendanceApi';
 import { getStudents } from '../../api/userApi';
 import { getCourses } from '../../api/courseApi';
@@ -99,7 +99,7 @@ export default function AdminAttendancePage({ setActiveScreen }) {
     }));
   };
 
-  const handleSaveAdminRemark = async (studentName, courseTitle, batchName, trainerName) => {
+  const handleSaveAdminRemark = async (studentName, courseTitle, batchName, _trainerName) => {
     const key = `${(studentName || '').toLowerCase().trim()}_${courseTitle}_${batchName}`;
     const remarkText = remarksState[key] || '';
 

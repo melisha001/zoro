@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, CheckCircle2, Save, BookOpen, Layers } from 'lucide-react';
+import { CheckCircle2, Save, BookOpen, Layers } from 'lucide-react';
 import { getBatches } from '../../api/batchApi';
 import { getTrainerStudents } from '../../api/userApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
@@ -137,9 +137,7 @@ export default function TrainerAttendancePage() {
     const recordsToSave = displayList.map(std => {
       const status = attendanceMap[std.name] || 'Present';
       const rText = remarksMap[std.name] || '';
-      const courseTitle = selectedCourseName !== 'All' ? selectedCourseName : (std.course || (std.courseBatches?.[0]?.course) || '');
       const courseId = std.courseId || (std.courseBatches?.[0]?.courseId) || '';
-      const batchName = selectedBatchName !== 'All' ? selectedBatchName : (std.batch || (std.courseBatches?.[0]?.batch) || 'Unassigned');
       const batchId = std.batchId || (std.courseBatches?.[0]?.batchId) || '';
 
       return {

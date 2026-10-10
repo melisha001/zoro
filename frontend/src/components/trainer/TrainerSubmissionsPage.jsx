@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Search, CheckCircle2, Clock, AlertCircle, Eye, Edit3, Check, 
-  Play, BookOpen, Layers, Video, FileText, UserCheck, X, Award
+  Search, Eye, Edit3, Check, 
+  Play, BookOpen, Layers, FileText, UserCheck, X, Award
 } from 'lucide-react';
 import { getSubmissions, updateCorrection } from '../../api/assignmentApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';

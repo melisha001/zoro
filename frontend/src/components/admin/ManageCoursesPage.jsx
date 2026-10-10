@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, BookOpen, Edit, Layers, Trash2, User, Search, DollarSign, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Plus, BookOpen, Edit, Layers, Trash2, User, Search } from 'lucide-react';
 import { getCourses, deleteCourse } from '../../api/courseApi';
 import ConfirmModal from '../common/ConfirmModal';
 import { resolveFileUrl } from '../../api/fileApi';
 
-export default function ManageCoursesPage({ setActiveScreen, setSelectedCourseIdForEdit }) {
+export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseIdForEdit }) {
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, Plus, Search, Edit, Trash2, CheckCircle2, X, ToggleLeft, ToggleRight, Calendar, User, Clock, AlertCircle } from 'lucide-react';
+import { Layers, Search, Edit, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { getBatches, createBatch, updateBatch, deleteBatch } from '../../api/batchApi';
 import { getCourses } from '../../api/courseApi';
 import { getTrainers } from '../../api/userApi';
-import { logActivity } from '../../api/activityLogApi';
 import ConfirmModal from '../common/ConfirmModal';
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -13,7 +12,7 @@ export default function AdminBatchManagementPage() {
   const [coursesList, setCoursesList] = useState([]);
   const [trainersList, setTrainersList] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   const [dayError, setDayError] = useState('');
   
   const [editingBatch, setEditingBatch] = useState(null);
