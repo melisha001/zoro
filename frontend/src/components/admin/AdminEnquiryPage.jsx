@@ -345,8 +345,13 @@ export default function AdminEnquiryPage() {
                 )}
                 <div className="flex items-center space-x-2 font-bold text-slate-700">
                   <BookOpen className="w-4 h-4 text-blue-600" />
-                  <span>Course / Topic: <strong className="text-blue-700">{viewingEnquiry.course}</strong></span>
+                  <span>Course / Topic: <strong className="text-blue-700">{viewingEnquiry.course || 'None'}</strong></span>
                 </div>
+                {viewingEnquiry.courseId && (
+                  <div className="text-[11px] font-mono text-slate-500 pl-6">
+                    Course ID: {viewingEnquiry.courseId}
+                  </div>
+                )}
               </div>
 
               {viewingEnquiry.message && (

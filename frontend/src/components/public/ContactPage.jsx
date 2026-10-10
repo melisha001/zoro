@@ -77,11 +77,12 @@ export default function ContactPage({ onOpenEnquire }) {
         name: formData.name.trim(),
         phone: formData.phone.trim(),
         email: formData.email.trim(),
-        course: formData.course,
+        courseId: formData.courseId || null,
+        courseInterest: formData.course || null,
         message: formData.message.trim() || 'Direct website contact form inquiry'
       });
       setSubmitted(true);
-      setFormData({ name: '', phone: '', email: '', course: 'General Enquiry', message: '' });
+      setFormData({ name: '', phone: '', email: '', courseId: '', course: '', message: '' });
       setTimeout(() => setSubmitted(false), 5000);
     } catch (err) {
       console.error('Error submitting contact form:', err);
@@ -278,23 +279,22 @@ export default function ContactPage({ onOpenEnquire }) {
                       </div>
                     ) : (
                       <select
-                        value={formData.courseId || (formData.course === 'General Enquiry' ? 'general' : '')}
+                        value={formData.courseId || ''}
                         onChange={(e) => {
                           const val = e.target.value;
                           if (!val) {
                             setFormData(prev => ({ ...prev, courseId: '', course: '' }));
-                          } else if (val === 'general') {
-                            setFormData(prev => ({ ...prev, courseId: '', course: 'General Enquiry' }));
                           } else {
                             const sel = courses.find(c => c.id === val);
-                            setFormData(prev => ({ ...prev, courseId: val, course: sel ? sel.title : val }));
+                            setFormData(prev => ({ ...prev, courseId: val, course: sel ? sel.title : '' }));
                           }
                         }}
-                        disabled={loadingCourses}
+                        disabled={loadingCourses || courses.length === 0}
                         className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none"
                       >
-                        <option value="">Select a course</option>
-                        <option value="general">General Enquiry</option>
+                        <option value="" disabled>
+                          {loadingCourses ? 'Loading courses...' : (courses.length === 0 ? 'No courses available yet' : 'Select a course')}
+                        </option>
                         {courses.map(c => (
                           <option key={c.id} value={c.id}>{c.title}</option>
                         ))}

@@ -1,6 +1,7 @@
 package com.zoroacademy.service;
 
 import com.zoroacademy.entity.Enquiry;
+import com.zoroacademy.repository.CourseRepository;
 import com.zoroacademy.repository.EnquiryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,8 +12,11 @@ import java.util.List;
 public class EnquiryService {
 
     private final EnquiryRepository enquiryRepository;
-    public EnquiryService(EnquiryRepository enquiryRepository) {
+    private final CourseRepository courseRepository;
+
+    public EnquiryService(EnquiryRepository enquiryRepository, CourseRepository courseRepository) {
         this.enquiryRepository = enquiryRepository;
+        this.courseRepository = courseRepository;
     }
 
 
@@ -32,6 +36,17 @@ public class EnquiryService {
         if (enquiry.getPhone() != null && !enquiry.getPhone().isBlank()) {
             enquiry.setPhone(com.zoroacademy.util.PhoneValidator.sanitize(enquiry.getPhone()));
         }
+
+        if (enquiry.getCourseId() != null && !enquiry.getCourseId().isBlank()) {
+            if (enquiry.getCourseInterest() == null || enquiry.getCourseInterest().isBlank()) {
+                courseRepository.findById(enquiry.getCourseId())
+                        .ifPresent(course -> enquiry.setCourseInterest(course.getTitle()));
+            }
+        } else if (enquiry.getCourseInterest() != null && !enquiry.getCourseInterest().isBlank()) {
+            courseRepository.findByTitleIgnoreCase(enquiry.getCourseInterest().trim())
+                    .ifPresent(course -> enquiry.setCourseId(course.getId()));
+        }
+
         return enquiryRepository.save(enquiry);
     }
 

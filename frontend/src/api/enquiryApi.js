@@ -8,6 +8,7 @@ export const getEnquiries = async () => {
       name: e.name || '',
       phone: e.phone || '',
       email: e.email || '',
+      courseId: e.courseId || null,
       course: e.courseInterest || e.course || '',
       courseInterest: e.courseInterest || e.course || '',
       message: e.message || '',
@@ -27,7 +28,8 @@ export const createEnquiry = async (enquiryData) => {
     name: enquiryData.name,
     email: enquiryData.email || '',
     phone: enquiryData.phone || '',
-    courseInterest: enquiryData.course || enquiryData.courseInterest || '',
+    courseId: enquiryData.courseId || null,
+    courseInterest: enquiryData.courseInterest || enquiryData.course || '',
     message: enquiryData.message || '',
     status: 'New'
   };

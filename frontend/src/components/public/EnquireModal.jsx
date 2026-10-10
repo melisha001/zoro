@@ -51,14 +51,12 @@ export default function EnquireModal({ isOpen, onClose }) {
     const val = e.target.value;
     if (!val) {
       setFormData(prev => ({ ...prev, courseId: '', course: '' }));
-    } else if (val === 'general') {
-      setFormData(prev => ({ ...prev, courseId: '', course: 'General enquiry' }));
     } else {
       const selected = courses.find(c => c.id === val);
       setFormData(prev => ({
         ...prev,
         courseId: val,
-        course: selected ? selected.title : val
+        course: selected ? selected.title : ''
       }));
     }
   };
@@ -76,7 +74,7 @@ export default function EnquireModal({ isOpen, onClose }) {
       phone: formData.phone.trim(),
       email: (formData.email || '').trim(),
       courseId: formData.courseId || null,
-      courseInterest: formData.course || 'General enquiry',
+      courseInterest: formData.course || null,
       message: (formData.message || '').trim()
     });
     setSubmitted(true);
@@ -176,13 +174,14 @@ export default function EnquireModal({ isOpen, onClose }) {
                   </div>
                 ) : (
                   <select
-                    value={formData.courseId || (formData.course === 'General enquiry' ? 'general' : '')}
+                    value={formData.courseId || ''}
                     onChange={handleCourseChange}
-                    disabled={loadingCourses}
+                    disabled={loadingCourses || courses.length === 0}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
                   >
-                    <option value="">Select a course</option>
-                    <option value="general">General enquiry</option>
+                    <option value="" disabled>
+                      {loadingCourses ? 'Loading courses...' : (courses.length === 0 ? 'No courses available yet' : 'Select a course')}
+                    </option>
                     {courses.map(c => (
                       <option key={c.id} value={c.id}>{c.title}</option>
                     ))}

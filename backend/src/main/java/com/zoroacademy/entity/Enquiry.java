@@ -21,6 +21,9 @@ public class Enquiry {
     @Column(length = 50)
     private String phone;
 
+    @Column(name = "course_id", length = 128)
+    private String courseId;
+
     @Column(name = "course_interest")
     private String courseInterest;
 
@@ -37,10 +40,15 @@ public class Enquiry {
     public Enquiry() {}
 
     public Enquiry(String id, String name, String email, String phone, String courseInterest, String message, String status, LocalDateTime createdAt) {
+        this(id, name, email, phone, null, courseInterest, message, status, createdAt);
+    }
+
+    public Enquiry(String id, String name, String email, String phone, String courseId, String courseInterest, String message, String status, LocalDateTime createdAt) {
         this.id = id;
         this.name = name;
         this.email = email;
         this.phone = phone;
+        this.courseId = courseId;
         this.courseInterest = courseInterest;
         this.message = message;
         this.status = status;
@@ -79,12 +87,30 @@ public class Enquiry {
         this.phone = phone;
     }
 
+    public String getCourseId() {
+        return courseId;
+    }
+
+    public void setCourseId(String courseId) {
+        this.courseId = courseId;
+    }
+
     public String getCourseInterest() {
         return courseInterest;
     }
 
     public void setCourseInterest(String courseInterest) {
         this.courseInterest = courseInterest;
+    }
+
+    public String getCourse() {
+        return courseInterest;
+    }
+
+    public void setCourse(String course) {
+        if (this.courseInterest == null || this.courseInterest.isBlank()) {
+            this.courseInterest = course;
+        }
     }
 
     public String getMessage() {
@@ -120,6 +146,7 @@ public class Enquiry {
         private String name;
         private String email;
         private String phone;
+        private String courseId;
         private String courseInterest;
         private String message;
         private String status = "New";
@@ -141,6 +168,10 @@ public class Enquiry {
             this.phone = phone;
             return this;
         }
+        public Builder courseId(String courseId) {
+            this.courseId = courseId;
+            return this;
+        }
         public Builder courseInterest(String courseInterest) {
             this.courseInterest = courseInterest;
             return this;
@@ -159,7 +190,7 @@ public class Enquiry {
         }
 
         public Enquiry build() {
-            return new Enquiry(id, name, email, phone, courseInterest, message, status, createdAt);
+            return new Enquiry(id, name, email, phone, courseId, courseInterest, message, status, createdAt);
         }
     }
 
