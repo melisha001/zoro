@@ -1,6 +1,7 @@
 import React, { useState, useRef, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { DialogProvider } from './context/DialogContext';
 import PublicNavbar from './components/layout/PublicNavbar';
 import DashboardSidebar from './components/layout/DashboardSidebar';
 import DashboardHeader from './components/layout/DashboardHeader';
@@ -523,7 +524,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <DialogProvider>
+          <AppRoutes />
+        </DialogProvider>
       </AuthProvider>
     </BrowserRouter>
   );

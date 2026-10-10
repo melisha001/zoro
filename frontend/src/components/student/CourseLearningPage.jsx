@@ -11,9 +11,11 @@ import { recordAttendance } from '../../api/attendanceApi';
 import { useAuth } from '../../context/AuthContext';
 import SecureVideoPlayer from '../common/SecureVideoPlayer';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import { useDialog } from '../../context/DialogContext';
 
 export default function CourseLearningPage({ courseId: initialCourseId, setActiveScreen }) {
   const { user } = useAuth();
+  const { showError } = useDialog();
   const [activeTab, setActiveTab] = useState('my-courses'); // 'my-courses' | 'explore' | 'learn'
   const [hybridTab, setHybridTab] = useState('live'); // 'live' | 'recorded'
   
@@ -120,7 +122,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, setActiv
         size: sizeMb
       });
     } catch (err) {
-      alert(err.message || 'Assessment file upload failed');
+      showError(err.message || 'Assessment file upload failed', 'Upload Error');
     }
   };
 

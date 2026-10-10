@@ -8,12 +8,23 @@ public class ApiResponse<T> {
     private T data;
     private String message;
 
+    private String correlationId;
+    private String errorCode;
+
     public ApiResponse() {}
 
     public ApiResponse(boolean success, T data, String message) {
         this.success = success;
         this.data = data;
         this.message = message;
+    }
+
+    public ApiResponse(boolean success, T data, String message, String errorCode, String correlationId) {
+        this.success = success;
+        this.data = data;
+        this.message = message;
+        this.errorCode = errorCode;
+        this.correlationId = correlationId;
     }
 
     public boolean isSuccess() {
@@ -40,6 +51,22 @@ public class ApiResponse<T> {
         this.message = message;
     }
 
+    public String getCorrelationId() {
+        return correlationId;
+    }
+
+    public void setCorrelationId(String correlationId) {
+        this.correlationId = correlationId;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
+    }
+
     public static <T> ApiResponse<T> ok(T data) {
         return new ApiResponse<>(true, data, "Success");
     }
@@ -50,6 +77,10 @@ public class ApiResponse<T> {
 
     public static <T> ApiResponse<T> error(String message) {
         return new ApiResponse<>(false, null, message);
+    }
+
+    public static <T> ApiResponse<T> error(String message, String errorCode, String correlationId) {
+        return new ApiResponse<>(false, null, message, errorCode, correlationId);
     }
 
     public static <T> Builder<T> builder() {

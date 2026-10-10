@@ -9,9 +9,11 @@ import { getTrainerStudents } from '../../api/userApi';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerAllocatedCourses, getTrainerAllocatedBatches, filterStudentsByCourseAndBatch } from '../../utils/trainerFilterHelper';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import { useDialog } from '../../context/DialogContext';
 
 export default function TrainerAssignmentsPage() {
   const { user } = useAuth();
+  const { showError, showWarning, confirm } = useDialog();
   const trainerName = user?.name || '';
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -116,7 +118,7 @@ export default function TrainerAssignmentsPage() {
         attachmentSize: `${(file.size / 1024).toFixed(1)} KB`
       }));
     } catch (err) {
-      alert(err.message || 'File upload failed');
+      showError(err.message || 'File upload failed', 'Upload Error');
     }
   };
 
@@ -174,7 +176,12 @@ export default function TrainerAssignmentsPage() {
   };
 
   const handleDeleteAssignment = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this assignment?')) return;
+    const isConfirmed = await confirm(
+      'Are you sure you want to delete this assignment? Students will no longer be able to submit.',
+      'Delete Assignment',
+      { confirmText: 'Delete', danger: true }
+    );
+    if (!isConfirmed) return;
     const res = await deleteAssignment(id);
     if (res.success) {
       setToastMsg('Assignment deleted successfully');
@@ -187,7 +194,7 @@ export default function TrainerAssignmentsPage() {
     e.preventDefault();
     if (!formData.title.trim()) return;
     if (formData.targetType === 'student' && selectedStudentObjects.length === 0) {
-      alert('Please select at least one student when target is Specific Student.');
+      showWarning('Please select at least one student when target is Specific Student.', 'Student Required');
       return;
     }
     setShowPreviewModal(true);

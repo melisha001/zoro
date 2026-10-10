@@ -171,25 +171,43 @@ export const apiFetch = async (endpoint, options = {}) => {
     }
 
     if (!res.ok) {
-      return {
+      const errorPayload = {
         success: false,
         status: res.status,
+        code: json?.errorCode || json?.code || `HTTP_${res.status}`,
         message: json?.message || `HTTP ${res.status}: ${res.statusText}`,
+        correlationId: json?.correlationId || null,
         data: json?.data || null
       };
+
+      const method = (options.method || 'GET').toUpperCase();
+      if (method !== 'GET' && !options.skipGlobalError && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('api:error', { detail: errorPayload }));
+      }
+
+      return errorPayload;
     }
     return json;
   } catch (err) {
-    return {
+    const errorPayload = {
       success: false,
+      status: 0,
+      code: 'NETWORK_ERROR',
       message: err.message || 'Network error while contacting server.',
       data: null
     };
+
+    const method = (options.method || 'GET').toUpperCase();
+    if (method !== 'GET' && !options.skipGlobalError && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('api:error', { detail: errorPayload }));
+    }
+
+    return errorPayload;
   }
 };
 
-export const apiGet = (endpoint) => apiFetch(endpoint, { method: 'GET' });
-export const apiPost = (endpoint, body) => apiFetch(endpoint, { method: 'POST', body: JSON.stringify(body) });
-export const apiPut = (endpoint, body) => apiFetch(endpoint, { method: 'PUT', body: JSON.stringify(body) });
-export const apiPatch = (endpoint, body) => apiFetch(endpoint, { method: 'PATCH', body: JSON.stringify(body) });
-export const apiDelete = (endpoint) => apiFetch(endpoint, { method: 'DELETE' });
+export const apiGet = (endpoint, options = {}) => apiFetch(endpoint, { ...options, method: 'GET' });
+export const apiPost = (endpoint, body, options = {}) => apiFetch(endpoint, { ...options, method: 'POST', body: JSON.stringify(body) });
+export const apiPut = (endpoint, body, options = {}) => apiFetch(endpoint, { ...options, method: 'PUT', body: JSON.stringify(body) });
+export const apiPatch = (endpoint, body, options = {}) => apiFetch(endpoint, { ...options, method: 'PATCH', body: JSON.stringify(body) });
+export const apiDelete = (endpoint, options = {}) => apiFetch(endpoint, { ...options, method: 'DELETE' });

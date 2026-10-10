@@ -4,9 +4,11 @@ import { useAuth } from '../../context/AuthContext';
 import { updateTrainerProfile } from '../../api/userApi';
 import { uploadFile, resolveFileUrl } from '../../api/fileApi';
 import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
+import { useDialog } from '../../context/DialogContext';
 
 export default function TrainerProfilePage() {
   const { user, updateUserInContext } = useAuth();
+  const { showError, showWarning } = useDialog();
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
@@ -39,7 +41,7 @@ export default function TrainerProfilePage() {
 
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!validTypes.includes(file.type.toLowerCase()) && !file.name.match(/\.(jpg|jpeg|png|webp)$/i)) {
-      alert('Please upload a valid image file (JPG, JPEG, PNG, or WEBP).');
+      showWarning('Please upload a valid image file (JPG, JPEG, PNG, or WEBP).', 'Invalid Image Type');
       return;
     }
 
@@ -48,7 +50,7 @@ export default function TrainerProfilePage() {
       setSelectedPhoto(res.url);
       setProfileData(prev => ({ ...prev, avatar: res.url }));
     } catch (err) {
-      alert(err.message || 'Avatar upload failed');
+      showError(err.message || 'Avatar upload failed', 'Upload Error');
     }
   };
 

@@ -4,8 +4,10 @@ import { getTrainers, createTrainer, updateTrainer, deleteTrainer, updateUserSta
 import { logActivity } from '../../api/activityLogApi';
 import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
 import ConfirmModal from '../common/ConfirmModal';
+import { useDialog } from '../../context/DialogContext';
 
 export default function ManageTrainersPage() {
+  const { showError, showWarning, confirm } = useDialog();
   const [trainers, setTrainers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [joinedDate, setJoinedDate] = useState('');
@@ -22,7 +24,12 @@ export default function ManageTrainersPage() {
   const [resetPasswordLoadingId, setResetPasswordLoadingId] = useState(null);
 
   const handleResetPassword = async (trainer) => {
-    if (!window.confirm(`Reset temporary password for trainer "${trainer.name}" (${trainer.email})?`)) {
+    const confirmed = await confirm(
+      `Reset temporary password for trainer "${trainer.name}" (${trainer.email})? They will be required to change it on their next login.`,
+      'Reset Trainer Password',
+      { confirmText: 'Reset Password', danger: false }
+    );
+    if (!confirmed) {
       return;
     }
     setResetPasswordLoadingId(trainer.id);
@@ -37,10 +44,10 @@ export default function ManageTrainersPage() {
         });
         loadData();
       } else {
-        alert(res.message || 'Failed to reset trainer password.');
+        showError(res.message || 'Failed to reset trainer password.', 'Reset Failed');
       }
     } catch (err) {
-      alert('Error resetting password: ' + (err?.message || 'Server error'));
+      showError('Error resetting password: ' + (err?.message || 'Server error'), 'Reset Error');
     } finally {
       setResetPasswordLoadingId(null);
     }
@@ -225,7 +232,7 @@ export default function ManageTrainersPage() {
     const newStatus = trainer.status === 'Inactive' ? 'Active' : 'Inactive';
     const res = await updateUserStatus(trainer.id, newStatus);
     if (!res.success) {
-      alert(res.message || 'Failed to update trainer status');
+      showError(res.message || 'Failed to update trainer status', 'Status Update Error');
       return;
     }
     logActivity('Trainer Status Changed', `Changed status of trainer "${trainer.name}" to ${newStatus}`, 'Trainer');
@@ -234,7 +241,7 @@ export default function ManageTrainersPage() {
 
   const handleConfirmReplacement = async () => {
     if (!trainerDepModalData?.replacementTrainerId) {
-      alert('Please select an active trainer from the dropdown to reassign courses and batches to.');
+      showWarning('Please select an active trainer from the dropdown to reassign courses and batches to.', 'Selection Required');
       return;
     }
     const { trainer, replacementTrainerId, action } = trainerDepModalData;
@@ -256,7 +263,7 @@ export default function ManageTrainersPage() {
       setTrainerDepModalData(null);
       loadData();
     } else {
-      alert(res.message || 'Failed to replace trainer.');
+      showError(res.message || 'Failed to replace trainer.', 'Replacement Error');
     }
   };
 

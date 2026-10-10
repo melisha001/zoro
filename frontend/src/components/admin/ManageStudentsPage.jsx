@@ -11,8 +11,10 @@ import { logActivity } from '../../api/activityLogApi';
 import { exportToExcel } from '../../utils/excelExporter';
 import { sanitizePhone, validatePhone } from '../../utils/phoneValidator';
 import ConfirmModal from '../common/ConfirmModal';
+import { useDialog } from '../../context/DialogContext';
 
 export default function ManageStudentsPage() {
+  const { showError, confirm } = useDialog();
   const [students, setStudents] = useState([]);
   const [coursesList, setCoursesList] = useState([]);
   const [batchesList, setBatchesList] = useState([]);
@@ -36,7 +38,12 @@ export default function ManageStudentsPage() {
   const [resetPasswordLoadingId, setResetPasswordLoadingId] = useState(null);
 
   const handleResetPassword = async (student) => {
-    if (!window.confirm(`Reset temporary password for student "${student.name}" (@${student.username || student.email})?`)) {
+    const confirmed = await confirm(
+      `Reset temporary password for student "${student.name}" (@${student.username || student.email})? They will be required to change it on their next login.`,
+      'Reset Student Password',
+      { confirmText: 'Reset Password', danger: false }
+    );
+    if (!confirmed) {
       return;
     }
     setResetPasswordLoadingId(student.id);
@@ -54,10 +61,10 @@ export default function ManageStudentsPage() {
         });
         loadData();
       } else {
-        alert(res.message || 'Failed to reset student password.');
+        showError(res.message || 'Failed to reset student password.', 'Reset Failed');
       }
     } catch (err) {
-      alert('Error resetting password: ' + (err?.message || 'Server error'));
+      showError('Error resetting password: ' + (err?.message || 'Server error'), 'Reset Error');
     } finally {
       setResetPasswordLoadingId(null);
     }
@@ -308,7 +315,7 @@ export default function ManageStudentsPage() {
     const newStatus = student.status === 'Inactive' ? 'Active' : 'Inactive';
     const res = await updateUserStatus(student.id, newStatus);
     if (!res.success) {
-      alert(res.message || 'Failed to update student status');
+      showError(res.message || 'Failed to update student status', 'Status Update Error');
       return;
     }
     logActivity('Student Status Changed', `Changed status of student "${student.name}" to ${newStatus}`, 'Student');

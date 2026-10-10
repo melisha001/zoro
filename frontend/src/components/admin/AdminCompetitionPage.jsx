@@ -10,9 +10,11 @@ import { uploadFile, resolveFileUrl } from '../../api/fileApi';
 import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import ConfirmModal from '../common/ConfirmModal';
+import { useDialog } from '../../context/DialogContext';
 
 export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompIdForModules }) {
   const navigate = useNavigate();
+  const { showError, showWarning, showSuccess } = useDialog();
   const todayStr = new Date().toISOString().split('T')[0];
 
   const [competitions, setCompetitions] = useState([]);
@@ -92,7 +94,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     const file = e.target.files[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        alert('Banner image size must be under 5MB.');
+        showWarning('Banner image size must be under 5MB.', 'File Too Large');
         return;
       }
       try {
@@ -100,7 +102,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
         setBannerPreview(res.url);
         setFormData(prev => ({ ...prev, banner: res.url }));
       } catch (err) {
-        alert(err.message || 'Banner upload failed');
+        showError(err.message || 'Banner upload failed', 'Upload Error');
       }
     }
   };
@@ -109,7 +111,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     const file = e.target.files[0];
     if (file) {
       if (!file.name.endsWith('.pdf')) {
-        alert('Rules document must be a PDF file.');
+        showWarning('Rules document must be a PDF file.', 'Invalid File Type');
         return;
       }
       try {
@@ -120,7 +122,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
           rulesPdf: { name: file.name, size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`, url: res.url }
         }));
       } catch (err) {
-        alert(err.message || 'Rules document upload failed');
+        showError(err.message || 'Rules document upload failed', 'Upload Error');
       }
     }
   };
@@ -129,7 +131,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     const file = e.target.files[0];
     if (file) {
       if (!file.name.endsWith('.pdf')) {
-        alert('Registration form document must be a PDF file.');
+        showWarning('Registration form document must be a PDF file.', 'Invalid File Type');
         return;
       }
       try {
@@ -140,7 +142,7 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
           registrationDocPdf: { name: file.name, size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`, url: res.url }
         }));
       } catch (err) {
-        alert(err.message || 'Registration form upload failed');
+        showError(err.message || 'Registration form upload failed', 'Upload Error');
       }
     }
   };
@@ -705,8 +707,15 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
                 <div className="flex flex-wrap gap-2">
                   {viewingComp.rulesPdf && (
                     <a
-                      href="#"
-                      onClick={(e) => { e.preventDefault(); alert(`Downloading rules: ${viewingComp.rulesPdf.name}`); }}
+                      href={resolveFileUrl(viewingComp.rulesPdf.url) || '#'}
+                      target={viewingComp.rulesPdf.url ? '_blank' : undefined}
+                      rel="noreferrer"
+                      onClick={(e) => {
+                        if (!viewingComp.rulesPdf.url) {
+                          e.preventDefault();
+                          showSuccess(`Rules document: ${viewingComp.rulesPdf.name}`);
+                        }
+                      }}
                       className="px-3 py-2 bg-amber-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-amber-700"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -716,8 +725,15 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
 
                   {viewingComp.registrationDocPdf && (
                     <a
-                      href="#"
-                      onClick={(e) => { e.preventDefault(); alert(`Downloading reg form: ${viewingComp.registrationDocPdf.name}`); }}
+                      href={resolveFileUrl(viewingComp.registrationDocPdf.url) || '#'}
+                      target={viewingComp.registrationDocPdf.url ? '_blank' : undefined}
+                      rel="noreferrer"
+                      onClick={(e) => {
+                        if (!viewingComp.registrationDocPdf.url) {
+                          e.preventDefault();
+                          showSuccess(`Registration form: ${viewingComp.registrationDocPdf.name}`);
+                        }
+                      }}
                       className="px-3 py-2 bg-blue-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-blue-700"
                     >
                       <Download className="w-3.5 h-3.5" />

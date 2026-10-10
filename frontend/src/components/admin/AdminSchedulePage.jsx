@@ -9,6 +9,7 @@ import { notifyScheduleChange, notifyScheduleCreated } from '../../api/notificat
 import { logActivity } from '../../api/activityLogApi';
 import ConfirmModal from '../common/ConfirmModal';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import { useDialog } from '../../context/DialogContext';
 
 const ALLOWED_EXTENSIONS = [
   'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt',
@@ -18,6 +19,7 @@ const ALLOWED_EXTENSIONS = [
 ];
 
 export default function AdminSchedulePage() {
+  const { showError, showWarning } = useDialog();
   const [selectedDateFilter, setSelectedDateFilter] = useState('');
   const [selectedBatchFilter, setSelectedBatchFilter] = useState('All');
   const [selectedTrainerFilter, setSelectedTrainerFilter] = useState('All');
@@ -182,12 +184,12 @@ export default function AdminSchedulePage() {
     if (!file) return;
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
-      alert(`Unsupported file type (.${ext}). Supported formats: ${ALLOWED_EXTENSIONS.join(', ')}`);
+      showWarning(`Unsupported file type (.${ext}). Supported formats: ${ALLOWED_EXTENSIONS.join(', ')}`, 'Unsupported Format');
       return;
     }
     const MAX_SIZE = 100 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
-      alert('File size must be 100 MB or less.');
+      showWarning('File size must be 100 MB or less.', 'File Too Large');
       return;
     }
 
@@ -216,7 +218,7 @@ export default function AdminSchedulePage() {
       });
       await loadSchedules();
     } catch (err) {
-      alert(err.message || 'Re-upload failed');
+      showError(err.message || 'Re-upload failed', 'Upload Error');
     }
   };
 

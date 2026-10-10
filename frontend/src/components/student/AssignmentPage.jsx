@@ -7,9 +7,11 @@ import { getSubmissions, getCreatedAssignments, createSubmission } from '../../a
 import { uploadFile as uploadFileApi } from '../../api/fileApi';
 import { useAuth } from '../../context/AuthContext';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import { useDialog } from '../../context/DialogContext';
 
 export default function AssignmentPage({ setActiveScreen }) {
   const { user } = useAuth();
+  const { showError } = useDialog();
   const [activeTab, setActiveTab] = useState('assignments'); // 'assignments' | 'extra'
   const [submissions, setSubmissions] = useState([]);
   const [createdAssignments, setCreatedAssignments] = useState([]);
@@ -77,7 +79,7 @@ export default function AssignmentPage({ setActiveScreen }) {
         size: sizeMb
       });
     } catch (err) {
-      alert(err.message || 'Submission file upload failed');
+      showError(err.message || 'Submission file upload failed', 'Upload Error');
     }
   };
 
