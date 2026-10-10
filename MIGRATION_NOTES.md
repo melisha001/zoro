@@ -76,6 +76,14 @@ This document details the complete overhaul performed on Zoro English Academy, i
   - Added unique constraints `uk_scb_student_course` on `student_course_batches(student_id, course_id)` and `uk_enrollments_student_course` on `enrollments(student_id, course_id)`.
   - Added `GET /api/batches/{id}/students` endpoint and `getBatchStudents(id)` in `batchApi.js`.
 
+### `V14__must_change_password.sql` (Hardening Phase - Task 3)
+- **Objective**: Added forced password change flag for administrator resets and first-time user provisioning.
+- **Key Changes**:
+  - Added `must_change_password BOOLEAN NOT NULL DEFAULT FALSE` to `users` table.
+  - Added `mustChangePassword` to User entity, auth responses, and user profile DTOs.
+  - Implemented `POST /api/users/{id}/reset-password` allowing Admins to generate a secure single-use temporary password.
+  - Integrated `ForceChangePasswordModal.jsx` blocking portal interactions until the password is changed.
+
 ---
 
 ## 3. Security Hardening & Session Lifecycle Management
@@ -168,3 +176,61 @@ npx oxlint
 npm run build
 ```
 Static production output is generated in `frontend/dist/`.
+
+---
+
+## 6. Zoro Academy Hardening & Architectural Upgrades (Tasks 0 – 7)
+
+### Task 0: Environment Fail-Fast & Connectivity Verification
+- Implemented environment isolation with `run-local.ps1` (git-ignored) and `run-local.example.ps1`.
+- Introduced `GET /api/admin/bunny-health` (ADMIN only) which performs live non-destructive write/read/delete on Bunny Storage and queries Bunny Stream video library without exposing credentials in logs or payloads.
+- Added strict startup checks in `application.yml` and `JwtTokenProvider` to fail fast if required environment variables or secrets are missing.
+
+### Task 1: Session Longevity & Silent Token Refresh
+- Configured anonymous pass-through in `JwtAuthenticationFilter` on public routes (`/api/auth/**`, `/api/courses/**`, `/api/competitions/**`, `/api/files/**`, `/api/enquiries/**`).
+- Switched JWT subject to User ID (`id`) while maintaining `email` as a claim for deterministic identity lookups.
+- Implemented `POST /api/auth/refresh` with silent client-side renewal when token age exceeds 50% of expiration lifetime.
+- Added "Keep me signed in" option (30 days vs 8 hours expiration).
+- Structured 401 handling with `SessionExpiredModal.jsx` displaying renewal prompts without abrupt redirection.
+
+### Task 2: Trainer & Student Authorization Audit
+- Created dedicated self-service endpoints:
+  - `GET /api/me/students`: fetches students assigned to the authenticated trainer's batches.
+  - `GET /api/me/profile` & `PUT /api/me/profile`: self-service profile management for non-admins.
+- Audited all frontend trainer and student pages to ensure zero unauthorized calls to admin `/api/users/*` endpoints.
+- Validated via `SecurityRbacIntegrationTest.java` verifying RBAC boundaries for ADMIN, TRAINER, and STUDENT tokens.
+
+### Task 3: Password Workflows & Forced Change
+- Added Flyway migration `V14__must_change_password.sql`.
+- Added Admin endpoint `POST /api/users/{id}/reset-password` generating a 12-character secure temporary password returned exactly once.
+- Built interactive credentials copy modal in `ManageTrainersPage` and `ManageStudentsPage`.
+- Integrated `ForceChangePasswordModal.jsx` in frontend requiring immediate password change on first login.
+
+### Task 4: Pluggable Storage Providers & Partitioned Media Paths
+- Implemented `StorageProvider` abstraction with two production implementations:
+  - `BunnyStorageProvider`: Streams directly to/from Bunny Storage API (`storage.bunnycdn.com`) with edge CDN caching (`vz-...b-cdn.net`).
+  - `LocalStorageProvider`: Local filesystem storage for development or fallback.
+- Partitioned storage paths:
+  - Public (`/public/{category}/{filename}`): Direct CDN/HTTP streaming for course thumbnails, banners, and trainer avatars.
+  - Private (`/private/{category}/{filename}`): Restricted files accessible exclusively via temporary signed HMAC tokens (`GET /api/files/{id}/link`).
+- Integrated `resolveFileUrl` helper across 12 frontend components.
+- Integrated `SecureVideoPlayer.jsx` and `CourseLearningPage.jsx` with signed playback tokens and Bunny Stream video delivery.
+
+### Task 5: Branded Dialog System & Global Exception Handling
+- Created `DialogProvider.jsx` and `useDialog()` hook (`showError`, `showSuccess`, `showWarning`, `confirm`) completely eradicating legacy `alert()` and `window.confirm()` calls across all 9 frontend pages.
+- Configured global `api:error` event listener in `client.js` for non-GET failures with retry alerts for GET failures.
+- Updated `GlobalExceptionHandler.java`:
+  - 413: `MaxUploadSizeExceededException` returning clean size guidance.
+  - 400: `MethodArgumentNotValidException` and `ConstraintViolationException` returning formatted field validation errors.
+  - 500: Server error logging with generated correlation ID UUID and client payload.
+
+### Task 6: Codebase Audit & Performance Optimization
+- Resolved all unused variables, unhandled errors, and redundant imports in `npx oxlint`.
+- Audited database queries in `AdminDashboardService.java` confirming optimal SQL aggregations with zero N+1 query patterns.
+- Verified zero leaked secrets across the entire codebase via security audit.
+
+### Task 7: Comprehensive Verification & QA Matrix
+- Full verification passed:
+  - `mvn -q test`: 100% pass rate across all backend integration and unit tests.
+  - `npm run build`: Production bundle generated cleanly with 0 errors.
+  - `npx oxlint`: 0 lint errors across all 96 files.
