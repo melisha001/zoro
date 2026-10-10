@@ -4,7 +4,8 @@ import { createCompetitionRegistration, checkDuplicateRegistration } from '../..
 import { initiateRazorpayPayment } from '../../utils/razorpay';
 import { createNotification } from '../../api/notificationApi';
 import { formatDate } from '../../utils/dateFormatter';
-import { sanitizePhone, validatePhone } from '../../utils/phoneValidator';
+import { validatePhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
+import PhoneInput from '../common/PhoneInput';
 
 export default function CompetitionRegisterModal({ competition, isOpen, onClose, currentUser, onSuccess }) {
   const [loading, setLoading] = useState(false);
@@ -64,7 +65,7 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
     }
 
     if (!validatePhone(formData.studentPhone)) {
-      setErrorMsg('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+      setErrorMsg(SUBMIT_PHONE_ERROR);
       return;
     }
 
@@ -257,19 +258,19 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">Mobile Phone (10 Digits) *</label>
-              <div className="relative">
-                <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  required
-                  placeholder="9876543210"
-                  value={formData.studentPhone}
-                  onChange={(e) => setFormData({ ...formData, studentPhone: sanitizePhone(e.target.value) })}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
-                />
-              </div>
+              <PhoneInput
+                showIcon={true}
+                required
+                value={formData.studentPhone}
+                onChange={(e) => {
+                  setFormData({ ...formData, studentPhone: e.target.value });
+                  if (errorMsg === SUBMIT_PHONE_ERROR) setErrorMsg('');
+                }}
+                error={errorMsg === SUBMIT_PHONE_ERROR ? errorMsg : ''}
+                onErrorClear={() => {
+                  if (errorMsg === SUBMIT_PHONE_ERROR) setErrorMsg('');
+                }}
+              />
             </div>
           </div>
 

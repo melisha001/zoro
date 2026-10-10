@@ -9,7 +9,8 @@ import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { logActivity } from '../../api/activityLogApi';
 import { exportToExcel } from '../../utils/excelExporter';
-import { sanitizePhone, validatePhone } from '../../utils/phoneValidator';
+import { validatePhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
+import PhoneInput from '../common/PhoneInput';
 import ConfirmModal from '../common/ConfirmModal';
 import { useDialog } from '../../context/DialogContext';
 
@@ -180,7 +181,7 @@ export default function ManageStudentsPage() {
     setEmailError('');
 
     if (formData.phone && !validatePhone(formData.phone)) {
-      setPhoneError('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+      setPhoneError(SUBMIT_PHONE_ERROR);
       return;
     }
     setPhoneError('');
@@ -260,7 +261,7 @@ export default function ManageStudentsPage() {
     setEmailError('');
 
     if (formData.phone && !validatePhone(formData.phone)) {
-      setPhoneError('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+      setPhoneError(SUBMIT_PHONE_ERROR);
       return;
     }
     setPhoneError('');
@@ -871,25 +872,16 @@ export default function ManageStudentsPage() {
               {/* Mobile Phone (10-Digit Indian Mobile) */}
               <div>
                 <label className="block font-extrabold text-slate-700 mb-1">Mobile Phone (10 Digits) *</label>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
+                <PhoneInput
                   required
-                  placeholder="9876543210"
                   value={formData.phone}
                   onChange={(e) => {
-                    const sanitized = sanitizePhone(e.target.value);
-                    setFormData({ ...formData, phone: sanitized });
+                    setFormData({ ...formData, phone: e.target.value });
                     if (phoneError) setPhoneError('');
                   }}
-                  className={`w-full px-4 py-2.5 bg-slate-50 border ${phoneError ? 'border-rose-500 bg-rose-50/30' : 'border-slate-200'} rounded-xl font-semibold text-slate-900 focus:bg-white`}
+                  error={phoneError}
+                  onErrorClear={() => setPhoneError('')}
                 />
-                {phoneError && (
-                  <p className="text-[11px] font-bold text-rose-600 mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {phoneError}
-                  </p>
-                )}
               </div>
 
               {/* Password & Joined On Row */}
@@ -1007,12 +999,14 @@ export default function ManageStudentsPage() {
 
                 <div>
                   <label className="block font-extrabold text-slate-700 mb-1">Mobile Number</label>
-                  <input
-                    type="tel"
-                    placeholder="+91 98765 43210"
+                  <PhoneInput
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white"
+                    onChange={(e) => {
+                      setFormData({ ...formData, phone: e.target.value });
+                      if (phoneError) setPhoneError('');
+                    }}
+                    error={phoneError}
+                    onErrorClear={() => setPhoneError('')}
                   />
                 </div>
               </div>

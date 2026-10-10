@@ -1,7 +1,7 @@
 /**
- * Phone Number Validator & Sanitizer Utility
- * Enforces standard 10-digit Indian mobile numbers (starts with 6, 7, 8, or 9).
+ * Standard submit error message for invalid mobile number.
  */
+export const SUBMIT_PHONE_ERROR = 'Enter a valid 10-digit mobile number (starts with 6-9)';
 
 /**
  * Strips non-digits and truncates to max 10 digits.

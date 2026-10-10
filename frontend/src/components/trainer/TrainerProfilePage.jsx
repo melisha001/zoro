@@ -3,8 +3,9 @@ import { User, Mail, Phone, Calendar, Edit3, Check, Upload, Camera } from 'lucid
 import { useAuth } from '../../context/AuthContext';
 import { updateTrainerProfile } from '../../api/userApi';
 import { uploadFile, resolveFileUrl } from '../../api/fileApi';
-import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
+import { sanitizePhone, validatePhone, formatPhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
 import { useDialog } from '../../context/DialogContext';
+import PhoneInput from '../common/PhoneInput';
 
 export default function TrainerProfilePage() {
   const { user, updateUserInContext } = useAuth();
@@ -57,7 +58,7 @@ export default function TrainerProfilePage() {
   const handleSave = async () => {
     if (isEditing) {
       if (profileData.phone && !validatePhone(profileData.phone)) {
-        setMsg('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+        setMsg(SUBMIT_PHONE_ERROR);
         setTimeout(() => setMsg(''), 4000);
         return;
       }
@@ -158,14 +159,13 @@ export default function TrainerProfilePage() {
           <div>
             <label className="block text-[11px] text-slate-400 font-bold uppercase mb-1">Phone Number</label>
             {isEditing ? (
-              <input
-                type="tel"
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="9876543210"
+              <PhoneInput
                 value={profileData.phone}
-                onChange={(e) => setProfileData({ ...profileData, phone: sanitizePhone(e.target.value) })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-[#0F52BA]"
+                onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                error={msg === SUBMIT_PHONE_ERROR ? msg : ''}
+                onErrorClear={() => {
+                  if (msg === SUBMIT_PHONE_ERROR) setMsg('');
+                }}
               />
             ) : (
               <p className="font-extrabold text-slate-900 text-sm">{formatPhone(profileData.phone) || 'Not set'}</p>

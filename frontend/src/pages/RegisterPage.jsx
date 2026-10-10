@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { UserPlus, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { sanitizePhone, validatePhone } from '../utils/phoneValidator';
+import { sanitizePhone, validatePhone, SUBMIT_PHONE_ERROR } from '../utils/phoneValidator';
+import PhoneInput from '../components/common/PhoneInput';
 
 export default function RegisterPage({ setActiveScreen }) {
   const { registerStudent } = useAuth();
@@ -19,7 +20,7 @@ export default function RegisterPage({ setActiveScreen }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!validatePhone(formData.phone)) {
-      setError('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+      setError(SUBMIT_PHONE_ERROR);
       return;
     }
     if (formData.password !== formData.confirmPassword) {
@@ -107,19 +108,17 @@ export default function RegisterPage({ setActiveScreen }) {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Mobile / WhatsApp Number (10 Digits) *</label>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
+                <PhoneInput
                   required
-                  placeholder="9876543210"
                   value={formData.phone}
                   onChange={(e) => {
-                    const sanitized = sanitizePhone(e.target.value);
-                    setFormData({ ...formData, phone: sanitized });
+                    setFormData({ ...formData, phone: e.target.value });
                     if (error) setError('');
                   }}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
+                  error={error === SUBMIT_PHONE_ERROR ? error : ''}
+                  onErrorClear={() => {
+                    if (error === SUBMIT_PHONE_ERROR) setError('');
+                  }}
                 />
               </div>
 

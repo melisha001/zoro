@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Edit, Trash2, X, Plus, Search, Calendar, AlertTriangle, ArrowRight, ShieldAlert, CheckCircle2, Copy, Check, Key } from 'lucide-react';
 import { getTrainers, createTrainer, updateTrainer, deleteTrainer, updateUserStatus, getTrainerDependencies, replaceTrainer, resetUserPassword } from '../../api/userApi';
 import { logActivity } from '../../api/activityLogApi';
-import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
+import { sanitizePhone, validatePhone, formatPhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
 import ConfirmModal from '../common/ConfirmModal';
 import MoneyInput from '../common/MoneyInput';
+import PhoneInput from '../common/PhoneInput';
 import { useDialog } from '../../context/DialogContext';
 
 export default function ManageTrainersPage() {
@@ -93,7 +94,7 @@ export default function ManageTrainersPage() {
     setEmailError('');
 
     if (!validatePhone(formData.phone)) {
-      setPhoneError('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+      setPhoneError(SUBMIT_PHONE_ERROR);
       return;
     }
     setPhoneError('');
@@ -146,7 +147,7 @@ export default function ManageTrainersPage() {
       setEmailError('');
 
       if (!validatePhone(formData.phone)) {
-        setPhoneError('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+        setPhoneError(SUBMIT_PHONE_ERROR);
         return;
       }
       setPhoneError('');
@@ -581,23 +582,16 @@ export default function ManageTrainersPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Mobile Number (10 Digits) *</label>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
+                <PhoneInput
                   required
-                  placeholder="9876543210"
                   value={formData.phone}
                   onChange={(e) => {
-                    const sanitized = sanitizePhone(e.target.value);
-                    setFormData({ ...formData, phone: sanitized });
+                    setFormData({ ...formData, phone: e.target.value });
                     if (phoneError) setPhoneError('');
                   }}
-                  className={`w-full px-4 py-2.5 bg-slate-50 border ${phoneError ? 'border-rose-500 bg-rose-50/30' : 'border-slate-200'} rounded-xl text-xs font-medium focus:bg-white focus:outline-none`}
+                  error={phoneError}
+                  onErrorClear={() => setPhoneError('')}
                 />
-                {phoneError && (
-                  <p className="text-[11px] font-bold text-rose-600 mt-1">{phoneError}</p>
-                )}
               </div>
 
               {formError && (

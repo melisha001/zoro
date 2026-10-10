@@ -4,8 +4,9 @@ import { useAuth } from '../../context/AuthContext';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { updateStudentProfile } from '../../api/userApi';
 import { uploadFile, resolveFileUrl } from '../../api/fileApi';
-import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
+import { sanitizePhone, validatePhone, formatPhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
 import { useDialog } from '../../context/DialogContext';
+import PhoneInput from '../common/PhoneInput';
 
 export default function StudentProfilePage() {
   const { user, updateUserInContext } = useAuth();
@@ -63,7 +64,7 @@ export default function StudentProfilePage() {
 
   const handleSaveProfile = async () => {
     if (profileData.phone && !validatePhone(profileData.phone)) {
-      setMsg({ type: 'error', text: 'Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.' });
+      setMsg({ type: 'error', text: SUBMIT_PHONE_ERROR });
       setTimeout(() => setMsg({ type: '', text: '' }), 4000);
       return;
     }
@@ -161,14 +162,13 @@ export default function StudentProfilePage() {
           <div>
             <label className="block text-slate-400 font-bold mb-1 uppercase tracking-wider text-[10px]">Phone Number</label>
             {isEditing ? (
-              <input
-                type="tel"
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="9876543210"
+              <PhoneInput
                 value={profileData.phone}
-                onChange={(e) => setProfileData({ ...profileData, phone: sanitizePhone(e.target.value) })}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white"
+                onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                error={msg?.type === 'error' && msg.text === SUBMIT_PHONE_ERROR ? msg.text : ''}
+                onErrorClear={() => {
+                  if (msg?.text === SUBMIT_PHONE_ERROR) setMsg({ type: '', text: '' });
+                }}
               />
             ) : (
               <p className="font-extrabold text-slate-800">{formatPhone(profileData.phone) || 'Not set'}</p>

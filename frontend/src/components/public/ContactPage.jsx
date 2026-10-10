@@ -3,7 +3,8 @@ import { Mail, Phone, MapPin, Clock, Send, CheckCircle, Sparkles, MessageSquare,
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 import { createEnquiry } from '../../api/enquiryApi';
 import { getCourses } from '../../api/courseApi';
-import { sanitizePhone, validatePhone } from '../../utils/phoneValidator';
+import { validatePhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
+import PhoneInput from '../common/PhoneInput';
 
 export default function ContactPage({ onOpenEnquire }) {
   const [siteSettings, setSiteSettings] = useState(null);
@@ -67,7 +68,7 @@ export default function ContactPage({ onOpenEnquire }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validatePhone(formData.phone)) {
-      setPhoneError('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+      setPhoneError(SUBMIT_PHONE_ERROR);
       return;
     }
     setPhoneError('');
@@ -232,23 +233,16 @@ export default function ContactPage({ onOpenEnquire }) {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">10-Digit Mobile Number *</label>
-                    <input
-                      type="tel"
-                      inputMode="numeric"
-                      maxLength={10}
+                    <PhoneInput
                       required
-                      placeholder="9876543210"
                       value={formData.phone}
                       onChange={(e) => {
-                        const sanitized = sanitizePhone(e.target.value);
-                        setFormData({ ...formData, phone: sanitized });
+                        setFormData({ ...formData, phone: e.target.value });
                         if (phoneError) setPhoneError('');
                       }}
-                      className={`w-full px-4 py-2.5 bg-slate-50 border ${phoneError ? 'border-rose-500 bg-rose-50/30' : 'border-slate-200'} rounded-xl text-xs font-medium focus:bg-white focus:outline-none`}
+                      error={phoneError}
+                      onErrorClear={() => setPhoneError('')}
                     />
-                    {phoneError && (
-                      <p className="text-[11px] font-bold text-rose-600 mt-1">{phoneError}</p>
-                    )}
                   </div>
                 </div>
 
