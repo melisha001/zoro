@@ -5,6 +5,7 @@ import { getFeeRecords } from '../../api/feesApi';
 import { getCompetitionRegistrations } from '../../api/competitionRegistrationApi';
 import { exportToExcel } from '../../utils/excelExporter';
 import ConfirmModal from '../common/ConfirmModal';
+import MoneyInput from '../common/MoneyInput';
 
 // Salary is EXCLUDED from manual expense categories because trainer salary is fetched automatically from Trainer Salary Management
 const MANUAL_EXPENSE_CATEGORIES = [
@@ -691,10 +692,9 @@ export default function AdminExpensesPage({ setActiveScreen }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Amount (₹) *</label>
-                  <input
-                    type="number"
+                  <MoneyInput
                     required
-                    placeholder="2500"
+                    placeholder="e.g. 2500"
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none"

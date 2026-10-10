@@ -4,6 +4,7 @@ import { getTrainers, createTrainer, updateTrainer, deleteTrainer, updateUserSta
 import { logActivity } from '../../api/activityLogApi';
 import { sanitizePhone, validatePhone, formatPhone } from '../../utils/phoneValidator';
 import ConfirmModal from '../common/ConfirmModal';
+import MoneyInput from '../common/MoneyInput';
 import { useDialog } from '../../context/DialogContext';
 
 export default function ManageTrainersPage() {
@@ -517,8 +518,7 @@ export default function ManageTrainersPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Monthly Salary (₹)</label>
-                  <input
-                    type="number"
+                  <MoneyInput
                     required
                     placeholder="e.g. 25000"
                     value={formData.salaryAmount}

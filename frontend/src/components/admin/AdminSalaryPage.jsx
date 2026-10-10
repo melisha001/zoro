@@ -3,6 +3,7 @@ import { DollarSign, Plus, Search, Eye, Edit2, Trash2, X } from 'lucide-react';
 import { getSalaryPayments, createSalaryPayment, updateSalaryPayment, deleteSalaryPayment, getSalaryStats } from '../../api/salaryApi';
 import { getTrainers } from '../../api/userApi';
 import ConfirmModal from '../common/ConfirmModal';
+import MoneyInput from '../common/MoneyInput';
 
 export default function AdminSalaryPage() {
   const [salaries, setSalaries] = useState([]);
@@ -425,8 +426,7 @@ export default function AdminSalaryPage() {
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Salary Amount (₹)</label>
-                <input
-                  type="number"
+                <MoneyInput
                   required
                   placeholder="e.g. 25000"
                   value={formData.amount}

@@ -10,6 +10,7 @@ import { uploadFile, resolveFileUrl } from '../../api/fileApi';
 import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import ConfirmModal from '../common/ConfirmModal';
+import MoneyInput from '../common/MoneyInput';
 import { useDialog } from '../../context/DialogContext';
 
 export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompIdForModules }) {
@@ -42,8 +43,8 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     deadline: todayStr,
     venue: 'Online (Google Meet & Zoro Portal)',
     status: 'Active',
-    registrationFee: 500,
-    fee: 500,
+    registrationFee: '',
+    fee: '',
     instructions: '',
     contactDetails: '+91 98765 43210 | competition@zoro.com',
     banner: '',
@@ -77,8 +78,8 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
       deadline: todayStr,
       venue: 'Online (Google Meet & Zoro Portal)',
       status: 'Active',
-      registrationFee: 500,
-      fee: 500,
+      registrationFee: '',
+      fee: '',
       instructions: 'Participants must follow standard competition guidelines. Webcams required for online rounds.',
       contactDetails: '+91 98765 43210 | competition@zoro.com',
       banner: '',
@@ -151,7 +152,12 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     e.preventDefault();
     if (!formData.name.trim()) return;
 
-    await createCompetition(formData);
+    const payload = {
+      ...formData,
+      registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0,
+      fee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0
+    };
+    await createCompetition(payload);
     setShowAddModal(false);
     resetForm();
     loadData();
@@ -161,7 +167,12 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
     e.preventDefault();
     if (!editingComp || !formData.name.trim()) return;
 
-    await updateCompetition(editingComp.id, formData);
+    const payload = {
+      ...formData,
+      registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0,
+      fee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0
+    };
+    await updateCompetition(editingComp.id, payload);
     setEditingComp(null);
     resetForm();
     loadData();
@@ -191,8 +202,8 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
       deadline: comp.deadline || comp.regEndDate || todayStr,
       venue: comp.venue || 'Online',
       status: comp.status === 'Registration Open' ? 'Active' : (comp.status || 'Active'),
-      registrationFee: comp.registrationFee ?? comp.fee ?? 500,
-      fee: comp.registrationFee ?? comp.fee ?? 500,
+      registrationFee: comp.registrationFee !== null && comp.registrationFee !== undefined ? String(comp.registrationFee) : (comp.fee !== null && comp.fee !== undefined ? String(comp.fee) : ''),
+      fee: comp.registrationFee !== null && comp.registrationFee !== undefined ? String(comp.registrationFee) : (comp.fee !== null && comp.fee !== undefined ? String(comp.fee) : ''),
       instructions: comp.instructions || '',
       contactDetails: comp.contactDetails || '',
       banner: comp.banner || '',
@@ -478,14 +489,12 @@ export default function AdminCompetitionPage({ setActiveScreen, setSelectedCompI
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Registration Fee (₹) *</label>
-                  <input
-                    type="number"
-                    min="0"
+                  <MoneyInput
                     required
                     placeholder="e.g. 500"
-                    value={formData.registrationFee ?? formData.fee ?? 500}
-                    onChange={(e) => setFormData({ ...formData, registrationFee: Number(e.target.value), fee: Number(e.target.value) })}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                    value={formData.registrationFee ?? formData.fee ?? ''}
+                    onChange={(e) => setFormData({ ...formData, registrationFee: e.target.value, fee: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white"
                   />
                 </div>
               </div>

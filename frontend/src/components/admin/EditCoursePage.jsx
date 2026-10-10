@@ -4,6 +4,7 @@ import { ArrowLeft, Save, Video, Layers, CheckCircle2 } from 'lucide-react';
 import { getCourseById, updateCourse } from '../../api/courseApi';
 import { getTrainers } from '../../api/userApi';
 import FileUploader from '../common/FileUploader';
+import MoneyInput from '../common/MoneyInput';
 import { resolveFileUrl } from '../../api/fileApi';
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -33,7 +34,7 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
             title: '',
             description: '',
             duration: '3 Months',
-            price: c.price != null && Number(c.price) > 0 ? String(c.price) : '',
+            price: '',
             mode: 'Online',
             trainerId: c.trainerId || matchedTrainer?.id || '',
             assignedTrainer: c.assignedTrainer || matchedTrainer?.name || '',
@@ -174,16 +175,10 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Course Fee (₹) *</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
+              <MoneyInput
                 placeholder="e.g. 2500"
                 value={formData.price || ''}
-                onChange={(e) => {
-                  const clean = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
-                  setFormData({ ...formData, price: clean });
-                }}
+                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600"
               />
             </div>
