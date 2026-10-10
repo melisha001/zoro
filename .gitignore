@@ -19,6 +19,8 @@ target/
 # Environment files
 .env
 *.env.local
+backend/.env.local
+frontend/.env.local
 
 # Editor directories and files
 .vscode/*
