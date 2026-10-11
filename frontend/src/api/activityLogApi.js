@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiResponse } from './client';
+import { apiGet, apiPost, apiResponse, getItem } from './client';
 
 export const getActivityLogs = async (fromDate, toDate) => {
   const res = await apiGet('/activity-logs');
@@ -31,10 +31,12 @@ export const getActivityLogs = async (fromDate, toDate) => {
 };
 
 export const logActivity = async (category, action, details) => {
-  const userStr = localStorage.getItem('zoro_user');
-  let user = null;
-  if (userStr) {
-    try { user = JSON.parse(userStr); } catch (e) {}
+  let user = getItem('user');
+  if (!user && typeof window !== 'undefined' && window.sessionStorage) {
+    const userStr = sessionStorage.getItem('zoro_user') || sessionStorage.getItem('user');
+    if (userStr) {
+      try { user = JSON.parse(userStr); } catch (e) {}
+    }
   }
 
   const payload = {

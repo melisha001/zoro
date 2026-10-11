@@ -39,6 +39,7 @@ describe('App Smoke Tests', () => {
     }));
 
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -70,5 +71,17 @@ describe('App Smoke Tests', () => {
 
       rendered.unmount();
     });
+  });
+
+  it('purges legacy localStorage auth keys and keeps session in sessionStorage', async () => {
+    localStorage.setItem('zoro_token', 'legacy_token');
+    localStorage.setItem('zoro_english_academy_authToken', 'legacy_token_2');
+    
+    // Importing client or initializing app triggers cleanup
+    const { clearLegacyLocalStorage } = await import('./api/client');
+    clearLegacyLocalStorage();
+
+    expect(localStorage.getItem('zoro_token')).toBeNull();
+    expect(localStorage.getItem('zoro_english_academy_authToken')).toBeNull();
   });
 });

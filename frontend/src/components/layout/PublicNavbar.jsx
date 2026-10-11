@@ -1,14 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { PhoneCall, LogIn, Menu, X } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 
 export default function PublicNavbar({ activeScreen, setActiveScreen, onOpenLogin, onOpenEnquire, siteSettings: propSettings }) {
   const [internalSettings, setInternalSettings] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { user } = useAuth();
-  const navigate = useNavigate();
 
   useEffect(() => {
     if (!propSettings) {
@@ -24,23 +20,8 @@ export default function PublicNavbar({ activeScreen, setActiveScreen, onOpenLogi
 
   const siteSettings = propSettings || internalSettings;
 
-  const handleGoToDashboard = () => {
-    const roleUpper = (user?.role || '').toUpperCase();
-    if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN') {
-      navigate('/admin');
-    } else if (roleUpper === 'TRAINER') {
-      navigate('/trainer');
-    } else {
-      navigate('/student');
-    }
-  };
-
   const handleLoginClick = () => {
-    if (user) {
-      handleGoToDashboard();
-    } else {
-      onOpenLogin();
-    }
+    onOpenLogin();
   };
 
   return (

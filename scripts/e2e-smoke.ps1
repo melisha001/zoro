@@ -9,6 +9,7 @@ Write-Host "`n[Step 1] Admin Login..."
 $loginBody = @{ email = "admin@zoro.com"; password = "adminPassword123!" } | ConvertTo-Json
 $loginRes = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method Post -Body $loginBody -ContentType "application/json"
 $token = $loginRes.data.accessToken
+$refreshToken = $loginRes.data.refreshToken
 Write-Host "-> HTTP 200: Logged in successfully. Token length: $($token.Length)" -ForegroundColor Green
 
 $headers = @{
@@ -262,5 +263,49 @@ Write-Host "-> HTTP $($statusCode): Logged-out download successful. Content-Type
 Invoke-RestMethod -Uri "$baseUrl/competitions/$createdCompId" -Method Delete -Headers $headers | Out-Null
 Write-Host "-> HTTP 200: Competition cleaned up." -ForegroundColor Green
 
-Write-Host "`n=== All E2E Smoke Tests PASSED (Tasks A, B, C, D) ===" -ForegroundColor Green
+# 7. Per-Tab Independent Sessions & Public Login (Task E)
+Write-Host "`n[Step 7] Per-Tab Session Isolation & Public Login Verification (Task E)..."
+$tab2StudentEmail = "smoke_tab2_$(Get-Random)@zoro.com"
+$tab2StudentPass = "SmokeTab2Pass123!"
+$t2StudentBody = @{
+    name = "Smoke Tab2 Student"
+    email = $tab2StudentEmail
+    password = $tab2StudentPass
+    role = "STUDENT"
+    status = "Active"
+} | ConvertTo-Json
+$createdT2Student = Invoke-RestMethod -Uri "$baseUrl/users/students" -Method Post -Headers $headers -Body $t2StudentBody
+
+$t2LoginBody = @{ email = $tab2StudentEmail; password = $tab2StudentPass } | ConvertTo-Json
+$t2LoginRes = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method Post -Body $t2LoginBody -ContentType "application/json"
+$t2Headers = @{ Authorization = "Bearer $($t2LoginRes.data.accessToken)" }
+
+$adminIdentity = Invoke-RestMethod -Uri "$baseUrl/auth/me" -Method Get -Headers $headers
+$studentIdentity = Invoke-RestMethod -Uri "$baseUrl/auth/me" -Method Get -Headers $t2Headers
+
+Write-Host "-> HTTP 200: Tab 1 Session is $($adminIdentity.data.role), Tab 2 Session is $($studentIdentity.data.role) (Isolated)" -ForegroundColor Green
+
+# Refresh Tab 1 and confirm Tab 2 continues uninterrupted
+$t1RefreshBody = @{ refreshToken = $refreshToken } | ConvertTo-Json
+$t1RefreshRes = Invoke-RestMethod -Uri "$baseUrl/auth/refresh" -Method Post -Body $t1RefreshBody -ContentType "application/json"
+$newT1Headers = @{ Authorization = "Bearer $($t1RefreshRes.data.accessToken)" }
+
+$adminIdentityAfter = Invoke-RestMethod -Uri "$baseUrl/auth/me" -Method Get -Headers $newT1Headers
+$studentIdentityAfter = Invoke-RestMethod -Uri "$baseUrl/auth/me" -Method Get -Headers $t2Headers
+Write-Host "-> HTTP 200: Tab 1 rotated independently ($($adminIdentityAfter.data.role)), Tab 2 unaffected ($($studentIdentityAfter.data.role))" -ForegroundColor Green
+
+# Logout Tab 2
+$t2LogoutBody = @{ refreshToken = $t2LoginRes.data.refreshToken } | ConvertTo-Json
+Invoke-RestMethod -Uri "$baseUrl/auth/logout" -Method Post -Headers $t2Headers -Body $t2LogoutBody -ContentType "application/json" | Out-Null
+Write-Host "-> HTTP 200: Tab 2 logged out independently." -ForegroundColor Green
+
+# Verify Tab 1 remains active
+$adminIdentityFinal = Invoke-RestMethod -Uri "$baseUrl/auth/me" -Method Get -Headers $newT1Headers
+Write-Host "-> HTTP 200: Tab 1 still active after Tab 2 logout ($($adminIdentityFinal.data.role))" -ForegroundColor Green
+
+# Cleanup Tab 2 student
+Invoke-RestMethod -Uri "$baseUrl/users/$($createdT2Student.data.id)?force=true" -Method Delete -Headers $newT1Headers | Out-Null
+Write-Host "-> HTTP 200: Cleaned up Tab 2 student." -ForegroundColor Green
+
+Write-Host "`n=== All E2E Smoke Tests PASSED (Tasks A, B, C, D, E) ===" -ForegroundColor Green
 

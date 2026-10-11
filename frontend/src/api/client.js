@@ -1,4 +1,4 @@
-// Centralized API Client with LocalStorage Persistence & REST backend integration
+// Centralized API Client with SessionStorage Persistence (per-tab sessions) & REST backend integration
 const STORAGE_PREFIX = 'zoro_english_academy_';
 export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL !== undefined)
   ? import.meta.env.VITE_API_BASE_URL
@@ -8,25 +8,28 @@ export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.e
 
 export const getItem = (key, defaultVal = null) => {
   try {
-    const data = localStorage.getItem(STORAGE_PREFIX + key);
+    if (typeof window === 'undefined' || !window.sessionStorage) return defaultVal;
+    const data = sessionStorage.getItem(STORAGE_PREFIX + key);
     return data ? JSON.parse(data) : defaultVal;
   } catch (e) {
-    console.error('Error reading localStorage', e);
+    console.error('Error reading sessionStorage', e);
     return defaultVal;
   }
 };
 
 export const setItem = (key, value) => {
   try {
-    localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    sessionStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
   } catch (e) {
-    console.error('Error writing localStorage', e);
+    console.error('Error writing sessionStorage', e);
   }
 };
 
 export const getAuthToken = () => {
   try {
-    return getItem('authToken') || localStorage.getItem('zoro_token') || localStorage.getItem('authToken') || null;
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    return getItem('authToken') || sessionStorage.getItem('zoro_token') || sessionStorage.getItem('authToken') || null;
   } catch (e) {
     return null;
   }
@@ -34,38 +37,40 @@ export const getAuthToken = () => {
 
 export const getRefreshToken = () => {
   try {
-    return getItem('refreshToken') || localStorage.getItem('zoro_refresh_token') || localStorage.getItem('refreshToken') || null;
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    return getItem('refreshToken') || sessionStorage.getItem('zoro_refresh_token') || sessionStorage.getItem('refreshToken') || null;
   } catch (e) {
     return null;
   }
 };
 
 export const setAuthTokens = (accessToken, refreshToken) => {
+  if (typeof window === 'undefined' || !window.sessionStorage) return;
   if (accessToken) {
     setItem('authToken', accessToken);
     try {
-      localStorage.setItem('zoro_token', accessToken);
-      localStorage.setItem('authToken', accessToken);
+      sessionStorage.setItem('zoro_token', accessToken);
+      sessionStorage.setItem('authToken', accessToken);
     } catch (e) {}
   } else {
     try {
-      localStorage.removeItem(STORAGE_PREFIX + 'authToken');
-      localStorage.removeItem('zoro_token');
-      localStorage.removeItem('authToken');
+      sessionStorage.removeItem(STORAGE_PREFIX + 'authToken');
+      sessionStorage.removeItem('zoro_token');
+      sessionStorage.removeItem('authToken');
     } catch (e) {}
   }
 
   if (refreshToken) {
     setItem('refreshToken', refreshToken);
     try {
-      localStorage.setItem('zoro_refresh_token', refreshToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      sessionStorage.setItem('zoro_refresh_token', refreshToken);
+      sessionStorage.setItem('refreshToken', refreshToken);
     } catch (e) {}
   } else if (refreshToken === null) {
     try {
-      localStorage.removeItem(STORAGE_PREFIX + 'refreshToken');
-      localStorage.removeItem('zoro_refresh_token');
-      localStorage.removeItem('refreshToken');
+      sessionStorage.removeItem(STORAGE_PREFIX + 'refreshToken');
+      sessionStorage.removeItem('zoro_refresh_token');
+      sessionStorage.removeItem('refreshToken');
     } catch (e) {}
   }
 };
@@ -74,17 +79,48 @@ export const setAuthToken = (token, refreshToken) => {
   setAuthTokens(token, refreshToken !== undefined ? refreshToken : getRefreshToken());
 };
 
+// Clear legacy localStorage auth keys from older single-session implementations
+export const clearLegacyLocalStorage = () => {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  const legacyKeys = [
+    STORAGE_PREFIX + 'user',
+    STORAGE_PREFIX + 'role',
+    STORAGE_PREFIX + 'authToken',
+    STORAGE_PREFIX + 'refreshToken',
+    'zoro_token',
+    'zoro_refresh_token',
+    'zoro_user',
+    'zoro_role',
+    'authToken',
+    'refreshToken'
+  ];
+  legacyKeys.forEach((k) => {
+    try {
+      localStorage.removeItem(k);
+    } catch (e) {}
+  });
+};
+
+// Clean legacy localStorage on startup
+if (typeof window !== 'undefined') {
+  clearLegacyLocalStorage();
+}
+
 export const clearAuthSession = () => {
   setAuthTokens(null, null);
+  clearLegacyLocalStorage();
+  if (typeof window === 'undefined' || !window.sessionStorage) return;
   try {
-    localStorage.removeItem(STORAGE_PREFIX + 'user');
-    localStorage.removeItem(STORAGE_PREFIX + 'role');
-    localStorage.removeItem(STORAGE_PREFIX + 'authToken');
-    localStorage.removeItem(STORAGE_PREFIX + 'refreshToken');
-    localStorage.removeItem('zoro_token');
-    localStorage.removeItem('zoro_refresh_token');
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('refreshToken');
+    sessionStorage.removeItem(STORAGE_PREFIX + 'user');
+    sessionStorage.removeItem(STORAGE_PREFIX + 'role');
+    sessionStorage.removeItem(STORAGE_PREFIX + 'authToken');
+    sessionStorage.removeItem(STORAGE_PREFIX + 'refreshToken');
+    sessionStorage.removeItem('zoro_token');
+    sessionStorage.removeItem('zoro_refresh_token');
+    sessionStorage.removeItem('zoro_user');
+    sessionStorage.removeItem('zoro_role');
+    sessionStorage.removeItem('authToken');
+    sessionStorage.removeItem('refreshToken');
   } catch (e) {}
 };
 

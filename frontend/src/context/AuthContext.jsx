@@ -1,12 +1,29 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { setAuthToken, clearAuthSession, getAuthToken, getRefreshToken, apiGet, apiPost } from '../api/client';
+import { setAuthToken, clearAuthSession, getAuthToken, getRefreshToken, getItem, setItem, apiGet, apiPost } from '../api/client';
 import { usePolling } from '../hooks/usePolling';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const u = getItem('user');
+      if (u) return u;
+      const str = typeof window !== 'undefined' ? (sessionStorage.getItem('zoro_user') || sessionStorage.getItem('user')) : null;
+      return str ? JSON.parse(str) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [role, setRole] = useState(() => {
+    try {
+      const r = getItem('role');
+      if (r) return r;
+      return typeof window !== 'undefined' ? (sessionStorage.getItem('zoro_role') || sessionStorage.getItem('role')) : null;
+    } catch (e) {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [authNotice, setAuthNotice] = useState(null);
 
@@ -43,6 +60,12 @@ export function AuthProvider({ children }) {
             };
             setUser(formattedUser);
             setRole(roleUpper);
+            setItem('user', formattedUser);
+            setItem('role', roleUpper);
+            try {
+              sessionStorage.setItem('zoro_user', JSON.stringify(formattedUser));
+              sessionStorage.setItem('zoro_role', roleUpper);
+            } catch (e) {}
           } else {
             setUser(null);
             setRole(null);
@@ -102,6 +125,12 @@ export function AuthProvider({ children }) {
     };
     setUser(newUser);
     setRole(formattedRole);
+    setItem('user', newUser);
+    setItem('role', formattedRole);
+    try {
+      sessionStorage.setItem('zoro_user', JSON.stringify(newUser));
+      sessionStorage.setItem('zoro_role', formattedRole);
+    } catch (e) {}
     return newUser;
   };
 
@@ -110,7 +139,12 @@ export function AuthProvider({ children }) {
   const updateUserInContext = (updatedFields) => {
     setUser(prev => {
       if (!prev) return null;
-      return { ...prev, ...updatedFields };
+      const nextUser = { ...prev, ...updatedFields };
+      setItem('user', nextUser);
+      try {
+        sessionStorage.setItem('zoro_user', JSON.stringify(nextUser));
+      } catch (e) {}
+      return nextUser;
     });
   };
 
