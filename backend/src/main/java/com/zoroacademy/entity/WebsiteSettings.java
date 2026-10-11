@@ -33,6 +33,8 @@ public class WebsiteSettings {
     private String bannerAnnouncement;
 
     @Column(name = "settings_json", columnDefinition = "jsonb")
+    @org.hibernate.annotations.ColumnTransformer(write = "?::jsonb")
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.zoroacademy.util.JsonAsStringDeserializer.class)
     @JsonRawValue
     private String settingsJson;
 
@@ -111,11 +113,11 @@ public class WebsiteSettings {
     }
 
     public String getSettingsJson() {
-        return settingsJson;
+        return (settingsJson == null || settingsJson.trim().isEmpty()) ? null : settingsJson.trim();
     }
 
     public void setSettingsJson(String settingsJson) {
-        this.settingsJson = settingsJson;
+        this.settingsJson = (settingsJson == null || settingsJson.trim().isEmpty()) ? null : settingsJson.trim();
     }
 
     public LocalDateTime getUpdatedAt() {

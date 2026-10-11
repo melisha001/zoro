@@ -36,17 +36,52 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage(), "CONFLICT", null));
     }
 
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMessageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        String correlationId = UUID.randomUUID().toString();
+        log.warn("Malformed request body [correlationId={}]: {}", correlationId, ex.getMessage());
+        String msg = "Malformed request payload. Please verify JSON format and field types.";
+        if (ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
+            String cause = ex.getMostSpecificCause().getMessage();
+            int lineIdx = cause.indexOf(" at [Source");
+            if (lineIdx > 0) {
+                cause = cause.substring(0, lineIdx);
+            }
+            msg = "Malformed request payload: " + cause;
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(msg, "MALFORMED_JSON", correlationId));
+    }
+
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException ex) {
-        log.warn("Data integrity violation: {}", ex.getMessage());
-        String msg = "Operation cannot be completed because dependent records exist or a database constraint was violated.";
+        String correlationId = UUID.randomUUID().toString();
+        log.warn("Data integrity violation [correlationId={}]: {}", correlationId, ex.getMessage());
+        String msg = "Operation cannot be completed because a database constraint was violated.";
+        HttpStatus status = HttpStatus.CONFLICT;
+        String errorCode = "DATA_INTEGRITY_VIOLATION";
+
         if (ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
             String specific = ex.getMostSpecificCause().getMessage();
             if (specific.contains("violates foreign key constraint")) {
                 msg = "Cannot delete or modify record because it is referenced by other records (foreign key constraint).";
+                status = HttpStatus.CONFLICT;
+                errorCode = "FOREIGN_KEY_VIOLATION";
+            } else if (specific.contains("violates unique constraint") || specific.contains("duplicate key")) {
+                msg = "A record with this information already exists (unique constraint violation).";
+                status = HttpStatus.CONFLICT;
+                errorCode = "DUPLICATE_KEY";
+            } else if (specific.contains("column is of type jsonb") || specific.contains("invalid input syntax for type json")) {
+                msg = "Invalid JSON data provided for one or more fields.";
+                status = HttpStatus.BAD_REQUEST;
+                errorCode = "INVALID_JSON_DATA";
+            } else if (specific.contains("violates not-null constraint")) {
+                msg = "A required field was missing or null.";
+                status = HttpStatus.BAD_REQUEST;
+                errorCode = "NOT_NULL_VIOLATION";
             }
         }
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(msg, "DATA_INTEGRITY_VIOLATION", null));
+        return ResponseEntity.status(status).body(ApiResponse.error(msg, errorCode, correlationId));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

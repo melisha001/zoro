@@ -61,6 +61,8 @@ public class AssignmentSubmission {
     private String answerText;
 
     @Column(columnDefinition = "jsonb")
+    @org.hibernate.annotations.ColumnTransformer(write = "?::jsonb")
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.zoroacademy.util.JsonAsStringDeserializer.class)
     @JsonRawValue
     private String attachment;
 
@@ -83,6 +85,8 @@ public class AssignmentSubmission {
     private String score;
 
     @Column(name = "correction_attachment", columnDefinition = "jsonb")
+    @org.hibernate.annotations.ColumnTransformer(write = "?::jsonb")
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.zoroacademy.util.JsonAsStringDeserializer.class)
     @JsonRawValue
     private String correctionAttachment;
 
@@ -254,11 +258,11 @@ public class AssignmentSubmission {
     }
 
     public String getAttachment() {
-        return attachment;
+        return (attachment == null || attachment.trim().isEmpty()) ? null : attachment.trim();
     }
 
     public void setAttachment(String attachment) {
-        this.attachment = attachment;
+        this.attachment = (attachment == null || attachment.trim().isEmpty()) ? null : attachment.trim();
     }
 
     public String getStatus() {
@@ -310,11 +314,11 @@ public class AssignmentSubmission {
     }
 
     public String getCorrectionAttachment() {
-        return correctionAttachment;
+        return (correctionAttachment == null || correctionAttachment.trim().isEmpty()) ? null : correctionAttachment.trim();
     }
 
     public void setCorrectionAttachment(String correctionAttachment) {
-        this.correctionAttachment = correctionAttachment;
+        this.correctionAttachment = (correctionAttachment == null || correctionAttachment.trim().isEmpty()) ? null : correctionAttachment.trim();
     }
 
     public LocalDateTime getCreatedAt() {

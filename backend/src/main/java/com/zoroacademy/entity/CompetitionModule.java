@@ -30,6 +30,8 @@ public class CompetitionModule {
     private String description;
 
     @Column(name = "assessment_data", columnDefinition = "jsonb")
+    @org.hibernate.annotations.ColumnTransformer(write = "?::jsonb")
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.zoroacademy.util.JsonAsStringDeserializer.class)
     @JsonRawValue
     private String assessmentData;
 
@@ -90,11 +92,11 @@ public class CompetitionModule {
     }
 
     public String getAssessmentData() {
-        return assessmentData;
+        return (assessmentData == null || assessmentData.trim().isEmpty()) ? null : assessmentData.trim();
     }
 
     public void setAssessmentData(String assessmentData) {
-        this.assessmentData = assessmentData;
+        this.assessmentData = (assessmentData == null || assessmentData.trim().isEmpty()) ? null : assessmentData.trim();
     }
 
     public LocalDateTime getCreatedAt() {

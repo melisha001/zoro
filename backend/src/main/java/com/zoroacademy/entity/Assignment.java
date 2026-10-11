@@ -42,6 +42,8 @@ public class Assignment {
     private String description;
 
     @Column(columnDefinition = "jsonb")
+    @org.hibernate.annotations.ColumnTransformer(write = "?::jsonb")
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.zoroacademy.util.JsonAsStringDeserializer.class)
     @JsonRawValue
     private String attachment;
 
@@ -147,11 +149,11 @@ public class Assignment {
     }
 
     public String getAttachment() {
-        return attachment;
+        return (attachment == null || attachment.trim().isEmpty()) ? null : attachment.trim();
     }
 
     public void setAttachment(String attachment) {
-        this.attachment = attachment;
+        this.attachment = (attachment == null || attachment.trim().isEmpty()) ? null : attachment.trim();
     }
 
     public LocalDateTime getCreatedAt() {

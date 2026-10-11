@@ -34,10 +34,14 @@ public class CourseModule {
     private String duration;
 
     @Column(name = "video_storage_ref", columnDefinition = "jsonb")
+    @org.hibernate.annotations.ColumnTransformer(write = "?::jsonb")
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.zoroacademy.util.JsonAsStringDeserializer.class)
     @JsonRawValue
     private String videoStorageRef;
 
     @Column(name = "after_session_assessment", columnDefinition = "jsonb")
+    @org.hibernate.annotations.ColumnTransformer(write = "?::jsonb")
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.zoroacademy.util.JsonAsStringDeserializer.class)
     @JsonRawValue
     private String afterSessionAssessment;
 
@@ -113,19 +117,19 @@ public class CourseModule {
     }
 
     public String getVideoStorageRef() {
-        return videoStorageRef;
+        return (videoStorageRef == null || videoStorageRef.trim().isEmpty()) ? null : videoStorageRef.trim();
     }
 
     public void setVideoStorageRef(String videoStorageRef) {
-        this.videoStorageRef = videoStorageRef;
+        this.videoStorageRef = (videoStorageRef == null || videoStorageRef.trim().isEmpty()) ? null : videoStorageRef.trim();
     }
 
     public String getAfterSessionAssessment() {
-        return afterSessionAssessment;
+        return (afterSessionAssessment == null || afterSessionAssessment.trim().isEmpty()) ? null : afterSessionAssessment.trim();
     }
 
     public void setAfterSessionAssessment(String afterSessionAssessment) {
-        this.afterSessionAssessment = afterSessionAssessment;
+        this.afterSessionAssessment = (afterSessionAssessment == null || afterSessionAssessment.trim().isEmpty()) ? null : afterSessionAssessment.trim();
     }
 
     public LocalDateTime getCreatedAt() {
