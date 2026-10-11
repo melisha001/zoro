@@ -55,10 +55,39 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     assessmentFile: null
   });
 
+  const [moduleVideoStatuses, setModuleVideoStatuses] = useState({});
+
+  const syncModuleVideoStatuses = (modulesList) => {
+    if (!modulesList || modulesList.length === 0) return;
+    const initial = {};
+    for (const mod of modulesList) {
+      if (!mod.videoStorageRef) continue;
+      try {
+        const parsed = typeof mod.videoStorageRef === 'string' ? JSON.parse(mod.videoStorageRef) : mod.videoStorageRef;
+        const vId = parsed?.videoId || (typeof mod.videoStorageRef === 'string' && !mod.videoStorageRef.startsWith('{') ? mod.videoStorageRef : null);
+        if (vId) {
+          initial[mod.id] = parsed?.status || 'Processing';
+          getVideoDetails(vId).then(res => {
+            if (res.success && res.data) {
+              const liveStatus = res.data.statusLabel || (res.data.status === 3 ? 'Ready' : (res.data.status === 4 ? 'Failed' : 'Processing'));
+              setModuleVideoStatuses(prev => ({ ...prev, [mod.id]: liveStatus }));
+            }
+          }).catch(() => {});
+        }
+      } catch {}
+    }
+    setModuleVideoStatuses(prev => ({ ...prev, ...initial }));
+  };
+
   const loadCourse = async () => {
     if (courseId) {
       const res = await getCourseById(courseId);
-      if (res.data) setCourse(res.data);
+      if (res.data) {
+        setCourse(res.data);
+        if (res.data.modules) {
+          syncModuleVideoStatuses(res.data.modules);
+        }
+      }
     }
   };
 
@@ -313,12 +342,22 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
       };
     }
 
-    const videoStorageRef = formData.videoId ? JSON.stringify({ videoId: formData.videoId }) : null;
+    const isVideoReady = videoUploadState.status === 'Ready' || videoUploadState.status === 'Transcoded' || videoUploadState.status === 'Finished';
+    const computedDuration = (isVideoReady && videoUploadState.duration)
+      ? videoUploadState.duration
+      : (editingModule?.duration && isVideoReady ? editingModule.duration : '');
+
+    const videoStatus = videoUploadState.status || (videoUploadState.isUploading ? 'Uploading' : (formData.videoId ? 'Ready' : ''));
+
+    const videoStorageRef = formData.videoId ? JSON.stringify({
+      videoId: formData.videoId,
+      status: videoStatus || 'Ready'
+    }) : null;
 
     const payload = {
       title: formData.title,
       description: formData.description,
-      duration: videoUploadState.duration || 'Lesson Video',
+      duration: computedDuration,
       videoStorageRef,
       thumbnail: formData.thumbnail,
       notesFile: formData.notesFile,
@@ -472,7 +511,38 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                         {index + 1}
                       </div>
                       <div>
-                        <h3 className="text-base font-black tracking-tight">{mod.title}</h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-base font-black tracking-tight">{mod.title}</h3>
+                          {(() => {
+                            let vInfo = null;
+                            if (mod.videoStorageRef) {
+                              try {
+                                const parsed = typeof mod.videoStorageRef === 'string' ? JSON.parse(mod.videoStorageRef) : mod.videoStorageRef;
+                                vInfo = { videoId: parsed?.videoId, status: parsed?.status || 'Ready' };
+                              } catch {
+                                vInfo = { videoId: mod.videoStorageRef, status: 'Ready' };
+                              }
+                            }
+                            const status = moduleVideoStatuses[mod.id] || vInfo?.status;
+                            if (!vInfo && !status) return null;
+                            const statusNorm = status || 'Processing';
+                            return (
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                statusNorm === 'Ready'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : statusNorm === 'Failed'
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                  : statusNorm === 'Uploading'
+                                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 animate-pulse'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
+                              }`}>
+                                <Video className="w-3 h-3" />
+                                <span>Video: {statusNorm}</span>
+                                {mod.duration && statusNorm === 'Ready' && <span className="opacity-80">({mod.duration})</span>}
+                              </span>
+                            );
+                          })()}
+                        </div>
                         {mod.description && <p className="text-slate-400 text-xs mt-0.5 line-clamp-1">{mod.description}</p>}
                       </div>
                     </div>

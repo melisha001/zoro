@@ -17,6 +17,41 @@ function matchesTrainer(course, user) {
   return false;
 }
 
+function formatModulesDuration(modules) {
+  if (!modules || modules.length === 0) return '';
+  let totalSec = 0;
+  let hasValid = false;
+  for (const m of modules) {
+    if (!m.duration) continue;
+    const dur = m.duration.trim();
+    if (/^\d+:\d+(:\d+)?$/.test(dur)) {
+      const parts = dur.split(':').map(Number);
+      if (parts.length === 2) {
+        totalSec += parts[0] * 60 + parts[1];
+        hasValid = true;
+      } else if (parts.length === 3) {
+        totalSec += parts[0] * 3600 + parts[1] * 60 + parts[2];
+        hasValid = true;
+      }
+    } else {
+      const hrs = dur.match(/(\d+)\s*(h|hr|hrs|hour|hours)/i);
+      const mins = dur.match(/(\d+)\s*(m|min|mins|minute|minutes)/i);
+      if (hrs || mins) {
+        if (hrs) totalSec += parseInt(hrs[1], 10) * 3600;
+        if (mins) totalSec += parseInt(mins[1], 10) * 60;
+        hasValid = true;
+      }
+    }
+  }
+  if (!hasValid || totalSec <= 0) return '';
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m} mins`;
+  return `${s}s`;
+}
+
 export default function TrainerCoursesPage() {
   const { user } = useAuth();
   const trainerId = user?.id || '';
@@ -213,7 +248,7 @@ export default function TrainerCoursesPage() {
                     {/* Requirement 10.2: Course Duration Display */}
                     <div className="absolute bottom-3 left-3 bg-slate-950/80 backdrop-blur-sm text-white text-xs font-bold px-3 py-1 rounded-xl shadow flex items-center space-x-2">
                       <Clock className="w-3.5 h-3.5 text-purple-400" />
-                      <span>Duration: {course.duration || '3 Months'}</span>
+                      <span>Duration: {course.duration || formatModulesDuration(course.modules) || 'Flexible'}</span>
                     </div>
                   </div>
 
@@ -263,7 +298,7 @@ export default function TrainerCoursesPage() {
                       </div>
                       <div>
                         <div className="text-slate-400 font-semibold text-[10px]">Duration</div>
-                        <div className="font-extrabold text-purple-900 text-xs mt-0.5">{course.duration || '3 Months'}</div>
+                        <div className="font-extrabold text-purple-900 text-xs mt-0.5">{course.duration || formatModulesDuration(course.modules) || 'Flexible'}</div>
                       </div>
                     </div>
 
@@ -274,7 +309,7 @@ export default function TrainerCoursesPage() {
                   <div className="pt-4 flex items-center justify-between text-xs font-bold text-slate-500">
                     <div className="flex items-center space-x-1 text-purple-700 font-extrabold">
                       <Layers className="w-4 h-4" />
-                      <span>{(course.modules || []).length} Modules</span>
+                      <span>{(course.modules || []).length} {(course.modules || []).length === 1 ? 'Module' : 'Modules'}{formatModulesDuration(course.modules) ? ` • ${formatModulesDuration(course.modules)}` : ''}</span>
                     </div>
 
                     {isAssignedToMe || (req && req.status === 'Approved') ? (

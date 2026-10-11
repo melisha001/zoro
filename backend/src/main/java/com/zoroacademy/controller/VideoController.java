@@ -58,16 +58,19 @@ public class VideoController {
      * User identity is strictly resolved from the authenticated JWT principal.
      */
     @GetMapping("/{id}/playback")
-    public ApiResponse<VideoPlaybackResponse> getPlaybackAuthorization(
+    public org.springframework.http.ResponseEntity<ApiResponse<VideoPlaybackResponse>> getPlaybackAuthorization(
             @PathVariable String id,
+            @RequestParam(required = false) String courseId,
             @AuthenticationPrincipal UserPrincipal principal,
             HttpServletRequest request) {
 
         if (principal == null) {
-            return ApiResponse.error("Authentication required to access video playback");
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("Authentication required to access video playback"));
         }
 
         String effectiveUser = principal.getId();
+        String userEmail = principal.getEmail();
         String effectiveRole = principal.getRole();
         String clientIp = request.getHeader("X-Forwarded-For");
         if (clientIp != null && !clientIp.isBlank()) {
@@ -76,11 +79,12 @@ public class VideoController {
             clientIp = request.getRemoteAddr();
         }
 
-        VideoPlaybackResponse response = bunnyStreamService.getPlaybackAuthorization(id, effectiveUser, effectiveRole, clientIp);
+        VideoPlaybackResponse response = bunnyStreamService.getPlaybackAuthorization(id, courseId, effectiveUser, userEmail, effectiveRole, clientIp);
         if (response.isAuthorized()) {
-            return ApiResponse.ok(response, response.getMessage());
+            return org.springframework.http.ResponseEntity.ok(ApiResponse.ok(response, response.getMessage()));
         } else {
-            return ApiResponse.error(response.getMessage());
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error(response.getMessage()));
         }
     }
 }

@@ -268,11 +268,23 @@ public class CourseService {
 
     private void cleanupModuleFilesAndVideos(CourseModule module) {
         if (module == null) return;
+        java.util.Set<String> deletedVideoIds = new java.util.HashSet<>();
         List<Video> videos = videoRepository.findByModuleId(module.getId());
         for (Video v : videos) {
-            bunnyStreamService.deleteVideo(v.getBunnyVideoId());
+            if (deletedVideoIds.add(v.getBunnyVideoId())) {
+                bunnyStreamService.deleteVideo(v.getBunnyVideoId());
+            }
         }
         if (module.getVideoStorageRef() != null) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(module.getVideoStorageRef());
+                if (node.has("videoId")) {
+                    String vid = node.get("videoId").asText();
+                    if (deletedVideoIds.add(vid)) {
+                        bunnyStreamService.deleteVideo(vid);
+                    }
+                }
+            } catch (Exception ignored) {}
             cleanupStoredFilesFromText(module.getVideoStorageRef());
         }
         if (module.getAfterSessionAssessment() != null) {
@@ -317,7 +329,23 @@ public class CourseService {
             module.setId("mod_" + UUID.randomUUID());
         }
         module.setCourse(course);
-        return moduleRepository.save(module);
+        CourseModule saved = moduleRepository.save(module);
+
+        if (saved.getVideoStorageRef() != null) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(saved.getVideoStorageRef());
+                if (node.has("videoId")) {
+                    String vid = node.get("videoId").asText();
+                    videoRepository.findById(vid).or(() -> videoRepository.findByBunnyVideoId(vid)).ifPresent(v -> {
+                        v.setCourseId(courseId);
+                        v.setModuleId(saved.getId());
+                        videoRepository.save(v);
+                    });
+                }
+            } catch (Exception ignored) {}
+        }
+
+        return saved;
     }
 
     @Transactional
@@ -341,6 +369,18 @@ public class CourseService {
                 } catch (Exception ignored) {}
             }
             existing.setVideoStorageRef(updated.getVideoStorageRef());
+
+            try {
+                com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(updated.getVideoStorageRef());
+                if (node.has("videoId")) {
+                    String vid = node.get("videoId").asText();
+                    videoRepository.findById(vid).or(() -> videoRepository.findByBunnyVideoId(vid)).ifPresent(v -> {
+                        v.setCourseId(courseId);
+                        v.setModuleId(moduleId);
+                        videoRepository.save(v);
+                    });
+                }
+            } catch (Exception ignored) {}
         }
         if (updated.getAfterSessionAssessment() != null) existing.setAfterSessionAssessment(updated.getAfterSessionAssessment());
 

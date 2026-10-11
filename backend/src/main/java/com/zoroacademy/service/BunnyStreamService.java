@@ -167,6 +167,17 @@ public class BunnyStreamService {
                     }
                     video.setUpdatedAt(LocalDateTime.now());
                     videoRepository.save(video);
+
+                    if (video.getModuleId() != null && statusInt == 3 && lengthSec > 0) {
+                        courseModuleRepository.findById(video.getModuleId()).ifPresent(mod -> {
+                            if (mod.getDuration() == null || mod.getDuration().isBlank() || "Lesson Video".equalsIgnoreCase(mod.getDuration())) {
+                                int mins = lengthSec / 60;
+                                int secs = lengthSec % 60;
+                                mod.setDuration(String.format("%d:%02d", mins, secs));
+                                courseModuleRepository.save(mod);
+                            }
+                        });
+                    }
                 }
             } catch (Exception e) {
                 log.debug("Could not sync video status from Bunny CDN: {}", e.getMessage());
@@ -192,6 +203,14 @@ public class BunnyStreamService {
                 log.warn("Failed to delete video {} from Bunny Stream: {}", videoId, e.getMessage());
             }
             videoRepository.delete(v);
+        } else {
+            try {
+                String url = String.format("https://video.bunnycdn.com/library/%s/videos/%s", properties.getLibraryId(), videoId);
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("AccessKey", properties.getApiKey());
+                HttpEntity<Void> entity = new HttpEntity<>(headers);
+                restTemplate.exchange(url, org.springframework.http.HttpMethod.DELETE, entity, Void.class);
+            } catch (Exception ignored) {}
         }
     }
 
@@ -200,7 +219,7 @@ public class BunnyStreamService {
      * Enforces course enrollment and denies access if video has no course.
      */
     @Transactional(readOnly = true)
-    public VideoPlaybackResponse getPlaybackAuthorization(String videoOrModuleId, String authenticatedUserId, String userRole, String clientIp) {
+    public VideoPlaybackResponse getPlaybackAuthorization(String videoOrModuleId, String courseIdParam, String authenticatedUserId, String userEmail, String userRole, String clientIp) {
         // Resolve video by ID, bunnyVideoId, or moduleId in videos table
         Optional<Video> videoOpt = videoRepository.findById(videoOrModuleId)
                 .or(() -> videoRepository.findByBunnyVideoId(videoOrModuleId))
@@ -239,6 +258,10 @@ public class BunnyStreamService {
             }
         }
 
+        if (courseId == null && courseIdParam != null && !courseIdParam.isBlank()) {
+            courseId = courseIdParam;
+        }
+
         if (effectiveVideoId == null) {
             effectiveVideoId = videoOrModuleId;
         }
@@ -260,6 +283,7 @@ public class BunnyStreamService {
             isAuthorized = true;
         } else if (authenticatedUserId != null && !authenticatedUserId.isBlank()) {
             boolean enrolled = enrollmentRepository.existsByStudentIdAndCourseId(authenticatedUserId, courseId)
+                    || (userEmail != null && enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(userEmail, courseId))
                     || enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(authenticatedUserId, courseId);
             if (enrolled) {
                 isAuthorized = true;
@@ -305,6 +329,11 @@ public class BunnyStreamService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public VideoPlaybackResponse getPlaybackAuthorization(String videoOrModuleId, String authenticatedUserId, String userRole, String clientIp) {
+        return getPlaybackAuthorization(videoOrModuleId, null, authenticatedUserId, null, userRole, clientIp);
+    }
+
     /**
      * Webhook receiver for Bunny Stream event notifications.
      */
@@ -325,6 +354,17 @@ public class BunnyStreamService {
             video.setUpdatedAt(LocalDateTime.now());
             videoRepository.save(video);
             log.info("Updated video {} status to {}", video.getBunnyVideoId(), video.getStatusLabel());
+
+            if (video.getModuleId() != null && video.getStatus() != null && video.getStatus() == 3 && video.getDurationSeconds() != null && video.getDurationSeconds() > 0) {
+                courseModuleRepository.findById(video.getModuleId()).ifPresent(mod -> {
+                    if (mod.getDuration() == null || mod.getDuration().isBlank() || "Lesson Video".equalsIgnoreCase(mod.getDuration())) {
+                        int mins = video.getDurationSeconds() / 60;
+                        int secs = video.getDurationSeconds() % 60;
+                        mod.setDuration(String.format("%d:%02d", mins, secs));
+                        courseModuleRepository.save(mod);
+                    }
+                });
+            }
         } else {
             log.warn("Received webhook for unknown video guid: {}", payload.getVideoGuid());
         }

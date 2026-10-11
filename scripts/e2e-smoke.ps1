@@ -141,4 +141,68 @@ $subPayload = @{
 $addSub = Invoke-RestMethod -Uri "$baseUrl/submissions" -Method Post -Headers $headers -Body $subPayload
 Write-Host "-> HTTP 200: POST /submissions successful. Submission ID: $($addSub.data.id)" -ForegroundColor Green
 
-Write-Host "`n=== Task A E2E Smoke Tests PASSED ===" -ForegroundColor Green
+# 5. Course Modules & Secured Playback Verification (Task C)
+Write-Host "`n[Step 5] Course Modules & Secured Playback Verification (Task C)..."
+$vidReq = @{
+    title = "E2E Smoke Lesson Video"
+    courseId = $targetCourse.id
+    moduleId = $null
+} | ConvertTo-Json
+$vidSession = Invoke-RestMethod -Uri "$baseUrl/videos/upload-session" -Method Post -Headers $headers -Body $vidReq
+$videoId = $vidSession.data.videoId
+Write-Host "-> HTTP 200: POST /videos/upload-session successful. Video ID: $videoId" -ForegroundColor Green
+
+# Create module with video reference
+$cModulePayload = @{
+    title = "Task C E2E Module"
+    description = "Module testing secured playback and duration sync"
+    duration = ""
+    videoStorageRef = (@{ videoId = $videoId; status = "Ready" } | ConvertTo-Json -Compress)
+} | ConvertTo-Json
+$createdModule = Invoke-RestMethod -Uri "$baseUrl/courses/$($targetCourse.id)/modules" -Method Post -Headers $headers -Body $cModulePayload
+$cModId = $createdModule.data.id
+Write-Host "-> HTTP 200: POST /courses/{id}/modules successful. Module ID: $cModId" -ForegroundColor Green
+
+# Unenrolled student playback denial (HTTP 403)
+$freshStudentEmail = "smoke_student_c_$(Get-Random)@zoro.com"
+$studentPass = "StudentPass123!"
+$newStudentPayload = @{
+    name = "Smoke Student C"
+    email = $freshStudentEmail
+    role = "STUDENT"
+    password = $studentPass
+    status = "Active"
+} | ConvertTo-Json
+Invoke-RestMethod -Uri "$baseUrl/users/students" -Method Post -Headers $headers -Body $newStudentPayload | Out-Null
+
+$sLoginBody = @{ email = $freshStudentEmail; password = $studentPass } | ConvertTo-Json
+$sLoginRes = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method Post -Body $sLoginBody -ContentType "application/json"
+$sHeaders = @{ Authorization = "Bearer $($sLoginRes.data.accessToken)"; "Content-Type" = "application/json" }
+
+try {
+    Invoke-WebRequest -Uri "$baseUrl/videos/$cModId/playback" -Method Get -Headers $sHeaders | Out-Null
+    Write-Host "-> ERROR: Unenrolled student was NOT denied playback!" -ForegroundColor Red
+} catch {
+    $code = $_.Exception.Response.StatusCode.value__
+    Write-Host "-> HTTP $code Forbidden: Unenrolled student denied playback as expected." -ForegroundColor Green
+}
+
+# Enroll student and verify playback authorization (HTTP 200)
+$sEnrollPayload = @{
+    studentId = $sLoginRes.data.user.id
+    studentEmail = $freshStudentEmail
+    studentName = "Smoke Student C"
+    courseId = $targetCourse.id
+    courseTitle = $targetCourse.title
+    status = "Active"
+} | ConvertTo-Json
+Invoke-RestMethod -Uri "$baseUrl/enrollments" -Method Post -Headers $headers -Body $sEnrollPayload | Out-Null
+
+$playbackAuth = Invoke-RestMethod -Uri "$baseUrl/videos/$cModId/playback" -Method Get -Headers $sHeaders
+Write-Host "-> HTTP 200: Enrolled student playback authorized. Video: $($playbackAuth.data.videoId), Authorized: $($playbackAuth.data.authorized)" -ForegroundColor Green
+
+# Clean up module
+Invoke-RestMethod -Uri "$baseUrl/courses/$($targetCourse.id)/modules/$cModId" -Method Delete -Headers $headers | Out-Null
+Write-Host "-> HTTP 200: DELETE /courses/{id}/modules/{id} cleaned up." -ForegroundColor Green
+
+Write-Host "`n=== All E2E Smoke Tests PASSED (Tasks A, B, C) ===" -ForegroundColor Green

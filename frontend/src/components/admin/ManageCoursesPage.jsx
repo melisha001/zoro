@@ -5,6 +5,41 @@ import { getCourses, deleteCourse } from '../../api/courseApi';
 import ConfirmModal from '../common/ConfirmModal';
 import { resolveFileUrl } from '../../api/fileApi';
 
+const formatModulesDuration = (modules) => {
+  if (!modules || modules.length === 0) return '';
+  let totalSec = 0;
+  let hasValid = false;
+  for (const m of modules) {
+    if (!m.duration) continue;
+    const dur = m.duration.trim();
+    if (/^\d+:\d+(:\d+)?$/.test(dur)) {
+      const parts = dur.split(':').map(Number);
+      if (parts.length === 2) {
+        totalSec += parts[0] * 60 + parts[1];
+        hasValid = true;
+      } else if (parts.length === 3) {
+        totalSec += parts[0] * 3600 + parts[1] * 60 + parts[2];
+        hasValid = true;
+      }
+    } else {
+      const hrs = dur.match(/(\d+)\s*(h|hr|hrs|hour|hours)/i);
+      const mins = dur.match(/(\d+)\s*(m|min|mins|minute|minutes)/i);
+      if (hrs || mins) {
+        if (hrs) totalSec += parseInt(hrs[1], 10) * 3600;
+        if (mins) totalSec += parseInt(mins[1], 10) * 60;
+        hasValid = true;
+      }
+    }
+  }
+  if (!hasValid || totalSec <= 0) return '';
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m} mins`;
+  return `${s}s`;
+};
+
 export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseIdForEdit }) {
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
@@ -134,7 +169,7 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
 
                   <div className="p-6 space-y-3">
                     <div className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider">
-                      {course.duration}
+                      {course.duration || formatModulesDuration(course.modules) || 'Self-Paced'}
                     </div>
                     <h3 className="text-xl font-black text-slate-900">{course.title}</h3>
                     <p className="text-slate-500 text-xs line-clamp-2">{course.description}</p>
@@ -142,7 +177,8 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
                     <div className="pt-2 text-xs font-bold text-slate-600 flex flex-wrap items-center gap-2">
                       {course.mode !== 'Online' ? (
                         <span className="bg-slate-100 px-2.5 py-1 rounded-lg">
-                          {(course.modules || []).length} Modules
+                          {(course.modules || []).length} {(course.modules || []).length === 1 ? 'Module' : 'Modules'}
+                          {formatModulesDuration(course.modules) ? ` • ${formatModulesDuration(course.modules)}` : ''}
                         </span>
                       ) : (
                         <span className="bg-blue-50 text-blue-800 px-2.5 py-1 rounded-lg border border-blue-200">

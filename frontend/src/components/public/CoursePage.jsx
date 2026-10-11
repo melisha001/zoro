@@ -1,7 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { Play } from 'lucide-react';
+import { Play, Layers } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
 import { resolveFileUrl } from '../../api/fileApi';
+
+function formatModulesDuration(modules) {
+  if (!modules || modules.length === 0) return '';
+  let totalSec = 0;
+  let hasValid = false;
+  for (const m of modules) {
+    if (!m.duration) continue;
+    const dur = m.duration.trim();
+    if (/^\d+:\d+(:\d+)?$/.test(dur)) {
+      const parts = dur.split(':').map(Number);
+      if (parts.length === 2) {
+        totalSec += parts[0] * 60 + parts[1];
+        hasValid = true;
+      } else if (parts.length === 3) {
+        totalSec += parts[0] * 3600 + parts[1] * 60 + parts[2];
+        hasValid = true;
+      }
+    } else {
+      const hrs = dur.match(/(\d+)\s*(h|hr|hrs|hour|hours)/i);
+      const mins = dur.match(/(\d+)\s*(m|min|mins|minute|minutes)/i);
+      if (hrs || mins) {
+        if (hrs) totalSec += parseInt(hrs[1], 10) * 3600;
+        if (mins) totalSec += parseInt(mins[1], 10) * 60;
+        hasValid = true;
+      }
+    }
+  }
+  if (!hasValid || totalSec <= 0) return '';
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m} mins`;
+  return `${s}s`;
+}
 
 export default function CoursePage({ onOpenEnquire }) {
   const [courses, setCourses] = useState([]);
@@ -148,6 +183,44 @@ export default function CoursePage({ onOpenEnquire }) {
                 <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
                   {selectedCourse.description || selectedCourse.overview}
                 </p>
+              </div>
+            )}
+
+            {/* Course Syllabus & Modules */}
+            {selectedCourse.id && selectedCourse.modules && selectedCourse.modules.length > 0 && (
+              <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md p-6 sm:p-8 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-5 h-5 text-blue-600" />
+                    <h3 className="text-lg font-extrabold text-slate-900">Course Syllabus & Modules</h3>
+                  </div>
+                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                    {selectedCourse.modules.length} {selectedCourse.modules.length === 1 ? 'Module' : 'Modules'}
+                    {formatModulesDuration(selectedCourse.modules) ? ` • ${formatModulesDuration(selectedCourse.modules)}` : ''}
+                  </span>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {selectedCourse.modules.map((mod, idx) => (
+                    <div key={mod.id || idx} className="py-3 flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-50 text-blue-700 font-extrabold text-xs shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900">{mod.title}</h4>
+                          {mod.description && (
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{mod.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      {mod.duration && (
+                        <span className="text-xs font-semibold text-slate-500 shrink-0 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
+                          {mod.duration}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
