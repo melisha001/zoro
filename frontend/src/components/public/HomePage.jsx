@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Award, Users, Globe, CheckCircle, ArrowRight, Play, Sparkles } from 'lucide-react';
+import { Award, Users, Globe, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
 import { getCompetitions } from '../../api/competitionApi';
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
@@ -63,7 +63,7 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
     spotlightTitle: 'National Championship & Competitions Spotlight'
   };
 
-  const showCourses = siteSettings?.portalControls?.publicWebsite?.showFeaturedCourses !== false;
+  const showCourses = true;
 
   return (
     <div className="bg-slate-50 min-h-screen">
@@ -335,20 +335,20 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
               <div className="space-y-4 text-sm">
                 <div>
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Phone</span>
-                  <a href={`tel:${siteSettings?.contactPageContent?.contactPhone || '+919876543210'}`} className="font-extrabold text-blue-600 hover:underline">
-                    {siteSettings?.contactPageContent?.contactPhone || '+91 98765 43210'}
+                  <a href={`tel:${(siteSettings?.contactPageContent?.contactPhone || siteSettings?.generalInfo?.contactPhone || '+919876543210').replace(/\s+/g, '')}`} className="font-extrabold text-blue-600 hover:underline">
+                    {siteSettings?.contactPageContent?.contactPhone || siteSettings?.generalInfo?.contactPhone || '+91 98765 43210'}
                   </a>
                 </div>
                 <div>
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Email</span>
-                  <a href={`mailto:${siteSettings?.contactPageContent?.contactEmail || 'contact@zoroacademy.com'}`} className="font-extrabold text-blue-600 hover:underline">
-                    {siteSettings?.contactPageContent?.contactEmail || 'contact@zoroacademy.com'}
+                  <a href={`mailto:${siteSettings?.contactPageContent?.contactEmail || siteSettings?.generalInfo?.contactEmail || 'contact@zoroacademy.com'}`} className="font-extrabold text-blue-600 hover:underline">
+                    {siteSettings?.contactPageContent?.contactEmail || siteSettings?.generalInfo?.contactEmail || 'contact@zoroacademy.com'}
                   </a>
                 </div>
                 <div>
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Address</span>
                   <p className="font-semibold text-slate-800">
-                    {siteSettings?.contactPageContent?.contactAddress || 'No. 12, Main Road, Skill Nagar, Chennai - 600001, Tamil Nadu, India'}
+                    {siteSettings?.contactPageContent?.contactAddress || siteSettings?.generalInfo?.address || 'No. 12, Main Road, Skill Nagar, Chennai - 600001, Tamil Nadu, India'}
                   </p>
                 </div>
                 <div>

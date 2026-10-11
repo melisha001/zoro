@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { createEnquiry } from '../../api/enquiryApi';
-import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 import { getCourses } from '../../api/courseApi';
 import { validatePhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
 import PhoneInput from '../common/PhoneInput';
@@ -10,7 +9,6 @@ export default function EnquireModal({ isOpen, onClose }) {
   const [submitted, setSubmitted] = useState(false);
   const [formData, setFormData] = useState({ name: '', phone: '', email: '', courseId: '', course: '', message: '' });
   const [phoneError, setPhoneError] = useState('');
-  const [isEnabled, setIsEnabled] = useState(true);
   const [courses, setCourses] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [coursesError, setCoursesError] = useState(false);
@@ -34,14 +32,7 @@ export default function EnquireModal({ isOpen, onClose }) {
   };
 
   useEffect(() => {
-    async function checkSettings() {
-      const res = await getWebsiteSettings();
-      if (res.success && res.data?.portalControls?.publicWebsite) {
-        setIsEnabled(res.data.portalControls.publicWebsite.enableEnquiryModal !== false);
-      }
-    }
     if (isOpen) {
-      checkSettings();
       loadActiveCourses();
     }
   }, [isOpen]);
@@ -64,7 +55,6 @@ export default function EnquireModal({ isOpen, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!isEnabled) return;
     if (!validatePhone(formData.phone)) {
       setPhoneError(SUBMIT_PHONE_ERROR);
       return;
@@ -96,13 +86,7 @@ export default function EnquireModal({ isOpen, onClose }) {
           <X className="w-5 h-5" />
         </button>
 
-        {!isEnabled ? (
-          <div className="text-center py-8 space-y-3">
-            <AlertCircle className="w-14 h-14 text-amber-500 mx-auto" />
-            <h3 className="text-xl font-extrabold text-slate-900">Enquiries Disabled</h3>
-            <p className="text-xs text-slate-500">Public course enquiry modal is currently turned off by system administrator.</p>
-          </div>
-        ) : submitted ? (
+        {submitted ? (
           <div className="text-center py-8 space-y-3">
             <CheckCircle className="w-14 h-14 text-emerald-500 mx-auto" />
             <h3 className="text-xl font-extrabold text-slate-900">Enquiry Submitted!</h3>

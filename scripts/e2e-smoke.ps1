@@ -17,23 +17,48 @@ $headers = @{
 }
 
 # 2. Website Settings Save and Read (Task A & B)
-Write-Host "`n[Step 2] Website Settings Save and Read (JSONB)..."
+Write-Host "`n[Step 2] Website Settings Save and Read (Task B: Landing, About & Contact, General Info)..."
 $settingsPayload = @{
-    id = "site_settings_default"
-    heroHeadline = "Master English & Abacus with Zoro"
-    heroSubheadline = "Interactive Online Classes for Children"
-    contactEmail = "support@zoro.com"
-    contactPhone = "9876543210"
-    address = "123 Learning Way, Education Hub"
-    bannerAnnouncement = "New Batch Starting Monday"
+    id = "default"
+    heroHeadline = "Master English with Zoro Academy"
+    heroSubheadline = "Building confidence and communication skills for kids aged 5 to 16."
+    contactEmail = "contact@zoroacademy.com"
+    contactPhone = "+91 98765 43210"
+    address = "No. 12, Main Road, Skill Nagar, Chennai - 600001"
+    bannerAnnouncement = "New Batches Enrolling Now"
     settingsJson = @{
         landingPageContent = @{
-            heroHeading = "Skills for a Brighter Tomorrow"
-            heroDescription = "Interactive live classes tailored for children aged 5 to 16."
+            heroBadge = "Global Communication Skills"
+            heroHeading = "Master English with Zoro Academy"
+            heroDescription = "Building confidence and communication skills for kids aged 5 to 16."
+            heroPrimaryBtnText = "View Courses"
+            heroSecondaryBtnText = "Join Competitions"
+            featuresTitle = "Our Featured Programs"
+            featuresSubtitle = "World-class curricula taught by expert educators."
         }
         aboutPageContent = @{
-            heading = "About Zoro Academy"
-            mission = "Empowering every learner with core skills."
+            heading = "About Zoro English Academy"
+            subtitle = "Nurturing Young Minds Through Small Steps and Big Communication"
+            introParagraph = "Zoro English Academy is dedicated to empowering students with exceptional communication."
+            missionStatement = "To make world-class skill development accessible to every child."
+            visionStatement = "Creating a global generation of articulate leaders."
+            coreValues = "Excellence, Growth, Integrity"
+        }
+        contactPageContent = @{
+            heading = "Contact Us"
+            subtitle = "We are here to support your child's learning journey."
+            contactPhone = "+91 98765 43210"
+            contactEmail = "contact@zoroacademy.com"
+            contactAddress = "No. 12, Main Road, Skill Nagar, Chennai - 600001"
+            businessHours = "Monday - Saturday: 9:00 AM - 7:00 PM IST"
+        }
+        generalInfo = @{
+            academyName = "Zoro English Academy"
+            tagline = "Small Steps Big Communication"
+            contactEmail = "contact@zoroacademy.com"
+            contactPhone = "+91 98765 43210"
+            address = "No. 12, Main Road, Skill Nagar, Chennai - 600001"
+            currency = "INR"
         }
     }
 } | ConvertTo-Json -Depth 6
@@ -42,7 +67,15 @@ $putSettings = Invoke-RestMethod -Uri "$baseUrl/website-settings" -Method Put -H
 Write-Host "-> HTTP 200: PUT /website-settings successful. Headline: $($putSettings.data.heroHeadline)" -ForegroundColor Green
 
 $getSettings = Invoke-RestMethod -Uri "$baseUrl/website-settings" -Method Get
-Write-Host "-> HTTP 200: GET /website-settings successful. Contact Email: $($getSettings.data.contactEmail)" -ForegroundColor Green
+Write-Host "-> HTTP 200: GET /website-settings successful." -ForegroundColor Green
+Write-Host "   Headline: $($getSettings.data.heroHeadline)"
+Write-Host "   Contact: $($getSettings.data.contactEmail), $($getSettings.data.contactPhone)"
+Write-Host "   Address: $($getSettings.data.address)"
+$parsedJson = $getSettings.data.settingsJson
+Write-Host "   Settings JSON Landing Hero: $($parsedJson.landingPageContent.heroHeading)"
+Write-Host "   Settings JSON About Heading: $($parsedJson.aboutPageContent.heading)"
+Write-Host "   Settings JSON General Academy: $($parsedJson.generalInfo.academyName)"
+Write-Host "   PortalControls Removed: $($parsedJson.portalControls -eq $null)" -ForegroundColor Green
 
 # 3. Course Module with videoStorageRef & afterSessionAssessment (Task A & C)
 Write-Host "`n[Step 3] Course Module Save and Read (JSONB)..."

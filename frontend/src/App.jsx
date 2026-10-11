@@ -13,6 +13,7 @@ import ContactPage from './components/public/ContactPage';
 import EnquireModal from './components/public/EnquireModal';
 import LoginModal from './components/public/LoginModal';
 import ForceChangePasswordModal from './components/common/ForceChangePasswordModal';
+import { getWebsiteSettings } from './api/websiteSettingsApi';
 
 // Code-splitting via React.lazy for portal screens
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
@@ -218,6 +219,19 @@ function PublicLayout({ onOpenLogin, onOpenEnquire }) {
   const location = useLocation();
   const navigate = useNavigate();
   const activeScreen = getActiveScreenFromPath(location.pathname);
+  const [siteSettings, setSiteSettings] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    getWebsiteSettings()
+      .then(res => {
+        if (isMounted && res && res.data) {
+          setSiteSettings(res.data);
+        }
+      })
+      .catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
 
   const handleSetActiveScreen = (screen) => {
     if (screen === 'public-login') {
@@ -227,6 +241,11 @@ function PublicLayout({ onOpenLogin, onOpenEnquire }) {
     }
   };
 
+  const academyName = siteSettings?.generalInfo?.academyName || 'Zoro English Academy';
+  const contactEmail = siteSettings?.contactPageContent?.contactEmail || siteSettings?.generalInfo?.contactEmail || 'contact@zoroacademy.com';
+  const contactPhone = siteSettings?.contactPageContent?.contactPhone || siteSettings?.generalInfo?.contactPhone || '+91 98765 43210';
+  const address = siteSettings?.contactPageContent?.contactAddress || siteSettings?.generalInfo?.address;
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 font-sans antialiased text-slate-900">
       <PublicNavbar 
@@ -234,16 +253,36 @@ function PublicLayout({ onOpenLogin, onOpenEnquire }) {
         setActiveScreen={handleSetActiveScreen}
         onOpenLogin={onOpenLogin}
         onOpenEnquire={onOpenEnquire}
+        siteSettings={siteSettings}
       />
       <main className="flex-1">
         <Outlet context={{ onOpenLogin, onOpenEnquire, setActiveScreen: handleSetActiveScreen }} />
       </main>
       <footer className="bg-slate-900 text-slate-400 py-12 border-t border-slate-800 text-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex flex-col sm:flex-row items-center space-x-3 text-center sm:text-left gap-2 sm:gap-0">
             <img src="/assets/logo.png" alt="Zoro English Academy Logo" className="h-7 w-auto object-contain" />
-            <span className="font-extrabold text-white text-sm">Zoro English Academy</span>
-            <span>© 2026 Zoro English Academy. All rights reserved.</span>
+            <div>
+              <span className="font-extrabold text-white text-sm block sm:inline">{academyName}</span>
+              <span className="block sm:inline sm:ml-2">© 2026 {academyName}. All rights reserved.</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-slate-400 font-medium">
+            {contactEmail && (
+              <a href={`mailto:${contactEmail}`} className="hover:text-white transition-colors">
+                {contactEmail}
+              </a>
+            )}
+            {contactPhone && (
+              <a href={`tel:${contactPhone.replace(/\s+/g, '')}`} className="hover:text-white transition-colors">
+                {contactPhone}
+              </a>
+            )}
+            {address && (
+              <span className="hidden lg:inline text-slate-500">
+                {address}
+              </span>
+            )}
           </div>
           <div className="flex space-x-6 text-slate-400 font-semibold">
             <a href="#" className="hover:text-white">Privacy Policy</a>

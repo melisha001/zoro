@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, HelpCircle, CheckCircle, Clock, MessageSquare, ChevronRight, X, AlertTriangle } from 'lucide-react';
 import { getDoubts, createDoubt } from '../../api/doubtApi';
-import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 import { useAuth } from '../../context/AuthContext';
 
 export default function DoubtPage({ setActiveScreen }) {
@@ -23,10 +22,6 @@ export default function DoubtPage({ setActiveScreen }) {
 
   const loadDoubts = async () => {
     try {
-      const sRes = await getWebsiteSettings();
-      if (sRes.success && sRes.data?.portalControls?.studentPortal) {
-        setDoubtsEnabled(sRes.data.portalControls.studentPortal.enableDoubtsForum !== false);
-      }
 
       const res = await getDoubts();
       if (res.success && res.data) {

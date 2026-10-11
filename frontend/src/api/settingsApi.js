@@ -25,22 +25,20 @@ const DEFAULT_SETTINGS = {
 
 export const getSettings = async () => {
   const { data: webSettings } = await getWebsiteSettings();
-  const adminSettings = webSettings?.adminSettings || DEFAULT_SETTINGS;
+  const genInfo = webSettings?.generalInfo || DEFAULT_SETTINGS.generalInfo;
   return apiResponse({
     ...DEFAULT_SETTINGS,
-    ...adminSettings
+    generalInfo: genInfo
   });
 };
 
 export const saveSettings = async (newSettingsData) => {
-  const { data: current } = await getSettings();
-  const updatedAdminSettings = {
-    ...current,
-    ...newSettingsData
-  };
-  const saveRes = await saveWebsiteSettings({ adminSettings: updatedAdminSettings });
+  const genInfo = newSettingsData.generalInfo || newSettingsData;
+  const saveRes = await saveWebsiteSettings({
+    generalInfo: genInfo
+  });
   if (saveRes && saveRes.success) {
-    return apiResponse(updatedAdminSettings, true, 'Settings saved successfully');
+    return apiResponse({ generalInfo: genInfo }, true, 'Settings saved successfully');
   }
   return apiResponse(null, false, saveRes?.message || 'Failed to save settings');
 };

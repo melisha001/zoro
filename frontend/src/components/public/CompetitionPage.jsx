@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, Monitor, Trophy, CheckCircle2, Tag, Download } from 'lucide-react';
 import { getCompetitions } from '../../api/competitionApi';
-import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 import { resolveFileUrl } from '../../api/fileApi';
 import { formatDate } from '../../utils/dateFormatter';
 import CompetitionRegisterModal from './CompetitionRegisterModal';
@@ -18,10 +17,6 @@ export default function CompetitionPage({ currentUser }) {
     async function loadComps() {
       setLoading(true);
       try {
-        const settingsRes = await getWebsiteSettings();
-        if (settingsRes.success && settingsRes.data?.portalControls?.publicWebsite) {
-          setAllowRegistration(settingsRes.data.portalControls.publicWebsite.enablePublicCompetitionReg !== false);
-        }
 
         const res = await getCompetitions();
         if (res.success && Array.isArray(res.data)) {

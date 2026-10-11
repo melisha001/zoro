@@ -29,27 +29,13 @@ const DEFAULT_WEBSITE_SETTINGS = {
     businessHours: 'Monday – Saturday: 9:00 AM – 7:00 PM IST',
     googleMapLink: 'https://maps.google.com'
   },
-  portalControls: {
-    adminPortal: {
-      enableDailyReports: true,
-      enableSalaryDisbursal: true,
-      maintenanceMode: false
-    },
-    trainerPortal: {
-      allowAssignmentCreation: true,
-      showSelfAttendance: true,
-      allowSubmissionsGrading: true
-    },
-    studentPortal: {
-      enableDoubtsForum: true,
-      allowSessionJoin: true,
-      showAttendanceBadges: true
-    },
-    publicWebsite: {
-      enablePublicCompetitionReg: true,
-      enableEnquiryModal: true,
-      showFeaturedCourses: true
-    }
+  generalInfo: {
+    academyName: 'Zoro English Academy',
+    tagline: 'Small Steps Big Communication',
+    contactEmail: 'contact@zoroacademy.com',
+    contactPhone: '+91 98765 43210',
+    address: 'No. 12, Main Road, Skill Nagar, Chennai - 600001',
+    currency: 'INR (₹)'
   }
 };
 
@@ -65,6 +51,10 @@ export const getWebsiteSettings = async () => {
       } catch (e) {}
     }
 
+    const contactEmail = res.data.contactEmail || parsedJson?.contactPageContent?.contactEmail || parsedJson?.generalInfo?.contactEmail || DEFAULT_WEBSITE_SETTINGS.contactPageContent.contactEmail;
+    const contactPhone = res.data.contactPhone || parsedJson?.contactPageContent?.contactPhone || parsedJson?.generalInfo?.contactPhone || DEFAULT_WEBSITE_SETTINGS.contactPageContent.contactPhone;
+    const contactAddress = res.data.address || parsedJson?.contactPageContent?.contactAddress || parsedJson?.generalInfo?.address || DEFAULT_WEBSITE_SETTINGS.contactPageContent.contactAddress;
+
     const merged = {
       ...DEFAULT_WEBSITE_SETTINGS,
       ...(parsedJson || {}),
@@ -74,14 +64,26 @@ export const getWebsiteSettings = async () => {
         heroDescription: res.data.heroSubheadline || parsedJson?.landingPageContent?.heroDescription || DEFAULT_WEBSITE_SETTINGS.landingPageContent.heroDescription,
         ...(parsedJson?.landingPageContent || {})
       },
+      aboutPageContent: {
+        ...DEFAULT_WEBSITE_SETTINGS.aboutPageContent,
+        ...(parsedJson?.aboutPageContent || {})
+      },
       contactPageContent: {
         ...DEFAULT_WEBSITE_SETTINGS.contactPageContent,
-        contactEmail: res.data.contactEmail || DEFAULT_WEBSITE_SETTINGS.contactPageContent.contactEmail,
-        contactPhone: res.data.contactPhone || DEFAULT_WEBSITE_SETTINGS.contactPageContent.contactPhone,
-        contactAddress: res.data.address || DEFAULT_WEBSITE_SETTINGS.contactPageContent.contactAddress,
+        contactEmail,
+        contactPhone,
+        contactAddress,
         ...(parsedJson?.contactPageContent || {})
+      },
+      generalInfo: {
+        ...DEFAULT_WEBSITE_SETTINGS.generalInfo,
+        contactEmail,
+        contactPhone,
+        address: contactAddress,
+        ...(parsedJson?.generalInfo || parsedJson?.adminSettings?.generalInfo || {})
       }
     };
+    delete merged.portalControls;
     return apiResponse(merged);
   }
   return apiResponse(DEFAULT_WEBSITE_SETTINGS, true);
@@ -93,13 +95,40 @@ export const saveWebsiteSettings = async (newSettingsData) => {
     ...current,
     ...newSettingsData
   };
+  delete updated.portalControls;
+
+  const contactEmail = newSettingsData.contactPageContent?.contactEmail
+    || newSettingsData.generalInfo?.contactEmail
+    || updated.contactPageContent?.contactEmail
+    || updated.generalInfo?.contactEmail;
+
+  const contactPhone = newSettingsData.contactPageContent?.contactPhone
+    || newSettingsData.generalInfo?.contactPhone
+    || updated.contactPageContent?.contactPhone
+    || updated.generalInfo?.contactPhone;
+
+  const address = newSettingsData.contactPageContent?.contactAddress
+    || newSettingsData.generalInfo?.address
+    || updated.contactPageContent?.contactAddress
+    || updated.generalInfo?.address;
+
+  if (updated.contactPageContent) {
+    updated.contactPageContent.contactEmail = contactEmail;
+    updated.contactPageContent.contactPhone = contactPhone;
+    updated.contactPageContent.contactAddress = address;
+  }
+  if (updated.generalInfo) {
+    updated.generalInfo.contactEmail = contactEmail;
+    updated.generalInfo.contactPhone = contactPhone;
+    updated.generalInfo.address = address;
+  }
 
   const payload = {
     heroHeadline: updated.landingPageContent?.heroHeading,
     heroSubheadline: updated.landingPageContent?.heroDescription,
-    contactEmail: updated.contactPageContent?.contactEmail,
-    contactPhone: updated.contactPageContent?.contactPhone,
-    address: updated.contactPageContent?.contactAddress,
+    contactEmail,
+    contactPhone,
+    address,
     settingsJson: JSON.stringify(updated)
   };
 

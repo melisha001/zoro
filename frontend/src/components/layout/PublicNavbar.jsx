@@ -1,12 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PhoneCall, LogIn, Menu, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 
-export default function PublicNavbar({ activeScreen, setActiveScreen, onOpenLogin, onOpenEnquire }) {
+export default function PublicNavbar({ activeScreen, setActiveScreen, onOpenLogin, onOpenEnquire, siteSettings: propSettings }) {
+  const [internalSettings, setInternalSettings] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!propSettings) {
+      let isMounted = true;
+      getWebsiteSettings()
+        .then(res => {
+          if (isMounted && res && res.data) setInternalSettings(res.data);
+        })
+        .catch(() => {});
+      return () => { isMounted = false; };
+    }
+  }, [propSettings]);
+
+  const siteSettings = propSettings || internalSettings;
 
   const handleGoToDashboard = () => {
     const roleUpper = (user?.role || '').toUpperCase();
@@ -43,10 +59,10 @@ export default function PublicNavbar({ activeScreen, setActiveScreen, onOpenLogi
           />
           <div className="ml-2.5 sm:ml-3">
             <div className="text-lg sm:text-xl font-black tracking-tight text-blue-950 leading-none">
-              Zoro English Academy
+              {siteSettings?.generalInfo?.academyName || 'Zoro English Academy'}
             </div>
             <div className="text-[9px] sm:text-[10px] font-bold text-blue-600 uppercase tracking-wider mt-0.5">
-              Learn | Practice | Grow
+              {siteSettings?.generalInfo?.tagline || 'Learn | Practice | Grow'}
             </div>
           </div>
         </div>

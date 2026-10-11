@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, BookOpen, AlertTriangle, X, Eye, Users, Layers, Check, Edit, Trash2, FileText } from 'lucide-react';
-import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 import { getCreatedAssignments, createExtraAssignment, updateAssignment, deleteAssignment } from '../../api/assignmentApi';
 import { uploadFile } from '../../api/fileApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
@@ -54,11 +53,6 @@ export default function TrainerAssignmentsPage() {
 
   const loadAllData = async () => {
     try {
-      const sRes = await getWebsiteSettings();
-      if (sRes.success && sRes.data?.portalControls?.trainerPortal) {
-        setAllowCreation(sRes.data.portalControls.trainerPortal.allowAssignmentCreation !== false);
-      }
-
       const asgRes = await getCreatedAssignments();
       setAssignments(asgRes.data || []);
 
