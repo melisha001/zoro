@@ -79,11 +79,27 @@ public class UserController {
         }
     }
 
-    @PostMapping("/{id}/reset-password")
+    @GetMapping("/{id}/admin-password")
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<UserDto> resetPassword(@PathVariable String id) {
-        UserDto result = userService.resetUserPassword(id);
-        return ApiResponse.ok(result, "Password reset successfully");
+    public ApiResponse<Map<String, String>> getAdminPassword(@PathVariable String id) {
+        String decrypted = userService.getAdminVisiblePassword(id);
+        if (decrypted == null || decrypted.isBlank()) {
+            throw new com.zoroacademy.exception.ResourceNotFoundException("No admin-visible password set for this user");
+        }
+        return ApiResponse.ok(Map.of("password", decrypted));
+    }
+
+    @PutMapping("/{id}/admin-password")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<Boolean> setAdminPassword(
+            @PathVariable String id,
+            @RequestBody Map<String, String> body) {
+        String newPassword = body.get("newPassword");
+        if (newPassword == null || newPassword.isBlank()) {
+            throw new IllegalArgumentException("New password is required");
+        }
+        userService.setAdminPassword(id, newPassword);
+        return ApiResponse.ok(true, "Password updated successfully");
     }
 
     @GetMapping("/{id}")

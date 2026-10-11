@@ -305,7 +305,56 @@ Write-Host "-> HTTP 200: Tab 1 still active after Tab 2 logout ($($adminIdentity
 
 # Cleanup Tab 2 student
 Invoke-RestMethod -Uri "$baseUrl/users/$($createdT2Student.data.id)?force=true" -Method Delete -Headers $newT1Headers | Out-Null
-Write-Host "-> HTTP 200: Cleaned up Tab 2 student." -ForegroundColor Green
+# 8. Admin-Set AES-256-GCM Reversible Passwords Lifecycle (Task F)
+Write-Host "`n[Step 8] Admin-Set AES-256-GCM Reversible Passwords Lifecycle (Task F)..."
+$fStudentEmail = "smoke.taskf.student@zoro.com"
+$fStudentPass = "SmokePass123!"
+$fStudentBody = @{
+    name = "Smoke TaskF Student"
+    username = "smoketaskf"
+    email = $fStudentEmail
+    password = $fStudentPass
+    role = "STUDENT"
+    status = "Active"
+} | ConvertTo-Json
+$createdFStudent = Invoke-RestMethod -Uri "$baseUrl/users/students" -Method Post -Headers $newT1Headers -Body $fStudentBody -ContentType "application/json"
+$fStudentId = $createdFStudent.data.id
 
-Write-Host "`n=== All E2E Smoke Tests PASSED (Tasks A, B, C, D, E) ===" -ForegroundColor Green
+# Admin reveals password
+$fRevealed1 = Invoke-RestMethod -Uri "$baseUrl/users/$fStudentId/admin-password" -Method Get -Headers $newT1Headers
+if ($fRevealed1.data.password -ne $fStudentPass) { Write-Error "Task F initial password mismatch" }
+Write-Host "-> HTTP 200: Admin decrypted initial password successfully: $($fRevealed1.data.password)" -ForegroundColor Green
+
+# Student logs in
+$fLoginBody = @{ email = $fStudentEmail; password = $fStudentPass } | ConvertTo-Json
+$fLoginRes = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method Post -Body $fLoginBody -ContentType "application/json"
+$fStudentHeaders = @{ Authorization = "Bearer $($fLoginRes.data.accessToken)" }
+
+# Student self-service changes password
+$fChangeBody = @{ currentPassword = $fStudentPass; newPassword = "SmokeNewPass456!" } | ConvertTo-Json
+Invoke-RestMethod -Uri "$baseUrl/users/password" -Method Post -Headers $fStudentHeaders -Body $fChangeBody -ContentType "application/json" | Out-Null
+
+# Admin reveals updated password
+$fRevealed2 = Invoke-RestMethod -Uri "$baseUrl/users/$fStudentId/admin-password" -Method Get -Headers $newT1Headers
+if ($fRevealed2.data.password -ne "SmokeNewPass456!") { Write-Error "Task F updated password mismatch" }
+Write-Host "-> HTTP 200: Admin decrypted student-updated password: $($fRevealed2.data.password)" -ForegroundColor Green
+
+# Admin overrides password
+$fOverrideBody = @{ newPassword = "AdminOverride789!" } | ConvertTo-Json
+Invoke-RestMethod -Uri "$baseUrl/users/$fStudentId/admin-password" -Method Put -Headers $newT1Headers -Body $fOverrideBody -ContentType "application/json" | Out-Null
+$fRevealed3 = Invoke-RestMethod -Uri "$baseUrl/users/$fStudentId/admin-password" -Method Get -Headers $newT1Headers
+if ($fRevealed3.data.password -ne "AdminOverride789!") { Write-Error "Task F admin override mismatch" }
+Write-Host "-> HTTP 200: Admin overridden password verified: $($fRevealed3.data.password)" -ForegroundColor Green
+
+# Student logs in with admin-overridden password
+$fOverrideLoginBody = @{ email = $fStudentEmail; password = "AdminOverride789!" } | ConvertTo-Json
+$fOverrideLoginRes = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method Post -Body $fOverrideLoginBody -ContentType "application/json"
+if (-not $fOverrideLoginRes.data.accessToken) { Write-Error "Task F student override login failed" }
+Write-Host "-> HTTP 200: Student logged in with admin-overridden password." -ForegroundColor Green
+
+# Cleanup
+Invoke-RestMethod -Uri "$baseUrl/users/$($fStudentId)?force=true" -Method Delete -Headers $newT1Headers | Out-Null
+Write-Host "-> HTTP 200: Cleaned up Task F student." -ForegroundColor Green
+
+Write-Host "`n=== All E2E Smoke Tests PASSED (Tasks A, B, C, D, E, F) ===" -ForegroundColor Green
 

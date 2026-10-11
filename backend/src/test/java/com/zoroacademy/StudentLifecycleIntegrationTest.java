@@ -73,7 +73,6 @@ class StudentLifecycleIntegrationTest {
         UserDto created = userService.saveStudent(studentDto);
         assertNotNull(created);
         assertNotNull(created.getId());
-        assertNull(created.getTemporaryPassword());
         assertNull(created.getPassword(), "UserDto password must never be exposed");
 
         // Login as newly created student

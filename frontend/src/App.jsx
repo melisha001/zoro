@@ -12,7 +12,6 @@ import CompetitionPage from './components/public/CompetitionPage';
 import ContactPage from './components/public/ContactPage';
 import EnquireModal from './components/public/EnquireModal';
 import LoginModal from './components/public/LoginModal';
-import ForceChangePasswordModal from './components/common/ForceChangePasswordModal';
 import { getWebsiteSettings } from './api/websiteSettingsApi';
 
 // Code-splitting via React.lazy for portal screens
@@ -554,7 +553,6 @@ function AppRoutes() {
         }} 
         onLoginSuccess={handleLoginSuccess}
       />
-      <ForceChangePasswordModal />
     </>
   );
 }

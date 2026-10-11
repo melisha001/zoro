@@ -66,7 +66,7 @@ class UserLifecycleTest {
     }
 
     @Test
-    void testCreateStudentGeneratesTemporaryPasswordAndEnforcesValidation() {
+    void testCreateStudentRequiresExplicitPassword() {
         UserDto dto = UserDto.builder()
                 .name("Ananya Iyer")
                 .email("ananya@student.com")
@@ -76,20 +76,9 @@ class UserLifecycleTest {
 
         when(userRepository.findByEmailIgnoreCase("ananya@student.com")).thenReturn(Optional.empty());
         when(userRepository.findByUsernameIgnoreCase("ananya_i")).thenReturn(Optional.empty());
-        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
-            User u = inv.getArgument(0);
-            u.setId("std-new-1");
-            return u;
-        });
 
-        UserDto created = userService.saveStudent(dto);
-
-        assertNotNull(created);
-        assertNotNull(created.getTemporaryPassword());
-        assertTrue(created.getTemporaryPassword().length() >= 10, "Temporary password must be at least 10 chars");
-        assertTrue(created.getMustChangePassword(), "New student with temp password must have mustChangePassword = true");
-        assertEquals("STUDENT", created.getRole());
-        assertEquals("9876543210", created.getPhone());
+        assertThrows(IllegalArgumentException.class, () -> userService.saveStudent(dto));
+        verify(userRepository, never()).save(any());
     }
 
     @Test
@@ -163,7 +152,6 @@ class UserLifecycleTest {
         UserDto created = userService.saveStudent(dto);
 
         assertNotNull(created);
-        assertNull(created.getTemporaryPassword(), "Temporary password should be null when explicit password provided");
         verify(passwordEncoder).encode("Student@123");
     }
 
@@ -270,47 +258,44 @@ class UserLifecycleTest {
     }
 
     @Test
-    void testResetUserPasswordSetsMustChangePasswordAndReturnsTemporaryPassword() {
+    void testAdminSetAndGetAdminPassword() {
         User user = User.builder()
                 .id("usr-reset-1")
                 .email("user1@zoro.com")
                 .role("STUDENT")
                 .password("encoded_oldPassword123")
-                .mustChangePassword(false)
                 .build();
 
         when(userRepository.findById("usr-reset-1")).thenReturn(Optional.of(user));
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        UserDto resetDto = userService.resetUserPassword("usr-reset-1");
+        userService.setAdminPassword("usr-reset-1", "AdminSetPass123!");
 
-        assertNotNull(resetDto);
-        assertNotNull(resetDto.getTemporaryPassword());
-        assertTrue(resetDto.getTemporaryPassword().length() >= 10);
-        assertTrue(resetDto.getMustChangePassword());
-        assertTrue(user.getMustChangePassword());
-        verify(passwordEncoder).encode(resetDto.getTemporaryPassword());
+        assertNotNull(user.getAdminVisiblePassword());
+        verify(passwordEncoder).encode("AdminSetPass123!");
         verify(userRepository).save(user);
+
+        String revealed = userService.getAdminVisiblePassword("usr-reset-1");
+        assertEquals("AdminSetPass123!", revealed);
     }
 
     @Test
-    void testUpdatePasswordClearsMustChangePassword() {
+    void testUpdatePasswordUpdatesBothHashAndAdminVisiblePassword() {
         User user = User.builder()
                 .id("usr-update-1")
                 .email("user2@zoro.com")
                 .password("encoded_tempPassword123")
-                .mustChangePassword(true)
                 .build();
 
         when(userRepository.findById("usr-update-1")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("tempPassword123", "encoded_tempPassword123")).thenReturn(true);
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        boolean updated = userService.updatePassword("usr-update-1", "tempPassword123", "brandNewPassword123");
+        boolean updated = userService.updatePassword("usr-update-1", "tempPassword123", "brandNewPassword123!");
 
         assertTrue(updated);
-        assertFalse(user.getMustChangePassword());
-        verify(passwordEncoder).encode("brandNewPassword123");
+        verify(passwordEncoder).encode("brandNewPassword123!");
         verify(userRepository).save(user);
+        assertEquals("brandNewPassword123!", userService.getAdminVisiblePassword("usr-update-1"));
     }
 }

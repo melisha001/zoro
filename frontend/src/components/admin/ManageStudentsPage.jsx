@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   UserPlus, Search, Edit, Trash2, Key, X, Calendar, 
   Download, CheckCircle2, AlertCircle, Users as UsersIcon,
-  Copy, Check
+  Copy, Check, Eye, EyeOff
 } from 'lucide-react';
-import { getStudents, createStudent, updateStudent, deleteStudent, updateUserStatus, resetUserPassword } from '../../api/userApi';
+import { getStudents, createStudent, updateStudent, deleteStudent, updateUserStatus, getAdminVisiblePassword, setAdminUserPassword } from '../../api/userApi';
 import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { logActivity } from '../../api/activityLogApi';
@@ -15,7 +15,7 @@ import ConfirmModal from '../common/ConfirmModal';
 import { useDialog } from '../../context/DialogContext';
 
 export default function ManageStudentsPage() {
-  const { showError, confirm } = useDialog();
+  const { showError } = useDialog();
   const [students, setStudents] = useState([]);
   const [coursesList, setCoursesList] = useState([]);
   const [batchesList, setBatchesList] = useState([]);
@@ -36,38 +36,100 @@ export default function ManageStudentsPage() {
   const [formError, setFormError] = useState('');
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [createdEmailModalData, setCreatedEmailModalData] = useState(null);
-  const [resetPasswordLoadingId, setResetPasswordLoadingId] = useState(null);
 
-  const handleResetPassword = async (student) => {
-    const confirmed = await confirm(
-      `Reset temporary password for student "${student.name}" (@${student.username || student.email})? They will be required to change it on their next login.`,
-      'Reset Student Password',
-      { confirmText: 'Reset Password', danger: false }
-    );
-    if (!confirmed) {
+  // Admin password states
+  const [revealedPasswords, setRevealedPasswords] = useState({});
+  const [showPasswords, setShowPasswords] = useState({});
+  const [loadingPasswordId, setLoadingPasswordId] = useState(null);
+  const [copiedStudentPasswordId, setCopiedStudentPasswordId] = useState(null);
+  const [passwordModalStudent, setPasswordModalStudent] = useState(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [passwordModalError, setPasswordModalError] = useState('');
+  const [passwordModalLoading, setPasswordModalLoading] = useState(false);
+
+  const handleToggleRevealPassword = async (studentId) => {
+    if (showPasswords[studentId]) {
+      setShowPasswords(prev => ({ ...prev, [studentId]: false }));
       return;
     }
-    setResetPasswordLoadingId(student.id);
+    if (revealedPasswords[studentId]) {
+      setShowPasswords(prev => ({ ...prev, [studentId]: true }));
+      return;
+    }
+    setLoadingPasswordId(studentId);
     try {
-      const res = await resetUserPassword(student.id);
+      const res = await getAdminVisiblePassword(studentId);
       if (res.success && res.data) {
-        logActivity('Student Password Reset', `Generated new temporary password for student "${student.name}"`, 'Student');
-        setCreatedEmailModalData({
-          studentName: student.name,
-          username: student.username || student.email,
-          email: student.email,
-          joiningDate: student.joinedOn || student.dateOfJoining || '12 Jan 2026',
-          temporaryPassword: res.data.temporaryPassword,
-          courseBatches: res.data.courseBatches || (student.courseBatches || [])
-        });
-        loadData();
+        setRevealedPasswords(prev => ({ ...prev, [studentId]: res.data }));
+        setShowPasswords(prev => ({ ...prev, [studentId]: true }));
       } else {
-        showError(res.message || 'Failed to reset student password.', 'Reset Failed');
+        showError(res.message || 'Failed to retrieve student password', 'Password Error');
       }
     } catch (err) {
-      showError('Error resetting password: ' + (err?.message || 'Server error'), 'Reset Error');
+      showError(err?.message || 'Failed to retrieve student password', 'Password Error');
     } finally {
-      setResetPasswordLoadingId(null);
+      setLoadingPasswordId(null);
+    }
+  };
+
+  const handleCopyPassword = async (studentId) => {
+    let pwd = revealedPasswords[studentId];
+    if (!pwd) {
+      setLoadingPasswordId(studentId);
+      try {
+        const res = await getAdminVisiblePassword(studentId);
+        if (res.success && res.data) {
+          pwd = res.data;
+          setRevealedPasswords(prev => ({ ...prev, [studentId]: pwd }));
+        } else {
+          showError(res.message || 'Failed to retrieve password for copying', 'Copy Failed');
+          return;
+        }
+      } catch (err) {
+        showError(err?.message || 'Failed to retrieve password', 'Copy Failed');
+        return;
+      } finally {
+        setLoadingPasswordId(null);
+      }
+    }
+    if (pwd) {
+      navigator.clipboard.writeText(pwd);
+      setCopiedStudentPasswordId(studentId);
+      setTimeout(() => setCopiedStudentPasswordId(null), 2000);
+    }
+  };
+
+  const handleOpenSetPasswordModal = (student) => {
+    setPasswordModalStudent(student);
+    setNewPasswordInput('');
+    setPasswordModalError('');
+  };
+
+  const handleSaveSetPassword = async (e) => {
+    e.preventDefault();
+    if (!newPasswordInput || newPasswordInput.trim().length < 8) {
+      setPasswordModalError('Password must be at least 8 characters long.');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(newPasswordInput) || !/\d/.test(newPasswordInput)) {
+      setPasswordModalError('Password must contain at least one letter and one number.');
+      return;
+    }
+    setPasswordModalLoading(true);
+    try {
+      const res = await setAdminUserPassword(passwordModalStudent.id, newPasswordInput.trim());
+      if (res.success) {
+        setRevealedPasswords(prev => ({ ...prev, [passwordModalStudent.id]: newPasswordInput.trim() }));
+        setShowPasswords(prev => ({ ...prev, [passwordModalStudent.id]: true }));
+        logActivity('Student Password Updated', `Admin updated password for student "${passwordModalStudent.name}"`, 'Student');
+        setPasswordModalStudent(null);
+      } else {
+        setPasswordModalError(res.message || 'Failed to update password.');
+      }
+    } catch (err) {
+      setPasswordModalError(err?.message || 'Server error updating password.');
+    } finally {
+      setPasswordModalLoading(false);
     }
   };
 
@@ -186,8 +248,12 @@ export default function ManageStudentsPage() {
     }
     setPhoneError('');
 
-    if (formData.password && formData.password.trim().length < 8) {
-      setFormError('Password must be at least 8 characters long.');
+    if (!formData.password || formData.password.trim().length < 8) {
+      setFormError('Password is required and must be at least 8 characters long.');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
+      setFormError('Password must contain at least one letter and one number.');
       return;
     }
 
@@ -213,11 +279,9 @@ export default function ManageStudentsPage() {
       status: formData.status || 'Active',
       joinedOn: formData.joinedOn,
       course: courseString,
-      courseBatches
+      courseBatches,
+      password: formData.password.trim()
     };
-    if (formData.password && formData.password.trim()) {
-      newStudentObj.password = formData.password.trim();
-    }
 
     const res = await createStudent(newStudentObj);
     if (!res.success) {
@@ -227,13 +291,18 @@ export default function ManageStudentsPage() {
 
     logActivity('Student Created', `Added student "${newStudentObj.name}" (@${newStudentObj.username}) enrolled in ${courseString}`, 'Student');
 
+    if (res.data?.id) {
+      setRevealedPasswords(prev => ({ ...prev, [res.data.id]: newStudentObj.password }));
+      setShowPasswords(prev => ({ ...prev, [res.data.id]: true }));
+    }
+
     setCreatedEmailModalData({
       studentName: newStudentObj.name,
       username: newStudentObj.username,
       email: newStudentObj.email,
       joiningDate: newStudentObj.joinedOn,
       courseBatches,
-      temporaryPassword: res.data?.temporaryPassword || null
+      password: newStudentObj.password
     });
 
     resetForm();
@@ -266,9 +335,15 @@ export default function ManageStudentsPage() {
     }
     setPhoneError('');
 
-    if (formData.password && formData.password.trim().length < 8) {
-      setFormError('Password must be at least 8 characters long.');
-      return;
+    if (formData.password && formData.password.trim()) {
+      if (formData.password.trim().length < 8) {
+        setFormError('Password must be at least 8 characters long.');
+        return;
+      }
+      if (!/[a-zA-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
+        setFormError('Password must contain at least one letter and one number.');
+        return;
+      }
     }
 
     const courseBatches = (formData.selectedCourses || []).map(crs => {
@@ -608,6 +683,7 @@ export default function ManageStudentsPage() {
                           <th className="py-3 px-4">Username</th>
                           <th className="py-3 px-4">Email</th>
                           <th className="py-3 px-4">Phone</th>
+                          <th className="py-3 px-4">Password</th>
                           <th className="py-3 px-4">Joining Date</th>
                           <th className="py-3 px-4">Status</th>
                           <th className="py-3 px-4 text-right">Actions</th>
@@ -623,6 +699,30 @@ export default function ManageStudentsPage() {
                                 <td className="py-3.5 px-4 font-bold text-slate-800 font-mono">@{student.username || 'n/a'}</td>
                                 <td className="py-3.5 px-4 text-blue-900 font-bold">{student.email}</td>
                                 <td className="py-3.5 px-4 text-slate-500">{student.phone}</td>
+                                <td className="py-3.5 px-4 font-mono">
+                                  <div className="flex items-center space-x-1.5">
+                                    <span className="text-slate-700 font-bold select-all">
+                                      {showPasswords[student.id] ? (revealedPasswords[student.id] || '••••••••') : '••••••••'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleRevealPassword(student.id)}
+                                      disabled={loadingPasswordId === student.id}
+                                      className="p-1 text-slate-400 hover:text-slate-600 rounded cursor-pointer transition-colors"
+                                      title={showPasswords[student.id] ? "Hide password" : "Show password"}
+                                    >
+                                      {showPasswords[student.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyPassword(student.id)}
+                                      className="p-1 text-slate-400 hover:text-slate-600 rounded cursor-pointer transition-colors"
+                                      title="Copy password"
+                                    >
+                                      {copiedStudentPasswordId === student.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                    </button>
+                                  </div>
+                                </td>
                                 <td className="py-3.5 px-4 text-slate-600 font-medium">{student.joinedOn || student.dateOfJoining || '12 Jan 2026'}</td>
                                 <td className="py-3.5 px-4">
                                   <button
@@ -636,10 +736,10 @@ export default function ManageStudentsPage() {
                                 </td>
                                 <td className="py-3.5 px-4 text-right space-x-2">
                                   <button
-                                    onClick={() => handleResetPassword(student)}
-                                    disabled={resetPasswordLoadingId === student.id}
-                                    className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors disabled:opacity-50"
-                                    title="Reset Temporary Password"
+                                    type="button"
+                                    onClick={() => handleOpenSetPasswordModal(student)}
+                                    className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
+                                    title="Set New Password"
                                   >
                                     <Key className="w-4 h-4" />
                                   </button>
@@ -667,7 +767,7 @@ export default function ManageStudentsPage() {
                           })
                         ) : (
                           <tr>
-                            <td colSpan="7" className="py-6 text-center text-slate-400 font-semibold italic whitespace-normal">
+                            <td colSpan="8" className="py-6 text-center text-slate-400 font-semibold italic whitespace-normal">
                               No students currently assigned to {batchObj.name}.
                             </td>
                           </tr>
@@ -692,6 +792,7 @@ export default function ManageStudentsPage() {
                   <th className="py-3 px-4">Username</th>
                   <th className="py-3 px-4">Email (Login ID)</th>
                   <th className="py-3 px-4">Courses & Assigned Batches</th>
+                  <th className="py-3 px-4">Password</th>
                   <th className="py-3 px-4">Date of Joining</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
@@ -734,6 +835,30 @@ export default function ManageStudentsPage() {
                             ))}
                           </div>
                         </td>
+                        <td className="py-4 px-4 font-mono">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="text-slate-700 font-bold select-all">
+                              {showPasswords[student.id] ? (revealedPasswords[student.id] || '••••••••') : '••••••••'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleRevealPassword(student.id)}
+                              disabled={loadingPasswordId === student.id}
+                              className="p-1 text-slate-400 hover:text-slate-600 rounded cursor-pointer transition-colors"
+                              title={showPasswords[student.id] ? "Hide password" : "Show password"}
+                            >
+                              {showPasswords[student.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyPassword(student.id)}
+                              className="p-1 text-slate-400 hover:text-slate-600 rounded cursor-pointer transition-colors"
+                              title="Copy password"
+                            >
+                              {copiedStudentPasswordId === student.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </td>
                         <td className="py-4 px-4 text-slate-600 font-medium">{student.joinedOn || student.dateOfJoining || '12 Jan 2026'}</td>
                         <td className="py-4 px-4">
                           <button
@@ -750,10 +875,10 @@ export default function ManageStudentsPage() {
                         </td>
                         <td className="py-4 px-4 text-right space-x-2">
                           <button
-                            onClick={() => handleResetPassword(student)}
-                            disabled={resetPasswordLoadingId === student.id}
-                            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors disabled:opacity-50"
-                            title="Reset Temporary Password"
+                            type="button"
+                            onClick={() => handleOpenSetPasswordModal(student)}
+                            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
+                            title="Set New Password"
                           >
                             <Key className="w-4 h-4" />
                           </button>
@@ -781,7 +906,7 @@ export default function ManageStudentsPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="7" className="py-8 text-center text-slate-500 font-bold text-xs">
+                    <td colSpan="8" className="py-8 text-center text-slate-500 font-bold text-xs">
                       No students found matching your search or date filter.
                     </td>
                   </tr>
@@ -887,10 +1012,13 @@ export default function ManageStudentsPage() {
               {/* Password & Joined On Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-extrabold text-slate-700 mb-1">Password (min 8 characters)</label>
+                  <label className="block font-extrabold text-slate-700 mb-1">
+                    {editingStudent ? 'Password (Leave blank to keep unchanged)' : 'Password (min 8 chars, 1 letter, 1 digit) *'}
+                  </label>
                   <input
                     type="text"
-                    placeholder={editingStudent ? "Leave blank to keep existing password" : "Leave blank to generate temporary password"}
+                    required={!editingStudent}
+                    placeholder={editingStudent ? "Leave blank to keep existing password" : "e.g. Pass1234!"}
                     value={formData.password}
                     onChange={(e) => {
                       setFormData({ ...formData, password: e.target.value });
@@ -1059,16 +1187,16 @@ export default function ManageStudentsPage() {
                 <div><strong>Email:</strong> {createdEmailModalData.email}</div>
                 <div><strong>Date of Joining:</strong> {createdEmailModalData.joiningDate}</div>
               </div>
-              {createdEmailModalData.temporaryPassword && (
+              {(createdEmailModalData.password || createdEmailModalData.temporaryPassword) && (
                 <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-center justify-between text-amber-300 my-2">
                   <div>
-                    <span className="text-[10px] text-amber-400 block font-bold uppercase tracking-wider">Temporary Password</span>
-                    <span className="font-mono font-bold text-sm text-white select-all">{createdEmailModalData.temporaryPassword}</span>
+                    <span className="text-[10px] text-amber-400 block font-bold uppercase tracking-wider">Account Password</span>
+                    <span className="font-mono font-bold text-sm text-white select-all">{createdEmailModalData.password || createdEmailModalData.temporaryPassword}</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard.writeText(createdEmailModalData.temporaryPassword);
+                      navigator.clipboard.writeText(createdEmailModalData.password || createdEmailModalData.temporaryPassword);
                       setCopiedPassword(true);
                       setTimeout(() => setCopiedPassword(false), 2000);
                     }}
@@ -1094,6 +1222,71 @@ export default function ManageStudentsPage() {
             >
               Done
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Set New Password Modal */}
+      {passwordModalStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative space-y-4 text-xs">
+            <button
+              type="button"
+              onClick={() => setPasswordModalStudent(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h3 className="text-base font-black text-slate-900">
+              Set New Password
+            </h3>
+            <p className="text-slate-500 text-[11px]">
+              Set a new password for <strong>{passwordModalStudent.name}</strong> (@{passwordModalStudent.username || passwordModalStudent.email}).
+            </p>
+
+            <form onSubmit={handleSaveSetPassword} className="space-y-3">
+              <div>
+                <label className="block font-extrabold text-slate-700 mb-1">
+                  New Password (min 8 chars, 1 letter, 1 digit) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. NewPass1234!"
+                  value={newPasswordInput}
+                  onChange={(e) => {
+                    setNewPasswordInput(e.target.value);
+                    if (passwordModalError) setPasswordModalError('');
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
+                />
+              </div>
+
+              {passwordModalError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{passwordModalError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPasswordModalStudent(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordModalLoading}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {passwordModalLoading ? 'Saving...' : 'Save Password'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

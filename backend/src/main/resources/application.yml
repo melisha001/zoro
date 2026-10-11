@@ -47,6 +47,7 @@ bunny:
 admin:
   email: ${ADMIN_EMAIL}
   password: ${ADMIN_PASSWORD}
+  password-key: ${ADMIN_PASSWORD_KEY:zoroAcademyDevAdminPwdKey32B123}
 
 jwt:
   secret: ${JWT_SECRET}

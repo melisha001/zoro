@@ -5,6 +5,7 @@ import com.zoroacademy.dto.TrainerReplacementRequest;
 import com.zoroacademy.dto.UserDto;
 import com.zoroacademy.entity.*;
 import com.zoroacademy.repository.*;
+import com.zoroacademy.security.AdminPasswordCryptoService;
 import com.zoroacademy.util.PhoneValidator;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AdminPasswordCryptoService adminPasswordCryptoService;
     private final StudentCourseBatchRepository studentCourseBatchRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final CourseRepository courseRepository;
@@ -40,6 +42,7 @@ public class UserService {
     @org.springframework.beans.factory.annotation.Autowired
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
+                       AdminPasswordCryptoService adminPasswordCryptoService,
                        StudentCourseBatchRepository studentCourseBatchRepository,
                        EnrollmentRepository enrollmentRepository,
                        CourseRepository courseRepository,
@@ -60,6 +63,7 @@ public class UserService {
                        RefreshTokenRepository refreshTokenRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.adminPasswordCryptoService = adminPasswordCryptoService != null ? adminPasswordCryptoService : new AdminPasswordCryptoService(null);
         this.studentCourseBatchRepository = studentCourseBatchRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.courseRepository = courseRepository;
@@ -82,6 +86,7 @@ public class UserService {
 
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
+                       AdminPasswordCryptoService adminPasswordCryptoService,
                        StudentCourseBatchRepository studentCourseBatchRepository,
                        EnrollmentRepository enrollmentRepository,
                        CourseRepository courseRepository,
@@ -91,7 +96,24 @@ public class UserService {
                        EnrollmentService enrollmentService,
                        NotificationService notificationService,
                        ActivityLogService activityLogService) {
-        this(userRepository, passwordEncoder, studentCourseBatchRepository, enrollmentRepository,
+        this(userRepository, passwordEncoder, adminPasswordCryptoService, studentCourseBatchRepository, enrollmentRepository,
+             courseRepository, batchRepository, scheduleRepository, studentFeeRepository,
+             enrollmentService, notificationService, activityLogService,
+             null, null, null, null, null, null, null, null, null);
+    }
+
+    public UserService(UserRepository userRepository,
+                       PasswordEncoder passwordEncoder,
+                       StudentCourseBatchRepository studentCourseBatchRepository,
+                       EnrollmentRepository enrollmentRepository,
+                       CourseRepository courseRepository,
+                       BatchRepository batchRepository,
+                       ScheduleRepository scheduleRepository,
+                       StudentFeeRepository studentFeeRepository,
+                       EnrollmentService enrollmentService,
+                       NotificationService notificationService,
+                       ActivityLogService activityLogService) {
+        this(userRepository, passwordEncoder, new AdminPasswordCryptoService(null), studentCourseBatchRepository, enrollmentRepository,
              courseRepository, batchRepository, scheduleRepository, studentFeeRepository,
              enrollmentService, notificationService, activityLogService,
              null, null, null, null, null, null, null, null, null);
@@ -178,14 +200,10 @@ public class UserService {
         return convertUserToDto(user);
     }
 
-    private String generateTemporaryPassword() {
-        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$";
-        StringBuilder sb = new StringBuilder();
-        java.security.SecureRandom random = new java.security.SecureRandom();
-        for (int i = 0; i < 10; i++) {
-            sb.append(chars.charAt(random.nextInt(chars.length())));
+    public static void validatePasswordStrength(String password) {
+        if (password == null || password.length() < 8 || !password.matches(".*[a-zA-Z].*") || !password.matches(".*[0-9].*")) {
+            throw new IllegalArgumentException("Password must be at least 8 characters long and contain at least one letter and one digit");
         }
-        return sb.toString();
     }
 
     @Transactional
@@ -233,17 +251,17 @@ public class UserService {
         user.setStatus(dto.getStatus() != null ? dto.getStatus() : "Active");
         user.setCourse(dto.getCourse());
 
-        String generatedTempPassword = null;
+        final boolean isNewStudent = user.getPassword() == null || user.getPassword().isBlank();
         if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
-            if (dto.getPassword().length() < 8) {
-                throw new IllegalArgumentException("Password must be at least 8 characters long");
-            }
-            user.setPassword(passwordEncoder.encode(dto.getPassword()));
+            validatePasswordStrength(dto.getPassword().trim());
+            user.setPassword(passwordEncoder.encode(dto.getPassword().trim()));
+            user.setAdminVisiblePassword(adminPasswordCryptoService.encrypt(dto.getPassword().trim()));
             user.setMustChangePassword(false);
-        } else if (user.getPassword() == null || user.getPassword().isBlank()) {
-            generatedTempPassword = generateTemporaryPassword();
-            user.setPassword(passwordEncoder.encode(generatedTempPassword));
-            user.setMustChangePassword(true);
+            if (!isNewStudent && refreshTokenRepository != null) {
+                refreshTokenRepository.revokeAllByUserId(user.getId());
+            }
+        } else if (isNewStudent) {
+            throw new IllegalArgumentException("Password is required for new student (min 8 characters, at least 1 letter and 1 digit)");
         }
 
         user = userRepository.save(user);
@@ -310,11 +328,7 @@ public class UserService {
             }
         }
 
-        UserDto resultDto = convertUserToDto(user);
-        if (generatedTempPassword != null) {
-            resultDto.setTemporaryPassword(generatedTempPassword);
-        }
-        return resultDto;
+        return convertUserToDto(user);
     }
 
     @Transactional
@@ -365,25 +379,21 @@ public class UserService {
         user.setSalaryAmount(dto.getSalaryAmount());
         user.setSalaryCreditDate(dto.getSalaryCreditDate());
 
-        String generatedTempPassword = null;
+        final boolean isNewTrainer = user.getPassword() == null || user.getPassword().isBlank();
         if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
-            if (dto.getPassword().length() < 8) {
-                throw new IllegalArgumentException("Password must be at least 8 characters long");
-            }
-            user.setPassword(passwordEncoder.encode(dto.getPassword()));
+            validatePasswordStrength(dto.getPassword().trim());
+            user.setPassword(passwordEncoder.encode(dto.getPassword().trim()));
+            user.setAdminVisiblePassword(adminPasswordCryptoService.encrypt(dto.getPassword().trim()));
             user.setMustChangePassword(false);
-        } else if (user.getPassword() == null || user.getPassword().isBlank()) {
-            generatedTempPassword = generateTemporaryPassword();
-            user.setPassword(passwordEncoder.encode(generatedTempPassword));
-            user.setMustChangePassword(true);
+            if (!isNewTrainer && refreshTokenRepository != null) {
+                refreshTokenRepository.revokeAllByUserId(user.getId());
+            }
+        } else if (isNewTrainer) {
+            throw new IllegalArgumentException("Password is required for new trainer (min 8 characters, at least 1 letter and 1 digit)");
         }
 
         user = userRepository.save(user);
-        UserDto resultDto = UserDto.fromEntity(user);
-        if (generatedTempPassword != null) {
-            resultDto.setTemporaryPassword(generatedTempPassword);
-        }
-        return resultDto;
+        return UserDto.fromEntity(user);
     }
 
 
@@ -500,9 +510,10 @@ public class UserService {
 
     @Transactional
     public boolean updatePassword(String userIdOrEmail, String currentPassword, String newPassword) {
-        if (newPassword == null || newPassword.length() < 8) {
-            throw new IllegalArgumentException("New password must be at least 8 characters long");
+        if (newPassword == null || newPassword.isBlank()) {
+            throw new IllegalArgumentException("New password is required");
         }
+        validatePasswordStrength(newPassword.trim());
 
         User user = userRepository.findById(userIdOrEmail)
                 .or(() -> userRepository.findByEmailIgnoreCase(userIdOrEmail))
@@ -513,7 +524,8 @@ public class UserService {
             return false;
         }
 
-        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPassword(passwordEncoder.encode(newPassword.trim()));
+        user.setAdminVisiblePassword(adminPasswordCryptoService.encrypt(newPassword.trim()));
         user.setMustChangePassword(false);
         userRepository.save(user);
         if (refreshTokenRepository != null) {
@@ -522,24 +534,38 @@ public class UserService {
         return true;
     }
 
-    @Transactional
-    public UserDto resetUserPassword(String id) {
-        User user = userRepository.findById(id)
-                .or(() -> userRepository.findByEmailIgnoreCase(id))
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
+    @Transactional(readOnly = true)
+    public String getAdminVisiblePassword(String userId) {
+        User user = userRepository.findById(userId)
+                .or(() -> userRepository.findByEmailIgnoreCase(userId))
+                .orElseThrow(() -> new com.zoroacademy.exception.ResourceNotFoundException("User not found: " + userId));
 
-        String tempPassword = generateTemporaryPassword();
-        user.setPassword(passwordEncoder.encode(tempPassword));
-        user.setMustChangePassword(true);
-        user = userRepository.save(user);
+        String encrypted = user.getAdminVisiblePassword();
+        if (encrypted == null || encrypted.isBlank()) {
+            return null;
+        }
+        return adminPasswordCryptoService.decrypt(encrypted);
+    }
+
+    @Transactional
+    public void setAdminPassword(String userId, String newPassword) {
+        if (newPassword == null || newPassword.isBlank()) {
+            throw new IllegalArgumentException("New password is required");
+        }
+        validatePasswordStrength(newPassword.trim());
+
+        User user = userRepository.findById(userId)
+                .or(() -> userRepository.findByEmailIgnoreCase(userId))
+                .orElseThrow(() -> new com.zoroacademy.exception.ResourceNotFoundException("User not found: " + userId));
+
+        user.setPassword(passwordEncoder.encode(newPassword.trim()));
+        user.setAdminVisiblePassword(adminPasswordCryptoService.encrypt(newPassword.trim()));
+        user.setMustChangePassword(false);
+        userRepository.save(user);
 
         if (refreshTokenRepository != null) {
             refreshTokenRepository.revokeAllByUserId(user.getId());
         }
-
-        UserDto dto = convertUserToDto(user);
-        dto.setTemporaryPassword(tempPassword);
-        return dto;
     }
 
     @Transactional

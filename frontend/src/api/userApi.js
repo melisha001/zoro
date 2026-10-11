@@ -79,15 +79,30 @@ export const changePassword = async (currentPassword, newPassword) => {
   return { success: false, message: res.message || 'Failed to change password.' };
 };
 
-export const resetUserPassword = async (id) => {
+export const getAdminVisiblePassword = async (id) => {
   if (!id) {
     return apiResponse(null, false, 'User ID is required');
   }
-  const res = await apiPost(`/users/${encodeURIComponent(id)}/reset-password`);
+  const res = await apiGet(`/users/${encodeURIComponent(id)}/admin-password`);
   if (res.success && res.data) {
-    return apiResponse(res.data, true, res.message || 'Password reset successfully');
+    return apiResponse(res.data.password, true, 'Password retrieved successfully');
   }
-  return apiResponse(null, false, res.message || 'Failed to reset password');
+  return apiResponse(null, false, res.message || 'Failed to retrieve password');
+};
+
+export const setAdminUserPassword = async (id, newPassword) => {
+  if (!id) {
+    return apiResponse(null, false, 'User ID is required');
+  }
+  const res = await apiPut(`/users/${encodeURIComponent(id)}/admin-password`, { newPassword });
+  if (res.success) {
+    return apiResponse(true, true, res.message || 'Password updated successfully');
+  }
+  return apiResponse(false, false, res.message || 'Failed to update password');
+};
+
+export const resetUserPassword = async (id) => {
+  return setAdminUserPassword(id, 'Pass1234!');
 };
 
 export const deleteStudent = async (id, force = false) => {

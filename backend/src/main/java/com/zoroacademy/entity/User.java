@@ -63,6 +63,9 @@ public class User {
     @Column(name = "must_change_password")
     private Boolean mustChangePassword = false;
 
+    @Column(name = "admin_visible_password", columnDefinition = "TEXT")
+    private String adminVisiblePassword;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -251,6 +254,14 @@ public class User {
         this.mustChangePassword = mustChangePassword;
     }
 
+    public String getAdminVisiblePassword() {
+        return adminVisiblePassword;
+    }
+
+    public void setAdminVisiblePassword(String adminVisiblePassword) {
+        this.adminVisiblePassword = adminVisiblePassword;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -260,6 +271,7 @@ public class User {
         private String email;
         private String username;
         private String password;
+        private String adminVisiblePassword;
         private String name;
         private String role;
         private String phone;
@@ -290,6 +302,10 @@ public class User {
         }
         public Builder password(String password) {
             this.password = password;
+            return this;
+        }
+        public Builder adminVisiblePassword(String adminVisiblePassword) {
+            this.adminVisiblePassword = adminVisiblePassword;
             return this;
         }
         public Builder name(String name) {
@@ -354,7 +370,9 @@ public class User {
         }
 
         public User build() {
-            return new User(id, email, username, password, name, role, phone, avatar, status, address, joinedOn, specialty, code, salaryAmount, salaryCreditDate, course, mustChangePassword, createdAt, updatedAt);
+            User u = new User(id, email, username, password, name, role, phone, avatar, status, address, joinedOn, specialty, code, salaryAmount, salaryCreditDate, course, mustChangePassword, createdAt, updatedAt);
+            u.setAdminVisiblePassword(adminVisiblePassword);
+            return u;
         }
     }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Edit, Trash2, X, Plus, Search, Calendar, AlertTriangle, ArrowRight, ShieldAlert, CheckCircle2, Copy, Check, Key } from 'lucide-react';
-import { getTrainers, createTrainer, updateTrainer, deleteTrainer, updateUserStatus, getTrainerDependencies, replaceTrainer, resetUserPassword } from '../../api/userApi';
+import { Edit, Trash2, X, Plus, Search, Calendar, AlertTriangle, ArrowRight, ShieldAlert, CheckCircle2, Copy, Check, Key, Eye, EyeOff } from 'lucide-react';
+import { getTrainers, createTrainer, updateTrainer, deleteTrainer, updateUserStatus, getTrainerDependencies, replaceTrainer, getAdminVisiblePassword, setAdminUserPassword } from '../../api/userApi';
 import { logActivity } from '../../api/activityLogApi';
 import { sanitizePhone, validatePhone, formatPhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
 import ConfirmModal from '../common/ConfirmModal';
@@ -9,7 +9,7 @@ import PhoneInput from '../common/PhoneInput';
 import { useDialog } from '../../context/DialogContext';
 
 export default function ManageTrainersPage() {
-  const { showError, showWarning, confirm } = useDialog();
+  const { showError, showWarning } = useDialog();
   const [trainers, setTrainers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [joinedDate, setJoinedDate] = useState('');
@@ -23,35 +23,100 @@ export default function ManageTrainersPage() {
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [createdTrainerModalData, setCreatedTrainerModalData] = useState(null);
   const [trainerDepModalData, setTrainerDepModalData] = useState(null);
-  const [resetPasswordLoadingId, setResetPasswordLoadingId] = useState(null);
 
-  const handleResetPassword = async (trainer) => {
-    const confirmed = await confirm(
-      `Reset temporary password for trainer "${trainer.name}" (${trainer.email})? They will be required to change it on their next login.`,
-      'Reset Trainer Password',
-      { confirmText: 'Reset Password', danger: false }
-    );
-    if (!confirmed) {
+  // Admin password states
+  const [revealedPasswords, setRevealedPasswords] = useState({});
+  const [showPasswords, setShowPasswords] = useState({});
+  const [loadingPasswordId, setLoadingPasswordId] = useState(null);
+  const [copiedTrainerPasswordId, setCopiedTrainerPasswordId] = useState(null);
+  const [passwordModalTrainer, setPasswordModalTrainer] = useState(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [passwordModalError, setPasswordModalError] = useState('');
+  const [passwordModalLoading, setPasswordModalLoading] = useState(false);
+
+  const handleToggleRevealPassword = async (trainerId) => {
+    if (showPasswords[trainerId]) {
+      setShowPasswords(prev => ({ ...prev, [trainerId]: false }));
       return;
     }
-    setResetPasswordLoadingId(trainer.id);
+    if (revealedPasswords[trainerId]) {
+      setShowPasswords(prev => ({ ...prev, [trainerId]: true }));
+      return;
+    }
+    setLoadingPasswordId(trainerId);
     try {
-      const res = await resetUserPassword(trainer.id);
+      const res = await getAdminVisiblePassword(trainerId);
       if (res.success && res.data) {
-        logActivity('Trainer Password Reset', `Generated new temporary password for trainer "${trainer.name}"`, 'Trainer');
-        setCreatedTrainerModalData({
-          trainerName: trainer.name,
-          email: trainer.email,
-          temporaryPassword: res.data.temporaryPassword
-        });
-        loadData();
+        setRevealedPasswords(prev => ({ ...prev, [trainerId]: res.data }));
+        setShowPasswords(prev => ({ ...prev, [trainerId]: true }));
       } else {
-        showError(res.message || 'Failed to reset trainer password.', 'Reset Failed');
+        showError(res.message || 'Failed to retrieve trainer password', 'Password Error');
       }
     } catch (err) {
-      showError('Error resetting password: ' + (err?.message || 'Server error'), 'Reset Error');
+      showError(err?.message || 'Failed to retrieve trainer password', 'Password Error');
     } finally {
-      setResetPasswordLoadingId(null);
+      setLoadingPasswordId(null);
+    }
+  };
+
+  const handleCopyPassword = async (trainerId) => {
+    let pwd = revealedPasswords[trainerId];
+    if (!pwd) {
+      setLoadingPasswordId(trainerId);
+      try {
+        const res = await getAdminVisiblePassword(trainerId);
+        if (res.success && res.data) {
+          pwd = res.data;
+          setRevealedPasswords(prev => ({ ...prev, [trainerId]: pwd }));
+        } else {
+          showError(res.message || 'Failed to retrieve password for copying', 'Copy Failed');
+          return;
+        }
+      } catch (err) {
+        showError(err?.message || 'Failed to retrieve password', 'Copy Failed');
+        return;
+      } finally {
+        setLoadingPasswordId(null);
+      }
+    }
+    if (pwd) {
+      navigator.clipboard.writeText(pwd);
+      setCopiedTrainerPasswordId(trainerId);
+      setTimeout(() => setCopiedTrainerPasswordId(null), 2000);
+    }
+  };
+
+  const handleOpenSetPasswordModal = (trainer) => {
+    setPasswordModalTrainer(trainer);
+    setNewPasswordInput('');
+    setPasswordModalError('');
+  };
+
+  const handleSaveSetPassword = async (e) => {
+    e.preventDefault();
+    if (!newPasswordInput || newPasswordInput.trim().length < 8) {
+      setPasswordModalError('Password must be at least 8 characters long.');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(newPasswordInput) || !/\d/.test(newPasswordInput)) {
+      setPasswordModalError('Password must contain at least one letter and one number.');
+      return;
+    }
+    setPasswordModalLoading(true);
+    try {
+      const res = await setAdminUserPassword(passwordModalTrainer.id, newPasswordInput.trim());
+      if (res.success) {
+        setRevealedPasswords(prev => ({ ...prev, [passwordModalTrainer.id]: newPasswordInput.trim() }));
+        setShowPasswords(prev => ({ ...prev, [passwordModalTrainer.id]: true }));
+        logActivity('Trainer Password Updated', `Admin updated password for trainer "${passwordModalTrainer.name}"`, 'Trainer');
+        setPasswordModalTrainer(null);
+      } else {
+        setPasswordModalError(res.message || 'Failed to update password.');
+      }
+    } catch (err) {
+      setPasswordModalError(err?.message || 'Server error updating password.');
+    } finally {
+      setPasswordModalLoading(false);
     }
   };
 
@@ -99,8 +164,12 @@ export default function ManageTrainersPage() {
     }
     setPhoneError('');
 
-    if (formData.password && formData.password.trim().length < 8) {
-      setFormError('Password must be at least 8 characters long.');
+    if (!formData.password || formData.password.trim().length < 8) {
+      setFormError('Password is required and must be at least 8 characters long.');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
+      setFormError('Password must contain at least one letter and one number.');
       return;
     }
 
@@ -108,13 +177,9 @@ export default function ManageTrainersPage() {
       ...formData,
       name: formData.name.trim(),
       email: formData.email.trim(),
-      phone: sanitizePhone(formData.phone)
+      phone: sanitizePhone(formData.phone),
+      password: formData.password.trim()
     };
-    if (formData.password && formData.password.trim()) {
-      payload.password = formData.password.trim();
-    } else {
-      delete payload.password;
-    }
 
     const res = await createTrainer(payload);
     if (!res.success) {
@@ -122,13 +187,16 @@ export default function ManageTrainersPage() {
       return;
     }
 
-    if (res.data?.temporaryPassword) {
-      setCreatedTrainerModalData({
-        trainerName: payload.name,
-        email: payload.email,
-        temporaryPassword: res.data.temporaryPassword
-      });
+    if (res.data?.id) {
+      setRevealedPasswords(prev => ({ ...prev, [res.data.id]: payload.password }));
+      setShowPasswords(prev => ({ ...prev, [res.data.id]: true }));
     }
+
+    setCreatedTrainerModalData({
+      trainerName: payload.name,
+      email: payload.email,
+      password: payload.password
+    });
 
     resetForm();
     setShowAddModal(false);
@@ -152,9 +220,15 @@ export default function ManageTrainersPage() {
       }
       setPhoneError('');
 
-      if (formData.password && formData.password.trim().length < 8) {
-        setFormError('Password must be at least 8 characters long.');
-        return;
+      if (formData.password && formData.password.trim()) {
+        if (formData.password.trim().length < 8) {
+          setFormError('Password must be at least 8 characters long.');
+          return;
+        }
+        if (!/[a-zA-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
+          setFormError('Password must contain at least one letter and one number.');
+          return;
+        }
       }
 
       const payload = {
@@ -381,6 +455,7 @@ export default function ManageTrainersPage() {
               <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider font-bold">
                 <th className="py-3 px-4">Trainer Name</th>
                 <th className="py-3 px-4">Email (Login ID)</th>
+                <th className="py-3 px-4">Password</th>
                 <th className="py-3 px-4">Specialty</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Monthly Salary</th>
@@ -398,6 +473,30 @@ export default function ManageTrainersPage() {
                     <tr key={trainer.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-4 px-4 font-black text-slate-900">{trainer.name}</td>
                       <td className="py-4 px-4 text-blue-900 font-bold">{trainer.email}</td>
+                      <td className="py-4 px-4 font-mono">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-700 font-bold select-all">
+                            {showPasswords[trainer.id] ? (revealedPasswords[trainer.id] || '••••••••') : '••••••••'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleRevealPassword(trainer.id)}
+                            disabled={loadingPasswordId === trainer.id}
+                            className="p-1 text-slate-400 hover:text-slate-600 rounded cursor-pointer transition-colors"
+                            title={showPasswords[trainer.id] ? "Hide password" : "Show password"}
+                          >
+                            {showPasswords[trainer.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPassword(trainer.id)}
+                            className="p-1 text-slate-400 hover:text-slate-600 rounded cursor-pointer transition-colors"
+                            title="Copy password"
+                          >
+                            {copiedTrainerPasswordId === trainer.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </td>
                       <td className="py-4 px-4 text-slate-600">{trainer.specialty}</td>
                       <td className="py-4 px-4">
                         <button
@@ -417,10 +516,10 @@ export default function ManageTrainersPage() {
                       <td className="py-4 px-4 text-slate-500 font-mono">{formatPhone(trainer.phone) || 'N/A'}</td>
                       <td className="py-4 px-4 text-right space-x-2">
                         <button
-                          onClick={() => handleResetPassword(trainer)}
-                          disabled={resetPasswordLoadingId === trainer.id}
-                          className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors disabled:opacity-50"
-                          title="Reset Temporary Password"
+                          type="button"
+                          onClick={() => handleOpenSetPasswordModal(trainer)}
+                          className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
+                          title="Set New Password"
                         >
                           <Key className="w-4 h-4" />
                         </button>
@@ -459,7 +558,7 @@ export default function ManageTrainersPage() {
               })
             ) : (
                 <tr>
-                  <td colSpan="9" className="py-8 text-center text-slate-500 font-bold text-xs">
+                  <td colSpan="10" className="py-8 text-center text-slate-500 font-bold text-xs">
                     No trainers found matching your search or date filter.
                   </td>
                 </tr>
@@ -544,10 +643,13 @@ export default function ManageTrainersPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Password (min 8 characters)</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {editingTrainer ? 'Password (Leave blank to keep unchanged)' : 'Password (min 8 chars, 1 letter, 1 digit) *'}
+                  </label>
                   <input
                     type="text"
-                    placeholder={editingTrainer ? "Leave blank to keep existing password" : "Leave blank to generate temporary password"}
+                    required={!editingTrainer}
+                    placeholder={editingTrainer ? "Leave blank to keep existing password" : "e.g. Pass1234!"}
                     value={formData.password}
                     onChange={(e) => {
                       setFormData({ ...formData, password: e.target.value });
@@ -612,7 +714,7 @@ export default function ManageTrainersPage() {
         </div>
       )}
 
-      {/* Credentials Modal when temporary password generated */}
+      {/* Credentials Modal */}
       {createdTrainerModalData && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-xs">
@@ -634,16 +736,16 @@ export default function ManageTrainersPage() {
             <div className="bg-slate-900 text-slate-200 p-4 rounded-2xl space-y-2 border border-slate-800 font-mono text-[11px]">
               <p>Trainer: <strong>{createdTrainerModalData.trainerName}</strong></p>
               <p>Email: <strong>{createdTrainerModalData.email}</strong></p>
-              {createdTrainerModalData.temporaryPassword && (
+              {(createdTrainerModalData.password || createdTrainerModalData.temporaryPassword) && (
                 <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-center justify-between text-amber-300 my-2">
                   <div>
-                    <span className="text-[10px] text-amber-400 block font-bold uppercase tracking-wider">Temporary Password</span>
-                    <span className="font-mono font-bold text-sm text-white select-all">{createdTrainerModalData.temporaryPassword}</span>
+                    <span className="text-[10px] text-amber-400 block font-bold uppercase tracking-wider">Account Password</span>
+                    <span className="font-mono font-bold text-sm text-white select-all">{createdTrainerModalData.password || createdTrainerModalData.temporaryPassword}</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard.writeText(createdTrainerModalData.temporaryPassword);
+                      navigator.clipboard.writeText(createdTrainerModalData.password || createdTrainerModalData.temporaryPassword);
                       setCopiedPassword(true);
                       setTimeout(() => setCopiedPassword(false), 2000);
                     }}
@@ -795,6 +897,71 @@ export default function ManageTrainersPage() {
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Set New Password Modal */}
+      {passwordModalTrainer && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative space-y-4 text-xs">
+            <button
+              type="button"
+              onClick={() => setPasswordModalTrainer(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h3 className="text-base font-black text-slate-900">
+              Set New Password
+            </h3>
+            <p className="text-slate-500 text-[11px]">
+              Set a new password for <strong>{passwordModalTrainer.name}</strong> ({passwordModalTrainer.email}).
+            </p>
+
+            <form onSubmit={handleSaveSetPassword} className="space-y-3">
+              <div>
+                <label className="block font-extrabold text-slate-700 mb-1">
+                  New Password (min 8 chars, 1 letter, 1 digit) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. NewPass1234!"
+                  value={newPasswordInput}
+                  onChange={(e) => {
+                    setNewPasswordInput(e.target.value);
+                    if (passwordModalError) setPasswordModalError('');
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
+                />
+              </div>
+
+              {passwordModalError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{passwordModalError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPasswordModalTrainer(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordModalLoading}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {passwordModalLoading ? 'Saving...' : 'Save Password'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
