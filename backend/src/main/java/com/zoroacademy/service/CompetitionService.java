@@ -18,15 +18,18 @@ public class CompetitionService {
     private final CompetitionModuleRepository moduleRepository;
     private final CompetitionRegistrationRepository registrationRepository;
     private final com.zoroacademy.repository.UserRepository userRepository;
+    private final FileStorageService fileStorageService;
 
     public CompetitionService(CompetitionRepository competitionRepository,
                               CompetitionModuleRepository moduleRepository,
                               CompetitionRegistrationRepository registrationRepository,
-                              com.zoroacademy.repository.UserRepository userRepository) {
+                              com.zoroacademy.repository.UserRepository userRepository,
+                              FileStorageService fileStorageService) {
         this.competitionRepository = competitionRepository;
         this.moduleRepository = moduleRepository;
         this.registrationRepository = registrationRepository;
         this.userRepository = userRepository;
+        this.fileStorageService = fileStorageService;
     }
 
     @Transactional(readOnly = true)
@@ -133,9 +136,20 @@ public class CompetitionService {
         if (updated.getStartTime() != null) comp.setStartTime(updated.getStartTime());
         if (updated.getEndTime() != null) comp.setEndTime(updated.getEndTime());
         if (updated.getVenue() != null) comp.setVenue(updated.getVenue());
-        if (updated.getBannerUrl() != null) comp.setBannerUrl(updated.getBannerUrl());
-        if (updated.getRulesPdfUrl() != null) comp.setRulesPdfUrl(updated.getRulesPdfUrl());
-        if (updated.getRegistrationFormUrl() != null) comp.setRegistrationFormUrl(updated.getRegistrationFormUrl());
+        if (updated.getBannerUrl() != null) {
+            if (comp.getBannerUrl() != null && !comp.getBannerUrl().isBlank()
+                    && !comp.getBannerUrl().equals(updated.getBannerUrl())) {
+                deleteAttachedFileIfPresent(comp.getBannerUrl());
+            }
+            comp.setBannerUrl(updated.getBannerUrl());
+        }
+        if (updated.getRulesPdfUrl() != null) {
+            if (comp.getRulesPdfUrl() != null && !comp.getRulesPdfUrl().isBlank()
+                    && !comp.getRulesPdfUrl().equals(updated.getRulesPdfUrl())) {
+                deleteAttachedFileIfPresent(comp.getRulesPdfUrl());
+            }
+            comp.setRulesPdfUrl(updated.getRulesPdfUrl());
+        }
         if (updated.getInstructions() != null) comp.setInstructions(updated.getInstructions());
         if (updated.getContactDetails() != null) comp.setContactDetails(updated.getContactDetails());
         if (updated.getRegistrationFee() != null) comp.setRegistrationFee(updated.getRegistrationFee());
@@ -147,7 +161,28 @@ public class CompetitionService {
 
     @Transactional
     public void deleteCompetition(String id) {
+        Competition comp = competitionRepository.findById(id).orElse(null);
+        if (comp != null) {
+            deleteAttachedFileIfPresent(comp.getRulesPdfUrl());
+            deleteAttachedFileIfPresent(comp.getBannerUrl());
+        }
         competitionRepository.deleteById(id);
+    }
+
+    private void deleteAttachedFileIfPresent(String fileUrl) {
+        if (fileUrl == null || fileUrl.isBlank()) return;
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", java.util.regex.Pattern.CASE_INSENSITIVE)
+                    .matcher(fileUrl);
+            if (m.find()) {
+                String fileId = m.group();
+                fileStorageService.deleteFile(fileId);
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(CompetitionService.class)
+                    .warn("Could not delete attached file for {}: {}", fileUrl, e.getMessage());
+        }
     }
 
     @Transactional

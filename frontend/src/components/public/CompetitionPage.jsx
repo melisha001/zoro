@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, Monitor, Trophy, CheckCircle2, Tag, Download } from 'lucide-react';
 import { getCompetitions } from '../../api/competitionApi';
-import { resolveFileUrl } from '../../api/fileApi';
+import { resolveFileUrl, getRulesDownloadUrl } from '../../api/fileApi';
 import { formatDate } from '../../utils/dateFormatter';
 import CompetitionRegisterModal from './CompetitionRegisterModal';
 
@@ -66,7 +66,7 @@ export default function CompetitionPage({ currentUser }) {
   const bannerSrc = activeComp.bannerUrl || activeComp.banner;
   const compTitle = activeComp.title || activeComp.name || 'Competition';
   const rulesUrl = activeComp.rulesPdfUrl || activeComp.rulesPdf?.url;
-  const formUrl = activeComp.registrationFormUrl || activeComp.registrationDocPdf?.url;
+  const rulesDownloadUrl = getRulesDownloadUrl(rulesUrl);
 
   return (
     <div className="bg-slate-50 min-h-screen py-10">
@@ -307,30 +307,16 @@ export default function CompetitionPage({ currentUser }) {
                   <div className="text-slate-400 italic">No specific helpline contact listed.</div>
                 )}
 
-                {(rulesUrl || formUrl) && (
+                {rulesDownloadUrl && (
                   <div className="pt-2 border-t border-slate-200 flex flex-wrap gap-2">
-                    {rulesUrl && (
-                      <a
-                        href={resolveFileUrl(rulesUrl)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-2 bg-amber-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-amber-700 transition-colors"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Rules Document (PDF)</span>
-                      </a>
-                    )}
-                    {formUrl && (
-                      <a
-                        href={resolveFileUrl(formUrl)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-2 bg-blue-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-blue-700 transition-colors"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Registration Form (PDF)</span>
-                      </a>
-                    )}
+                    <a
+                      href={rulesDownloadUrl}
+                      download
+                      className="px-3 py-2 bg-amber-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-amber-700 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download Rules (PDF)</span>
+                    </a>
                   </div>
                 )}
               </div>

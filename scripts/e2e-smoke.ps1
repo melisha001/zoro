@@ -205,4 +205,62 @@ Write-Host "-> HTTP 200: Enrolled student playback authorized. Video: $($playbac
 Invoke-RestMethod -Uri "$baseUrl/courses/$($targetCourse.id)/modules/$cModId" -Method Delete -Headers $headers | Out-Null
 Write-Host "-> HTTP 200: DELETE /courses/{id}/modules/{id} cleaned up." -ForegroundColor Green
 
-Write-Host "`n=== All E2E Smoke Tests PASSED (Tasks A, B, C) ===" -ForegroundColor Green
+# 6. Competition Lifecycle & Public Rules Download (Task D)
+Write-Host "`n[Step 6] Competition Lifecycle & Public Rules Download (Task D)..."
+$boundary = [System.Guid]::NewGuid().ToString()
+$LF = "`r`n"
+$pdfBytes = [System.Text.Encoding]::ASCII.GetBytes("%PDF-1.4`n1 0 obj<</Type/Catalog>>endobj`nxref`n0 1`ntrailer<</Root 1 0 R>>`nstartxref`n30`n%%EOF")
+$pdfHeader = "--" + $boundary + $LF + "Content-Disposition: form-data; name=`"category`"" + $LF + $LF + "public-document" + $LF + "--" + $boundary + $LF + "Content-Disposition: form-data; name=`"file`"; filename=`"National-Rules.pdf`"" + $LF + "Content-Type: application/pdf" + $LF + $LF
+$pdfFooter = $LF + "--" + $boundary + "--" + $LF
+
+$msPdf = New-Object System.IO.MemoryStream
+$swPdf = New-Object System.IO.StreamWriter($msPdf, [System.Text.Encoding]::ASCII)
+$swPdf.Write($pdfHeader)
+$swPdf.Flush()
+$msPdf.Write($pdfBytes, 0, $pdfBytes.Length)
+$swPdf.Write($pdfFooter)
+$swPdf.Flush()
+$pdfData = $msPdf.ToArray()
+
+$pdfUploadRes = Invoke-RestMethod -Uri "$baseUrl/files" -Method Post -Headers @{ Authorization = "Bearer $token" } -Body $pdfData -ContentType "multipart/form-data; boundary=$boundary"
+$pdfId = $pdfUploadRes.data.id
+Write-Host "-> HTTP 200: Uploaded rules PDF ($pdfId) with category 'public-document', isPublic: $($pdfUploadRes.data.isPublic)" -ForegroundColor Green
+
+$compPayload = @{
+    title = "National Abacus Grand Prix 2026"
+    category = "Abacus Championship"
+    startDate = "2026-11-20"
+    endDate = "2026-11-25"
+    startTime = "09:00 AM"
+    endTime = "12:00 PM"
+    venue = "National Hall"
+    rulesPdfUrl = "/api/files/$pdfId/download"
+    instructions = "Bring abacus tool."
+    rules = "Official abacus rules apply."
+    contactDetails = "+91 98765 43210"
+    registrationFee = 250
+    status = "Active"
+} | ConvertTo-Json
+
+$compRes = Invoke-RestMethod -Uri "$baseUrl/competitions" -Method Post -Headers $headers -Body $compPayload -ContentType "application/json"
+$createdCompId = $compRes.data.id
+Write-Host "-> HTTP 200: Competition created ($createdCompId). registrationFormUrl present: $([bool]($compRes.data.PSObject.Properties['registrationFormUrl']))" -ForegroundColor Green
+
+# Public logged-out download test without Authorization
+$downloadReq = [System.Net.HttpWebRequest]::Create("$baseUrl/files/$pdfId/download")
+$downloadReq.Method = "GET"
+$downloadResp = $downloadReq.GetResponse()
+$statusCode = [int]$downloadResp.StatusCode
+$contentType = $downloadResp.ContentType
+$contentDisp = $downloadResp.Headers["Content-Disposition"]
+$nosniff = $downloadResp.Headers["X-Content-Type-Options"]
+$downloadResp.Close()
+
+Write-Host "-> HTTP $($statusCode): Logged-out download successful. Content-Type: $contentType, Content-Disposition: $contentDisp, X-Content-Type-Options: $nosniff" -ForegroundColor Green
+
+# Clean up competition
+Invoke-RestMethod -Uri "$baseUrl/competitions/$createdCompId" -Method Delete -Headers $headers | Out-Null
+Write-Host "-> HTTP 200: Competition cleaned up." -ForegroundColor Green
+
+Write-Host "`n=== All E2E Smoke Tests PASSED (Tasks A, B, C, D) ===" -ForegroundColor Green
+

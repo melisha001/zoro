@@ -1,4 +1,4 @@
-import { getAuthToken, API_BASE_URL } from './client';
+import { getAuthToken, API_BASE_URL, apiDelete } from './client';
 
 /**
  * Resolves a file URL or path for display/download in the frontend.
@@ -156,3 +156,29 @@ export async function uploadFile(file, category = 'document', onProgress = null)
     xhr.send(formData);
   });
 }
+
+/**
+ * Delete a stored file from storage and database.
+ * 
+ * @param {string} fileId
+ * @returns {Promise<any>}
+ */
+export async function deleteFile(fileId) {
+  if (!fileId) return null;
+  return apiDelete(`/files/${encodeURIComponent(fileId)}`);
+}
+
+/**
+ * Returns absolute download URL for a public rules document.
+ * 
+ * @param {string} rulesPdfUrl
+ * @returns {string} Absolute download URL
+ */
+export function getRulesDownloadUrl(rulesPdfUrl) {
+  if (!rulesPdfUrl) return '';
+  const match = rulesPdfUrl.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  const fileId = match ? match[0] : rulesPdfUrl.replace(/^\/api\/files\//, '').replace(/\/download$/, '');
+  const baseObj = new URL(API_BASE_URL, window.location.origin);
+  return `${baseObj.origin}/api/files/${encodeURIComponent(fileId)}/download`;
+}
+

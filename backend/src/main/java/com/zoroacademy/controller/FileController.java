@@ -4,6 +4,8 @@ import com.zoroacademy.common.ApiResponse;
 import com.zoroacademy.entity.StoredFile;
 import com.zoroacademy.security.UserPrincipal;
 import com.zoroacademy.service.FileStorageService;
+import com.zoroacademy.repository.CompetitionRepository;
+import com.zoroacademy.entity.Competition;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -22,9 +25,11 @@ import java.util.Map;
 public class FileController {
 
     private final FileStorageService fileStorageService;
+    private final CompetitionRepository competitionRepository;
 
-    public FileController(FileStorageService fileStorageService) {
+    public FileController(FileStorageService fileStorageService, CompetitionRepository competitionRepository) {
         this.fileStorageService = fileStorageService;
+        this.competitionRepository = competitionRepository;
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -141,6 +146,44 @@ public class FileController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, mediaType)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + storedFile.getOriginalName() + "\"")
+                .body(resource);
+    }
+
+    @GetMapping("/{id}/download")
+    public ResponseEntity<Resource> downloadPublicFile(
+            @PathVariable String id,
+            @RequestParam(value = "title", required = false) String titleParam
+    ) {
+        StoredFile storedFile = fileStorageService.getFileMetadata(id);
+        if (!Boolean.TRUE.equals(storedFile.getIsPublic())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        Resource resource = fileStorageService.loadFileAsResource(storedFile);
+        if (resource == null || !resource.exists()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        String competitionTitle = null;
+        if (titleParam != null && !titleParam.isBlank()) {
+            competitionTitle = titleParam.trim();
+        } else {
+            List<Competition> comps = competitionRepository.findByRulesPdfUrlContaining(id);
+            if (!comps.isEmpty()) {
+                competitionTitle = comps.get(0).getTitle();
+            }
+        }
+        if (competitionTitle == null || competitionTitle.isBlank()) {
+            competitionTitle = "competition";
+        }
+
+        String sanitizedTitle = competitionTitle.replaceAll("[^a-zA-Z0-9.-]", "_");
+        String downloadFilename = sanitizedTitle + "-rules.pdf";
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, "application/pdf")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + downloadFilename + "\"")
+                .header("X-Content-Type-Options", "nosniff")
                 .body(resource);
     }
 

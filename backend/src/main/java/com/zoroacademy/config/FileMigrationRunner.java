@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.io.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -52,8 +53,7 @@ public class FileMigrationRunner implements CommandLineRunner {
                 {"users", "avatar", "avatar"},
                 {"courses", "thumbnail", "thumbnail"},
                 {"competitions", "banner_url", "banner"},
-                {"competitions", "rules_pdf_url", "document"},
-                {"competitions", "registration_form_url", "document"},
+                {"competitions", "rules_pdf_url", "public-document"},
                 {"course_contents", "thumbnail", "thumbnail"},
                 {"course_contents", "notes_file_url", "notes"},
                 {"course_contents", "worksheet_file_url", "worksheet"},
@@ -72,9 +72,89 @@ public class FileMigrationRunner implements CommandLineRunner {
             migrateTableColumn(table, column, category);
         }
 
+        migratePrivateRulesPdfsToPublic();
         migrateLocalFilesToBunny();
 
         log.info("Completed file storage data migration scan.");
+    }
+
+    private void migratePrivateRulesPdfsToPublic() {
+        log.info("Checking competitions.rules_pdf_url for private-to-public migration...");
+        try {
+            String selectSql = "SELECT id, title, rules_pdf_url FROM competitions WHERE rules_pdf_url IS NOT NULL AND rules_pdf_url <> ''";
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(selectSql);
+
+            int migratedCount = 0;
+            java.util.regex.Pattern uuidPattern = java.util.regex.Pattern.compile(
+                    "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+                    java.util.regex.Pattern.CASE_INSENSITIVE
+            );
+
+            for (Map<String, Object> row : rows) {
+                String compId = String.valueOf(row.get("id"));
+                String rulesUrl = String.valueOf(row.get("rules_pdf_url"));
+
+                java.util.regex.Matcher m = uuidPattern.matcher(rulesUrl);
+                if (!m.find()) {
+                    continue;
+                }
+                String fileId = m.group();
+
+                StoredFile storedFile = storedFileRepository.findById(fileId).orElse(null);
+                if (storedFile == null) {
+                    continue;
+                }
+
+                boolean isPublic = Boolean.TRUE.equals(storedFile.getIsPublic());
+                String storagePath = storedFile.getStoragePath();
+                boolean isPublicPath = storagePath != null && storagePath.startsWith("public/");
+
+                if (!isPublic || !isPublicPath) {
+                    try {
+                        Resource resource = storageProvider.loadAsResource(storagePath);
+                        if (resource != null && resource.exists()) {
+                            byte[] data;
+                            try (java.io.InputStream is = resource.getInputStream()) {
+                                data = is.readAllBytes();
+                            }
+
+                            String ext = "";
+                            int dot = storedFile.getOriginalName() != null ? storedFile.getOriginalName().lastIndexOf('.') : -1;
+                            if (dot >= 0) {
+                                ext = storedFile.getOriginalName().substring(dot);
+                            }
+                            if (ext.isEmpty()) ext = ".pdf";
+
+                            String newStoragePath = "public/public-document/" + storedFile.getId() + ext;
+                            storageProvider.store(newStoragePath, data, "application/pdf");
+
+                            if (!newStoragePath.equals(storagePath)) {
+                                storageProvider.delete(storagePath);
+                            }
+
+                            storedFile.setIsPublic(true);
+                            storedFile.setCategory("public-document");
+                            storedFile.setStoragePath(newStoragePath);
+                            storedFile.setContentType("application/pdf");
+                            storedFileRepository.save(storedFile);
+
+                            String downloadUrl = "/api/files/" + storedFile.getId() + "/download";
+                            jdbcTemplate.update("UPDATE competitions SET rules_pdf_url = ? WHERE id = ?", downloadUrl, compId);
+                            migratedCount++;
+                            log.info("Migrated rules PDF {} for competition {} to public storage", fileId, compId);
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to copy private rules PDF {} to public storage: {}", fileId, e.getMessage());
+                    }
+                }
+            }
+
+            if (migratedCount > 0) {
+                log.info("Migrated {} competition rules PDFs from private to public storage.", migratedCount);
+            }
+        } catch (Exception e) {
+            log.warn("Error running private rules PDF migration: {}", e.getMessage());
+        }
     }
 
     private void migrateLocalFilesToBunny() {

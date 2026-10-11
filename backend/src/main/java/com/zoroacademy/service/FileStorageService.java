@@ -31,13 +31,14 @@ public class FileStorageService {
 
     private static final long MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
     private static final long MAX_DOC_SIZE = 100 * 1024 * 1024; // 100 MB
+    private static final long MAX_PUBLIC_DOC_SIZE = 10 * 1024 * 1024; // 10 MB
 
     private static final Set<String> IMAGE_CATEGORIES = Set.of(
             "image", "images", "avatar", "thumbnail", "banner", "profile"
     );
 
     private static final Set<String> PUBLIC_CATEGORIES = Set.of(
-            "avatar", "thumbnail", "banner", "profile", "public", "image", "images"
+            "avatar", "thumbnail", "banner", "profile", "public", "image", "images", "public-document"
     );
 
     @Autowired
@@ -61,7 +62,11 @@ public class FileStorageService {
 
         // Size check
         long size = file.getSize();
-        if (isImage && size > MAX_IMAGE_SIZE) {
+        if ("public-document".equals(normCategory)) {
+            if (size > MAX_PUBLIC_DOC_SIZE) {
+                throw new BadRequestException("Public document file size exceeds maximum limit of 10 MB.");
+            }
+        } else if (isImage && size > MAX_IMAGE_SIZE) {
             throw new BadRequestException("Image file size exceeds maximum limit of 5 MB.");
         } else if (size > MAX_DOC_SIZE) {
             throw new BadRequestException("Document file size exceeds maximum limit of 100 MB.");
@@ -84,7 +89,7 @@ public class FileStorageService {
             throw new BadRequestException("Failed to read file header: " + e.getMessage());
         }
 
-        validateMagicBytes(headerBytes, originalFilename, isImage);
+        validateMagicBytes(headerBytes, originalFilename, normCategory, isImage);
 
         // Determine public status and partition storage path
         boolean isPublic = PUBLIC_CATEGORIES.contains(normCategory);
@@ -96,7 +101,9 @@ public class FileStorageService {
         String storagePath = prefix + "/" + normCategory + "/" + storedFilename;
 
         String contentType = file.getContentType();
-        if (contentType == null || contentType.isBlank()) {
+        if ("public-document".equals(normCategory) || "pdf".equalsIgnoreCase(ext)) {
+            contentType = "application/pdf";
+        } else if (contentType == null || contentType.isBlank()) {
             contentType = isImage ? "image/" + (ext.isEmpty() ? "jpeg" : ext) : "application/octet-stream";
         }
 
@@ -241,7 +248,7 @@ public class FileStorageService {
         }
     }
 
-    private void validateMagicBytes(byte[] header, String originalFilename, boolean requireImage) {
+    private void validateMagicBytes(byte[] header, String originalFilename, String category, boolean requireImage) {
         String ext = getFileExtension(originalFilename).toLowerCase(Locale.ROOT);
 
         boolean isJpg = header.length >= 3 && (header[0] & 0xFF) == 0xFF && (header[1] & 0xFF) == 0xD8 && (header[2] & 0xFF) == 0xFF;
@@ -253,7 +260,14 @@ public class FileStorageService {
         boolean isZipOrOfficeXml = header.length >= 4 && header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04;
         boolean isOle2Office = header.length >= 4 && (header[0] & 0xFF) == 0xD0 && (header[1] & 0xFF) == 0xCF && (header[2] & 0xFF) == 0x11 && (header[3] & 0xFF) == 0xE0;
 
-        if (requireImage) {
+        if ("public-document".equals(category)) {
+            if (!isPdf) {
+                throw new BadRequestException("File header does not match valid PDF format (%PDF-).");
+            }
+            if (!"pdf".equals(ext)) {
+                throw new BadRequestException("File extension must be .pdf for public documents.");
+            }
+        } else if (requireImage) {
             if (!isJpg && !isPng && !isWebp) {
                 if (!Set.of("jpg", "jpeg", "png", "webp", "gif").contains(ext)) {
                     throw new BadRequestException("Uploaded file header does not match valid image format (JPEG, PNG, WEBP).");

@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface CompetitionRepository extends JpaRepository<Competition, String> {
     List<Competition> findByStatusIgnoreCase(String status);
+    List<Competition> findByRulesPdfUrlContaining(String fileId);
 }

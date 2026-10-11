@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Trophy, Plus, Search, Calendar, Clock, MapPin, 
   FileText, Download, Edit, Trash2, Eye, X,
-  FileCheck, Layers, Phone
+  Layers
 } from 'lucide-react';
 import { getCompetitions, createCompetition, updateCompetition, deleteCompetition } from '../../api/competitionApi';
-import { uploadFile, resolveFileUrl } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl, deleteFile, getRulesDownloadUrl } from '../../api/fileApi';
 import ConfirmModal from '../common/ConfirmModal';
 import MoneyInput from '../common/MoneyInput';
 import { formatDate } from '../../utils/dateFormatter';
@@ -27,7 +27,7 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
 
   const [bannerPreview, setBannerPreview] = useState('');
   const [rulesFileName, setRulesFileName] = useState('');
-  const [regDocFileName, setRegDocFileName] = useState('');
+  const rulesFileInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -46,8 +46,7 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
     rules: '',
     contactDetails: '',
     bannerUrl: '',
-    rulesPdfUrl: '',
-    registrationFormUrl: ''
+    rulesPdfUrl: ''
   });
 
   const loadData = async () => {
@@ -81,12 +80,13 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
       rules: '',
       contactDetails: '',
       bannerUrl: '',
-      rulesPdfUrl: '',
-      registrationFormUrl: ''
+      rulesPdfUrl: ''
     });
     setBannerPreview('');
     setRulesFileName('');
-    setRegDocFileName('');
+    if (rulesFileInputRef.current) {
+      rulesFileInputRef.current.value = '';
+    }
   };
 
   const handleBannerUpload = async (e) => {
@@ -113,29 +113,42 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
         showWarning('Rules document must be a PDF file.', 'Invalid File Type');
         return;
       }
+      if (file.size > 10 * 1024 * 1024) {
+        showWarning('Rules document size must not exceed 10 MB.', 'File Too Large');
+        return;
+      }
+      const oldUrl = formData.rulesPdfUrl;
       try {
-        const res = await uploadFile(file, 'document');
+        const res = await uploadFile(file, 'public-document');
         setRulesFileName(file.name);
-        setFormData(prev => ({ ...prev, rulesPdfUrl: res.url }));
+        setFormData(prev => ({ ...prev, rulesPdfUrl: res.url || `/api/files/${res.id}/download` }));
+        if (oldUrl && oldUrl !== res.url) {
+          const match = oldUrl.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+          if (match && match[0] !== res.id) {
+            try {
+              await deleteFile(match[0]);
+            } catch (ignored) {}
+          }
+        }
       } catch (err) {
         showError(err.message || 'Rules document upload failed', 'Upload Error');
       }
     }
   };
 
-  const handleRegDocPdfUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.name.toLowerCase().endsWith('.pdf')) {
-        showWarning('Registration form document must be a PDF file.', 'Invalid File Type');
-        return;
-      }
-      try {
-        const res = await uploadFile(file, 'document');
-        setRegDocFileName(file.name);
-        setFormData(prev => ({ ...prev, registrationFormUrl: res.url }));
-      } catch (err) {
-        showError(err.message || 'Registration form upload failed', 'Upload Error');
+  const handleRemoveRulesPdf = async () => {
+    const oldUrl = formData.rulesPdfUrl;
+    setFormData(prev => ({ ...prev, rulesPdfUrl: '' }));
+    setRulesFileName('');
+    if (rulesFileInputRef.current) {
+      rulesFileInputRef.current.value = '';
+    }
+    if (oldUrl) {
+      const match = oldUrl.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      if (match) {
+        try {
+          await deleteFile(match[0]);
+        } catch (ignored) {}
       }
     }
   };
@@ -195,12 +208,13 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
       rules: comp.rules || '',
       contactDetails: comp.contactDetails || '',
       bannerUrl: comp.bannerUrl || comp.banner || '',
-      rulesPdfUrl: comp.rulesPdfUrl || comp.rulesPdf?.url || '',
-      registrationFormUrl: comp.registrationFormUrl || comp.registrationDocPdf?.url || ''
+      rulesPdfUrl: comp.rulesPdfUrl || comp.rulesPdf?.url || ''
     });
     setBannerPreview(comp.bannerUrl || comp.banner || '');
-    setRulesFileName(comp.rulesPdfUrl || comp.rulesPdf?.url ? 'Saved Rules PDF' : '');
-    setRegDocFileName(comp.registrationFormUrl || comp.registrationDocPdf?.url ? 'Saved Registration Doc' : '');
+    setRulesFileName(comp.rulesPdfUrl || comp.rulesPdf?.url ? 'Saved Rules Document (PDF)' : '');
+    if (rulesFileInputRef.current) {
+      rulesFileInputRef.current.value = '';
+    }
   };
 
   const filteredCompetitions = competitions.filter(comp => {
@@ -388,12 +402,6 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
                         <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-lg flex items-center gap-1">
                           <FileText className="w-3 h-3 text-amber-600" />
                           Rules PDF
-                        </span>
-                      )}
-                      {(comp.registrationFormUrl || comp.registrationDocPdf) && (
-                        <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-1 rounded-lg flex items-center gap-1">
-                          <FileCheck className="w-3 h-3 text-blue-600" />
-                          Reg Form PDF
                         </span>
                       )}
                     </div>
@@ -661,29 +669,52 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
                   )}
                 </div>
 
-                {/* PDF Documents */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-600 mb-1">Rules Document (.pdf)</label>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleRulesPdfUpload}
-                      className="w-full text-[11px] file:mr-2 file:py-1.5 file:px-2.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-50 file:text-amber-800"
-                    />
-                    {rulesFileName && <p className="text-[10px] text-amber-700 font-bold mt-1">✓ {rulesFileName}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-600 mb-1">Registration Form PDF (.pdf)</label>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleRegDocPdfUpload}
-                      className="w-full text-[11px] file:mr-2 file:py-1.5 file:px-2.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-800"
-                    />
-                    {regDocFileName && <p className="text-[10px] text-blue-700 font-bold mt-1">✓ {regDocFileName}</p>}
-                  </div>
+                {/* Rules Document (PDF) */}
+                <div>
+                  <label className="block font-bold text-slate-600 mb-1">Rules Document (.pdf)</label>
+                  {formData.rulesPdfUrl ? (
+                    <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      <div className="flex items-center gap-2 truncate mr-2">
+                        <FileText className="w-4 h-4 text-amber-700 shrink-0" />
+                        <span className="text-xs font-bold text-amber-900 truncate">
+                          {rulesFileName || 'Saved Rules Document (PDF)'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => rulesFileInputRef.current?.click()}
+                          className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                        >
+                          Replace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveRulesPdf}
+                          className="px-2.5 py-1 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <input
+                        ref={rulesFileInputRef}
+                        type="file"
+                        accept=".pdf"
+                        onChange={handleRulesPdfUpload}
+                        className="hidden"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        ref={rulesFileInputRef}
+                        type="file"
+                        accept=".pdf"
+                        onChange={handleRulesPdfUpload}
+                        className="w-full text-[11px] file:mr-2 file:py-1.5 file:px-2.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-50 file:text-amber-800"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -703,7 +734,6 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
         const title = viewingComp.title || viewingComp.name || 'Competition';
         const fee = Number(viewingComp.registrationFee || 0);
         const rulesUrl = viewingComp.rulesPdfUrl || viewingComp.rulesPdf?.url;
-        const formUrl = viewingComp.registrationFormUrl || viewingComp.registrationDocPdf?.url;
 
         return (
           <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -781,33 +811,18 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
                 )}
 
                 {/* Downloadable Files */}
-                {(rulesUrl || formUrl) && (
+                {rulesUrl && (
                   <div className="space-y-2 pt-2">
                     <h4 className="font-bold text-slate-900">Official Attachments:</h4>
                     <div className="flex flex-wrap gap-2">
-                      {rulesUrl && (
-                        <a
-                          href={resolveFileUrl(rulesUrl)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-2 bg-amber-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-amber-700 transition-colors"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Rules PDF</span>
-                        </a>
-                      )}
-
-                      {formUrl && (
-                        <a
-                          href={resolveFileUrl(formUrl)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-2 bg-blue-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-blue-700 transition-colors"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Registration Form PDF</span>
-                        </a>
-                      )}
+                      <a
+                        href={getRulesDownloadUrl(rulesUrl)}
+                        download
+                        className="px-3 py-2 bg-amber-600 text-white font-bold rounded-xl flex items-center gap-1.5 hover:bg-amber-700 transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download Rules (PDF)</span>
+                      </a>
                     </div>
                   </div>
                 )}

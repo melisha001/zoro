@@ -24,6 +24,7 @@ class CompetitionPersistenceTest {
     private CompetitionModuleRepository moduleRepository;
     private CompetitionRegistrationRepository registrationRepository;
     private UserRepository userRepository;
+    private com.zoroacademy.service.FileStorageService fileStorageService;
     private CompetitionService competitionService;
 
     @BeforeEach
@@ -32,12 +33,14 @@ class CompetitionPersistenceTest {
         moduleRepository = mock(CompetitionModuleRepository.class);
         registrationRepository = mock(CompetitionRegistrationRepository.class);
         userRepository = mock(UserRepository.class);
+        fileStorageService = mock(com.zoroacademy.service.FileStorageService.class);
 
         competitionService = new CompetitionService(
                 competitionRepository,
                 moduleRepository,
                 registrationRepository,
-                userRepository
+                userRepository,
+                fileStorageService
         );
     }
 
@@ -56,7 +59,6 @@ class CompetitionPersistenceTest {
                 .venue("Zoro Academy Auditorium")
                 .bannerUrl("https://storage.bunnycdn.com/banners/comp_banner.jpg")
                 .rulesPdfUrl("https://storage.bunnycdn.com/docs/rules.pdf")
-                .registrationFormUrl("https://storage.bunnycdn.com/docs/form.pdf")
                 .instructions("Carry your school ID and admit card.")
                 .rules("Standard national Olympiad regulations apply.")
                 .contactDetails("+91 98765 43210 | info@zoroacademy.com")
@@ -82,7 +84,6 @@ class CompetitionPersistenceTest {
         assertEquals("Zoro Academy Auditorium", created.getVenue());
         assertEquals("https://storage.bunnycdn.com/banners/comp_banner.jpg", created.getBannerUrl());
         assertEquals("https://storage.bunnycdn.com/docs/rules.pdf", created.getRulesPdfUrl());
-        assertEquals("https://storage.bunnycdn.com/docs/form.pdf", created.getRegistrationFormUrl());
         assertEquals("Carry your school ID and admit card.", created.getInstructions());
         assertEquals("Standard national Olympiad regulations apply.", created.getRules());
         assertEquals("+91 98765 43210 | info@zoroacademy.com", created.getContactDetails());
@@ -96,7 +97,6 @@ class CompetitionPersistenceTest {
         assertEquals("National Championship 2026", saved.getTitle());
         assertEquals("https://storage.bunnycdn.com/banners/comp_banner.jpg", saved.getBannerUrl());
         assertEquals("https://storage.bunnycdn.com/docs/rules.pdf", saved.getRulesPdfUrl());
-        assertEquals("https://storage.bunnycdn.com/docs/form.pdf", saved.getRegistrationFormUrl());
     }
 
     @Test
@@ -116,7 +116,6 @@ class CompetitionPersistenceTest {
                 .venue("Old Venue")
                 .bannerUrl("old_banner.jpg")
                 .rulesPdfUrl("old_rules.pdf")
-                .registrationFormUrl("old_form.pdf")
                 .instructions("Old instructions")
                 .rules("Old rules")
                 .contactDetails("old contact")
@@ -140,7 +139,6 @@ class CompetitionPersistenceTest {
                 .venue("New Venue Center")
                 .bannerUrl("https://storage.bunnycdn.com/banners/new_banner.png")
                 .rulesPdfUrl("https://storage.bunnycdn.com/docs/new_rules.pdf")
-                .registrationFormUrl("https://storage.bunnycdn.com/docs/new_form.pdf")
                 .instructions("Updated instructions for finalists")
                 .rules("Updated rules document")
                 .contactDetails("+91 99999 88888")
@@ -162,7 +160,6 @@ class CompetitionPersistenceTest {
         assertEquals("New Venue Center", result.getVenue());
         assertEquals("https://storage.bunnycdn.com/banners/new_banner.png", result.getBannerUrl());
         assertEquals("https://storage.bunnycdn.com/docs/new_rules.pdf", result.getRulesPdfUrl());
-        assertEquals("https://storage.bunnycdn.com/docs/new_form.pdf", result.getRegistrationFormUrl());
         assertEquals("Updated instructions for finalists", result.getInstructions());
         assertEquals("Updated rules document", result.getRules());
         assertEquals("+91 99999 88888", result.getContactDetails());

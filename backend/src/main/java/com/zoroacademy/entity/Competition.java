@@ -50,9 +50,6 @@ public class Competition {
     @Column(name = "rules_pdf_url", columnDefinition = "TEXT")
     private String rulesPdfUrl;
 
-    @Column(name = "registration_form_url", columnDefinition = "TEXT")
-    private String registrationFormUrl;
-
     @Column(columnDefinition = "TEXT")
     private String instructions;
 
@@ -87,7 +84,7 @@ public class Competition {
 
     public Competition(String id, String title, String category, String startDate, String endDate,
                        String regStartDate, String regEndDate, String startTime, String endTime,
-                       String venue, String bannerUrl, String rulesPdfUrl, String registrationFormUrl,
+                       String venue, String bannerUrl, String rulesPdfUrl,
                        String instructions, String contactDetails, BigDecimal registrationFee,
                        String description, String rules, String status, List<CompetitionModule> modules,
                        List<CompetitionRegistration> registrations, LocalDateTime createdAt) {
@@ -103,7 +100,6 @@ public class Competition {
         this.venue = venue;
         this.bannerUrl = bannerUrl;
         this.rulesPdfUrl = rulesPdfUrl;
-        this.registrationFormUrl = registrationFormUrl;
         this.instructions = instructions;
         this.contactDetails = contactDetails;
         this.registrationFee = registrationFee;
@@ -211,14 +207,6 @@ public class Competition {
         this.rulesPdfUrl = rulesPdfUrl;
     }
 
-    public String getRegistrationFormUrl() {
-        return registrationFormUrl;
-    }
-
-    public void setRegistrationFormUrl(String registrationFormUrl) {
-        this.registrationFormUrl = registrationFormUrl;
-    }
-
     public String getInstructions() {
         return instructions;
     }
@@ -308,7 +296,6 @@ public class Competition {
         private String venue;
         private String bannerUrl;
         private String rulesPdfUrl;
-        private String registrationFormUrl;
         private String instructions;
         private String contactDetails;
         private BigDecimal registrationFee = BigDecimal.ZERO;
@@ -367,10 +354,6 @@ public class Competition {
             this.rulesPdfUrl = rulesPdfUrl;
             return this;
         }
-        public Builder registrationFormUrl(String registrationFormUrl) {
-            this.registrationFormUrl = registrationFormUrl;
-            return this;
-        }
         public Builder instructions(String instructions) {
             this.instructions = instructions;
             return this;
@@ -411,7 +394,7 @@ public class Competition {
         public Competition build() {
             return new Competition(id, title, category, startDate, endDate,
                     regStartDate, regEndDate, startTime, endTime, venue, bannerUrl,
-                    rulesPdfUrl, registrationFormUrl, instructions, contactDetails,
+                    rulesPdfUrl, instructions, contactDetails,
                     registrationFee, description, rules, status, modules, registrations, createdAt);
         }
     }
