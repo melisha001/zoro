@@ -24,7 +24,7 @@ Create a local PostgreSQL database:
 ```sql
 CREATE DATABASE zoro_academy;
 ```
-Flyway automatically applies all schema migrations (V1 through V17) on application startup. See `MIGRATION_NOTES.md` for migration details (including V15 competition fields, V16 refresh tokens, and V17 enquiry courses).
+Flyway automatically applies all schema migrations (V1 through V19) on application startup. See `MIGRATION_NOTES.md` for migration details (including V18 competition rules document standardization and V19 admin-visible AES-256-GCM encrypted passwords).
 
 ### 2. Backend Setup (`/backend`)
 
@@ -79,6 +79,7 @@ Flyway automatically applies all schema migrations (V1 through V17) on applicati
 | `CORS_ORIGINS` | Spring | Comma-separated list of allowed CORS origins |
 | `RAZORPAY_KEY_ID` | Razorpay | Razorpay payment gateway API Key ID |
 | `RAZORPAY_KEY_SECRET` | Razorpay | Razorpay payment gateway API Key Secret |
+| `ADMIN_PASSWORD_KEY` | Spring | Secret encryption key for AES-256-GCM reversible passwords (PBKDF2-derived, configured via `admin.password-key` / `ADMIN_PASSWORD_KEY`, min 16 chars) |
 
 ---
 
@@ -129,6 +130,6 @@ Flyway automatically applies all schema migrations (V1 through V17) on applicati
 - **Refresh Token**: 7 days validity (`REFRESH_TOKEN_EXPIRATION_DAYS=7`). Random opaque 256-bit value stored as a SHA-256 hash in the `refresh_tokens` database table.
 - **Rotation & Reuse Detection**: Each call to `/api/auth/refresh` rotates the refresh token (revokes the presented token and issues a new 7-day token). If an already-revoked refresh token is presented (reuse attempt), all refresh tokens for that user are immediately revoked.
 - **Revocation**: Logging out (`/api/auth/logout`), deleting or disabling a user account, or resetting/changing passwords immediately revokes all refresh tokens.
-- **Storage Note**: Tokens are currently stored in browser `localStorage` (note the XSS trade-off; a future hardening enhancement can migrate refresh tokens to Secure httpOnly SameSite cookies).
-- **Navbar Behavior**: Public navigation always displays "Login" and "Enquire Now". Clicking "Login" while already having a valid active session immediately navigates to the user's role-specific dashboard.
+- **Per-Tab Session Storage**: Tokens and auth session state are stored in browser `sessionStorage` (with automatic startup purging of legacy `localStorage` keys). This guarantees strict per-tab session isolation, allowing different roles or accounts in separate browser tabs without cross-tab session clobbering.
+- **Navbar Behavior**: Public navigation always displays "Login" and "Enquire Now". Clicking "Login" navigates directly to `/login` without unwanted auto-redirects.
 - Unauthenticated access to any protected route immediately redirects to the public landing page. Roles are strictly validated from authenticated JWT tokens retrieved via `/api/auth/me` on session restoration.
