@@ -85,7 +85,7 @@ class BatchMembershipTest {
                 .email("kavya@student.com")
                 .role("STUDENT")
                 .build();
-        when(userRepository.findAll()).thenReturn(List.of(student));
+        when(userRepository.findStudentsByBatchId("btc-200")).thenReturn(List.of(student));
 
         List<UserDto> result = batchService.getStudentsInBatch("btc-200");
         assertEquals(1, result.size());

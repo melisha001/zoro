@@ -362,7 +362,7 @@ export default function AdminSchedulePage() {
 
   const filteredSchedules = safeSchedules.filter(item => {
     if (!item) return false;
-    const matchesBatch = selectedBatchFilter === 'All' || item.batch === selectedBatchFilter;
+    const matchesBatch = selectedBatchFilter === 'All' || item.batchId === selectedBatchFilter || item.batch === selectedBatchFilter;
     const matchesTrainer = selectedTrainerFilter === 'All' || 
       (item.trainer && item.trainer.toLowerCase().includes(selectedTrainerFilter.toLowerCase()));
     const matchesDate = !selectedDateFilter || item.date === selectedDateFilter;
@@ -482,7 +482,7 @@ export default function AdminSchedulePage() {
             >
               <option value="All">All Batches</option>
               {safeBatches.map((b) => (
-                <option key={b.id} value={b.name}>{b.name} ({b.courseName})</option>
+                <option key={b.id} value={b.id}>{b.name} ({b.courseName})</option>
               ))}
             </select>
           </div>

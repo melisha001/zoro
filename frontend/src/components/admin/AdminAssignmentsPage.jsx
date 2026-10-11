@@ -94,7 +94,7 @@ export default function AdminAssignmentsPage() {
 
   // Apply search & batch filter
   const finalFilteredSubs = tabFilteredSubs.filter(s => {
-    if (selectedBatchFilter !== 'All' && s.batchName !== selectedBatchFilter) return false;
+    if (selectedBatchFilter !== 'All' && s.batchName !== selectedBatchFilter && s.batchId !== selectedBatchFilter) return false;
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     return (

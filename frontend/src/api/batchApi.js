@@ -52,6 +52,17 @@ export const getBatchStudents = async (id) => {
   return apiResponse([], false, res?.message || 'Failed to fetch batch students');
 };
 
+export const getBatchStudentCount = async (id) => {
+  if (!id) {
+    return apiResponse(0, false, 'Batch ID is required');
+  }
+  const res = await apiGet(`/batches/${encodeURIComponent(id)}/students/count`);
+  if (res.success && typeof res.data === 'number') {
+    return apiResponse(res.data);
+  }
+  return apiResponse(0, false, res?.message || 'Failed to fetch batch student count');
+};
+
 export const createBatch = async (batchData) => {
   if (!batchData?.name && !batchData?.batchName) {
     return apiResponse(null, false, 'Batch name is required');

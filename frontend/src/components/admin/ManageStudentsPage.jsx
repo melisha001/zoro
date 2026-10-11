@@ -14,6 +14,15 @@ import PhoneInput from '../common/PhoneInput';
 import ConfirmModal from '../common/ConfirmModal';
 import { useDialog } from '../../context/DialogContext';
 
+// Helper to determine if student belongs to batch (match by ID only)
+export const isStudentInBatch = (student, batchObj) => {
+  if (!student || !batchObj || !batchObj.id) return false;
+  if (student.courseBatches && Array.isArray(student.courseBatches)) {
+    return student.courseBatches.some(cb => Boolean(cb.batchId && cb.batchId === batchObj.id));
+  }
+  return false;
+};
+
 export default function ManageStudentsPage() {
   const { showError } = useDialog();
   const [students, setStudents] = useState([]);
@@ -491,17 +500,6 @@ export default function ManageStudentsPage() {
     const safeBatchName = (batchObj.name || 'Batch').replace(/[^a-zA-Z0-9]/g, '_');
     const filename = `Zoro_Students_${safeBatchName}_${new Date().toISOString().split('T')[0]}.xlsx`;
     exportToExcel(filename, safeBatchName, headers, rows);
-  };
-
-  // Helper to determine if student belongs to batch
-  const isStudentInBatch = (student, batchObj) => {
-    if (student.courseBatches && Array.isArray(student.courseBatches)) {
-      return student.courseBatches.some(cb => cb.batch === batchObj.name || cb.course === batchObj.courseName);
-    }
-    if (student.course) {
-      return student.course.includes(batchObj.name) || student.course.includes(batchObj.courseName);
-    }
-    return false;
   };
 
   const filteredStudents = students.filter(student => {

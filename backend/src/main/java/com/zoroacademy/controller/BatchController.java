@@ -49,6 +49,11 @@ public class BatchController {
         return ApiResponse.ok(batchService.getStudentsInBatch(id));
     }
 
+    @GetMapping("/{id}/students/count")
+    public ApiResponse<Long> getStudentCountInBatch(@PathVariable String id) {
+        return ApiResponse.ok(batchService.getStudentCountInBatch(id));
+    }
+
     @PostMapping
     public ApiResponse<Batch> createBatch(@RequestBody Batch batch) {
         return ApiResponse.ok(batchService.createBatch(batch), "Batch created successfully");

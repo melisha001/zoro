@@ -54,7 +54,7 @@ export default function TrainerStudentsPage() {
   const handleCourseChange = (courseTitle) => {
     setSelectedCourse(courseTitle);
     const newBatches = getTrainerAllocatedBatches(user, courseTitle, courses, batches);
-    const isCurrentBatchValid = newBatches.some(b => (b.name || b.title) === selectedBatch);
+    const isCurrentBatchValid = newBatches.some(b => (b.id === selectedBatch) || ((b.name || b.title) === selectedBatch));
     if (!isCurrentBatchValid) {
       setSelectedBatch('All');
     }

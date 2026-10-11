@@ -454,10 +454,7 @@ export default function AdminAttendancePage({ setActiveScreen }) {
 
                           const batchStudents = allStudents.filter(s => {
                             if (s.courseBatches && Array.isArray(s.courseBatches)) {
-                              return s.courseBatches.some(cb => cb.course === courseTitle && cb.batch === batchName);
-                            }
-                            if (s.course) {
-                              return s.course.includes(courseTitle) && s.course.includes(batchName);
+                              return s.courseBatches.some(cb => Boolean(cb.batchId && batchObj.id && cb.batchId === batchObj.id));
                             }
                             return false;
                           });

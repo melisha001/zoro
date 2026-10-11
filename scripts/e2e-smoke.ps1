@@ -356,5 +356,94 @@ Write-Host "-> HTTP 200: Student logged in with admin-overridden password." -For
 Invoke-RestMethod -Uri "$baseUrl/users/$($fStudentId)?force=true" -Method Delete -Headers $newT1Headers | Out-Null
 Write-Host "-> HTTP 200: Cleaned up Task F student." -ForegroundColor Green
 
-Write-Host "`n=== All E2E Smoke Tests PASSED (Tasks A, B, C, D, E, F) ===" -ForegroundColor Green
+# 9. Two Batches and One Student in One Batch Isolation (Task G)
+Write-Host "`n[Step 9] Two Batches and One Student in One Batch Isolation (Task G)..."
+$gSuffix = [System.Guid]::NewGuid().ToString().Substring(0, 8)
+$gCoursePayload = @{
+    title = "Smoke Course TaskG $gSuffix"
+    description = "Smoke course for batch isolation testing"
+    price = 9999
+    level = "Intermediate"
+    mode = "Online"
+    status = "Active"
+} | ConvertTo-Json
+$gCourseRes = Invoke-RestMethod -Uri "$baseUrl/courses" -Method Post -Headers $newT1Headers -Body $gCoursePayload -ContentType "application/json"
+$gCourseId = $gCourseRes.data.id
+$gCourseTitle = $gCourseRes.data.title
+
+$gB1Payload = @{
+    name = "Smoke Batch G1 $gSuffix"
+    courseId = $gCourseId
+    courseName = $gCourseTitle
+    session = "Morning"
+    status = "Active"
+    days = "Monday, Wednesday"
+} | ConvertTo-Json
+$gB1Res = Invoke-RestMethod -Uri "$baseUrl/batches" -Method Post -Headers $newT1Headers -Body $gB1Payload -ContentType "application/json"
+$gB1Id = $gB1Res.data.id
+
+$gB2Payload = @{
+    name = "Smoke Batch G2 $gSuffix"
+    courseId = $gCourseId
+    courseName = $gCourseTitle
+    session = "Evening"
+    status = "Active"
+    days = "Tuesday, Thursday"
+} | ConvertTo-Json
+$gB2Res = Invoke-RestMethod -Uri "$baseUrl/batches" -Method Post -Headers $newT1Headers -Body $gB2Payload -ContentType "application/json"
+$gB2Id = $gB2Res.data.id
+Write-Host "-> HTTP 200: Created course and two batches (B1: $gB1Id, B2: $gB2Id)." -ForegroundColor Green
+
+$gStudentPayload = @{
+    name = "Smoke Student G $gSuffix"
+    username = "smokeg_$gSuffix"
+    email = "smokeg_$gSuffix@zoro.com"
+    phone = "9876543210"
+    password = "SmokeGPass123!"
+    status = "Active"
+    course = "$gCourseTitle (Smoke Batch G1 $gSuffix)"
+    courseBatches = @(
+        @{
+            course = $gCourseTitle
+            courseId = $gCourseId
+            batch = "Smoke Batch G1 $gSuffix"
+            batchId = $gB1Id
+        }
+    )
+} | ConvertTo-Json -Depth 5
+$gStudentRes = Invoke-RestMethod -Uri "$baseUrl/users/students" -Method Post -Headers $newT1Headers -Body $gStudentPayload -ContentType "application/json"
+$gStudentId = $gStudentRes.data.id
+Write-Host "-> HTTP 200: Created student enrolled in B1 only ($gStudentId)." -ForegroundColor Green
+
+# Verify B1 lists student
+$gB1ListRes = Invoke-RestMethod -Uri "$baseUrl/batches/$gB1Id/students" -Method Get -Headers $newT1Headers
+if ($gB1ListRes.data.Count -ne 1 -or $gB1ListRes.data[0].id -ne $gStudentId) {
+    Write-Error "Task G B1 student list failed! Count: $($gB1ListRes.data.Count)"
+}
+Write-Host "-> HTTP 200: GET /batches/$gB1Id/students correctly returned student $gStudentId." -ForegroundColor Green
+
+# Verify B2 does NOT list student (zero leakage)
+$gB2ListRes = Invoke-RestMethod -Uri "$baseUrl/batches/$gB2Id/students" -Method Get -Headers $newT1Headers
+if ($gB2ListRes.data.Count -ne 0) {
+    Write-Error "Task G B2 student list leakage! Expected 0, got: $($gB2ListRes.data.Count)"
+}
+Write-Host "-> HTTP 200: GET /batches/$gB2Id/students correctly returned 0 students (zero leakage)." -ForegroundColor Green
+
+# Verify batch student counts
+$gB1CountRes = Invoke-RestMethod -Uri "$baseUrl/batches/$gB1Id/students/count" -Method Get -Headers $newT1Headers
+if ($gB1CountRes.data -ne 1) { Write-Error "Task G B1 count failed: $($gB1CountRes.data)" }
+Write-Host "-> HTTP 200: GET /batches/$gB1Id/students/count returned 1." -ForegroundColor Green
+
+$gB2CountRes = Invoke-RestMethod -Uri "$baseUrl/batches/$gB2Id/students/count" -Method Get -Headers $newT1Headers
+if ($gB2CountRes.data -ne 0) { Write-Error "Task G B2 count failed: $($gB2CountRes.data)" }
+Write-Host "-> HTTP 200: GET /batches/$gB2Id/students/count returned 0." -ForegroundColor Green
+
+# Cleanup
+Invoke-RestMethod -Uri "$baseUrl/users/$($gStudentId)?force=true" -Method Delete -Headers $newT1Headers | Out-Null
+Invoke-RestMethod -Uri "$baseUrl/batches/$($gB2Id)" -Method Delete -Headers $newT1Headers | Out-Null
+Invoke-RestMethod -Uri "$baseUrl/batches/$($gB1Id)" -Method Delete -Headers $newT1Headers | Out-Null
+Invoke-RestMethod -Uri "$baseUrl/courses/$($gCourseId)" -Method Delete -Headers $newT1Headers | Out-Null
+Write-Host "-> HTTP 200: Cleaned up Task G student, batches, and course." -ForegroundColor Green
+
+Write-Host "`n=== All E2E Smoke Tests PASSED (Tasks A, B, C, D, E, F, G) ===" -ForegroundColor Green
 

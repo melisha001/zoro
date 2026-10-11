@@ -102,17 +102,23 @@ export function filterStudentsByCourseAndBatch(students = [], selectedCourse = '
 
     const cMatches = selectedCourse === 'All' || selectedCourse === 'All Courses' ||
       (student.course || '').toLowerCase().trim() === selectedCourse.toLowerCase().trim() ||
-      (student.courseBatches && student.courseBatches.some(cb => (cb.course || '').toLowerCase().trim() === selectedCourse.toLowerCase().trim()));
+      (student.courseBatches && student.courseBatches.some(cb => 
+        (cb.courseId && cb.courseId === selectedCourse) ||
+        (cb.course || '').toLowerCase().trim() === selectedCourse.toLowerCase().trim()
+      ));
 
     const bMatches = selectedBatch === 'All' || selectedBatch === 'All Batches' ||
-      (student.batch || '').toLowerCase().trim() === selectedBatch.toLowerCase().trim() ||
-      (student.courseBatches && student.courseBatches.some(cb => (cb.batch || '').toLowerCase().trim() === selectedBatch.toLowerCase().trim()));
+      (student.courseBatches && student.courseBatches.some(cb => 
+        (cb.batchId && cb.batchId === selectedBatch) ||
+        (cb.batch || '').toLowerCase().trim() === selectedBatch.toLowerCase().trim()
+      )) ||
+      (student.batch || '').toLowerCase().trim() === selectedBatch.toLowerCase().trim();
 
     if (selectedCourse !== 'All' && selectedCourse !== 'All Courses' && selectedBatch !== 'All' && selectedBatch !== 'All Batches') {
       if (student.courseBatches && student.courseBatches.length > 0) {
         return student.courseBatches.some(cb => 
-          (cb.course || '').toLowerCase().trim() === selectedCourse.toLowerCase().trim() &&
-          (cb.batch || '').toLowerCase().trim() === selectedBatch.toLowerCase().trim()
+          ((cb.courseId && cb.courseId === selectedCourse) || (cb.course || '').toLowerCase().trim() === selectedCourse.toLowerCase().trim()) &&
+          ((cb.batchId && cb.batchId === selectedBatch) || (cb.batch || '').toLowerCase().trim() === selectedBatch.toLowerCase().trim())
         );
       }
     }

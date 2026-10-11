@@ -13,4 +13,5 @@ public interface StudentCourseBatchRepository extends JpaRepository<StudentCours
     List<StudentCourseBatch> findByCourseId(String courseId);
     java.util.Optional<StudentCourseBatch> findByStudentIdAndCourseId(String studentId, String courseId);
     void deleteByStudentId(String studentId);
+    long countByBatchId(String batchId);
 }

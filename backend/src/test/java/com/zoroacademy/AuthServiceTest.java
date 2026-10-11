@@ -151,6 +151,16 @@ class AuthServiceTest {
             return Collections.emptyList();
         }
 
+        @Override
+        public List<User> findStudentsByBatchId(String batchId) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public long countStudentsByBatchId(String batchId) {
+            return 0L;
+        }
+
         @Override public void flush() {}
         @Override public <S extends User> S saveAndFlush(S entity) { return entity; }
         @Override public <S extends User> List<S> saveAllAndFlush(Iterable<S> entities) { return Collections.emptyList(); }
