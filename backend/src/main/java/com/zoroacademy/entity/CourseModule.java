@@ -1,12 +1,15 @@
 package com.zoroacademy.entity;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonRawValue;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 @Entity
 @Table(name = "course_modules")
@@ -45,6 +48,27 @@ public class CourseModule {
     @JsonRawValue
     private String afterSessionAssessment;
 
+    @Column(name = "thumbnail_url", columnDefinition = "TEXT")
+    private String thumbnailUrl;
+
+    @Column(name = "notes_file_url", columnDefinition = "TEXT")
+    private String notesFileUrl;
+
+    @Column(name = "notes_file_name", length = 255)
+    private String notesFileName;
+
+    @Column(name = "worksheet_file_url", columnDefinition = "TEXT")
+    private String worksheetFileUrl;
+
+    @Column(name = "worksheet_file_name", length = 255)
+    private String worksheetFileName;
+
+    @Column(name = "assignment_file_url", columnDefinition = "TEXT")
+    private String assignmentFileUrl;
+
+    @Column(name = "assignment_file_name", length = 255)
+    private String assignmentFileName;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -64,6 +88,26 @@ public class CourseModule {
         this.duration = duration;
         this.videoStorageRef = videoStorageRef;
         this.afterSessionAssessment = afterSessionAssessment;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
+
+    public CourseModule(String id, Course course, Integer moduleOrder, String title, String description, String duration, String videoStorageRef, String afterSessionAssessment, String thumbnailUrl, String notesFileUrl, String notesFileName, String worksheetFileUrl, String worksheetFileName, String assignmentFileUrl, String assignmentFileName, LocalDateTime createdAt, LocalDateTime updatedAt) {
+        this.id = id;
+        this.course = course;
+        this.moduleOrder = moduleOrder;
+        this.title = title;
+        this.description = description;
+        this.duration = duration;
+        this.videoStorageRef = videoStorageRef;
+        this.afterSessionAssessment = afterSessionAssessment;
+        this.thumbnailUrl = thumbnailUrl;
+        this.notesFileUrl = notesFileUrl;
+        this.notesFileName = notesFileName;
+        this.worksheetFileUrl = worksheetFileUrl;
+        this.worksheetFileName = worksheetFileName;
+        this.assignmentFileUrl = assignmentFileUrl;
+        this.assignmentFileName = assignmentFileName;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -132,6 +176,140 @@ public class CourseModule {
         this.afterSessionAssessment = (afterSessionAssessment == null || afterSessionAssessment.trim().isEmpty()) ? null : afterSessionAssessment.trim();
     }
 
+    public String getThumbnailUrl() {
+        return (thumbnailUrl == null || thumbnailUrl.trim().isEmpty()) ? null : thumbnailUrl.trim();
+    }
+
+    public void setThumbnailUrl(String thumbnailUrl) {
+        this.thumbnailUrl = (thumbnailUrl == null || thumbnailUrl.trim().isEmpty()) ? null : thumbnailUrl.trim();
+    }
+
+    @JsonProperty("thumbnail")
+    public String getThumbnail() {
+        return getThumbnailUrl();
+    }
+
+    @JsonProperty("thumbnail")
+    public void setThumbnail(String thumbnail) {
+        if (thumbnail != null && !thumbnail.isBlank()) {
+            this.thumbnailUrl = thumbnail.trim();
+        }
+    }
+
+    public String getNotesFileUrl() {
+        return (notesFileUrl == null || notesFileUrl.trim().isEmpty()) ? null : notesFileUrl.trim();
+    }
+
+    public void setNotesFileUrl(String notesFileUrl) {
+        this.notesFileUrl = (notesFileUrl == null || notesFileUrl.trim().isEmpty()) ? null : notesFileUrl.trim();
+    }
+
+    public String getNotesFileName() {
+        return notesFileName;
+    }
+
+    public void setNotesFileName(String notesFileName) {
+        this.notesFileName = notesFileName;
+    }
+
+    @JsonProperty("notesFile")
+    public Map<String, Object> getNotesFile() {
+        if (notesFileUrl == null && notesFileName == null) return null;
+        Map<String, Object> map = new HashMap<>();
+        map.put("fileUrl", notesFileUrl);
+        map.put("name", notesFileName != null ? notesFileName : "Notes");
+        return map;
+    }
+
+    @JsonProperty("notesFile")
+    public void setNotesFile(Object notesFile) {
+        if (notesFile instanceof Map<?, ?> map) {
+            Object url = map.get("fileUrl");
+            if (url == null) url = map.get("url");
+            if (url != null) this.notesFileUrl = url.toString().trim();
+            Object name = map.get("name");
+            if (name != null) this.notesFileName = name.toString().trim();
+        } else if (notesFile instanceof String str && !str.isBlank()) {
+            this.notesFileUrl = str.trim();
+        }
+    }
+
+    public String getWorksheetFileUrl() {
+        return (worksheetFileUrl == null || worksheetFileUrl.trim().isEmpty()) ? null : worksheetFileUrl.trim();
+    }
+
+    public void setWorksheetFileUrl(String worksheetFileUrl) {
+        this.worksheetFileUrl = (worksheetFileUrl == null || worksheetFileUrl.trim().isEmpty()) ? null : worksheetFileUrl.trim();
+    }
+
+    public String getWorksheetFileName() {
+        return worksheetFileName;
+    }
+
+    public void setWorksheetFileName(String worksheetFileName) {
+        this.worksheetFileName = worksheetFileName;
+    }
+
+    @JsonProperty("worksheetFile")
+    public Map<String, Object> getWorksheetFile() {
+        if (worksheetFileUrl == null && worksheetFileName == null) return null;
+        Map<String, Object> map = new HashMap<>();
+        map.put("fileUrl", worksheetFileUrl);
+        map.put("name", worksheetFileName != null ? worksheetFileName : "Worksheet");
+        return map;
+    }
+
+    @JsonProperty("worksheetFile")
+    public void setWorksheetFile(Object worksheetFile) {
+        if (worksheetFile instanceof Map<?, ?> map) {
+            Object url = map.get("fileUrl");
+            if (url == null) url = map.get("url");
+            if (url != null) this.worksheetFileUrl = url.toString().trim();
+            Object name = map.get("name");
+            if (name != null) this.worksheetFileName = name.toString().trim();
+        } else if (worksheetFile instanceof String str && !str.isBlank()) {
+            this.worksheetFileUrl = str.trim();
+        }
+    }
+
+    public String getAssignmentFileUrl() {
+        return (assignmentFileUrl == null || assignmentFileUrl.trim().isEmpty()) ? null : assignmentFileUrl.trim();
+    }
+
+    public void setAssignmentFileUrl(String assignmentFileUrl) {
+        this.assignmentFileUrl = (assignmentFileUrl == null || assignmentFileUrl.trim().isEmpty()) ? null : assignmentFileUrl.trim();
+    }
+
+    public String getAssignmentFileName() {
+        return assignmentFileName;
+    }
+
+    public void setAssignmentFileName(String assignmentFileName) {
+        this.assignmentFileName = assignmentFileName;
+    }
+
+    @JsonProperty("assignmentFile")
+    public Map<String, Object> getAssignmentFile() {
+        if (assignmentFileUrl == null && assignmentFileName == null) return null;
+        Map<String, Object> map = new HashMap<>();
+        map.put("fileUrl", assignmentFileUrl);
+        map.put("name", assignmentFileName != null ? assignmentFileName : "Assignment");
+        return map;
+    }
+
+    @JsonProperty("assignmentFile")
+    public void setAssignmentFile(Object assignmentFile) {
+        if (assignmentFile instanceof Map<?, ?> map) {
+            Object url = map.get("fileUrl");
+            if (url == null) url = map.get("url");
+            if (url != null) this.assignmentFileUrl = url.toString().trim();
+            Object name = map.get("name");
+            if (name != null) this.assignmentFileName = name.toString().trim();
+        } else if (assignmentFile instanceof String str && !str.isBlank()) {
+            this.assignmentFileUrl = str.trim();
+        }
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -161,6 +339,13 @@ public class CourseModule {
         private String duration;
         private String videoStorageRef;
         private String afterSessionAssessment;
+        private String thumbnailUrl;
+        private String notesFileUrl;
+        private String notesFileName;
+        private String worksheetFileUrl;
+        private String worksheetFileName;
+        private String assignmentFileUrl;
+        private String assignmentFileName;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
 
@@ -196,6 +381,34 @@ public class CourseModule {
             this.afterSessionAssessment = afterSessionAssessment;
             return this;
         }
+        public Builder thumbnailUrl(String thumbnailUrl) {
+            this.thumbnailUrl = thumbnailUrl;
+            return this;
+        }
+        public Builder notesFileUrl(String notesFileUrl) {
+            this.notesFileUrl = notesFileUrl;
+            return this;
+        }
+        public Builder notesFileName(String notesFileName) {
+            this.notesFileName = notesFileName;
+            return this;
+        }
+        public Builder worksheetFileUrl(String worksheetFileUrl) {
+            this.worksheetFileUrl = worksheetFileUrl;
+            return this;
+        }
+        public Builder worksheetFileName(String worksheetFileName) {
+            this.worksheetFileName = worksheetFileName;
+            return this;
+        }
+        public Builder assignmentFileUrl(String assignmentFileUrl) {
+            this.assignmentFileUrl = assignmentFileUrl;
+            return this;
+        }
+        public Builder assignmentFileName(String assignmentFileName) {
+            this.assignmentFileName = assignmentFileName;
+            return this;
+        }
         public Builder createdAt(LocalDateTime createdAt) {
             this.createdAt = createdAt;
             return this;
@@ -206,7 +419,7 @@ public class CourseModule {
         }
 
         public CourseModule build() {
-            return new CourseModule(id, course, moduleOrder, title, description, duration, videoStorageRef, afterSessionAssessment, createdAt, updatedAt);
+            return new CourseModule(id, course, moduleOrder, title, description, duration, videoStorageRef, afterSessionAssessment, thumbnailUrl, notesFileUrl, notesFileName, worksheetFileUrl, worksheetFileName, assignmentFileUrl, assignmentFileName, createdAt, updatedAt);
         }
     }
 

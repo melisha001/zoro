@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import * as tus from 'tus-js-client';
 import { getCourseById, addModule, updateModule, deleteModule } from '../../api/courseApi';
-import { uploadFile, resolveFileUrl } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
 import { createVideoUploadSession, getVideoDetails } from '../../api/videoApi';
 import ConfirmModal from '../common/ConfirmModal';
 
@@ -359,10 +359,17 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
       description: formData.description,
       duration: computedDuration,
       videoStorageRef,
-      thumbnail: formData.thumbnail,
+      thumbnail: formData.thumbnail || '',
+      thumbnailUrl: formData.thumbnail || '',
       notesFile: formData.notesFile,
+      notesFileUrl: formData.notesFile?.fileUrl || (typeof formData.notesFile === 'string' ? formData.notesFile : null),
+      notesFileName: formData.notesFile?.name || null,
       worksheetFile: formData.worksheetFile,
+      worksheetFileUrl: formData.worksheetFile?.fileUrl || (typeof formData.worksheetFile === 'string' ? formData.worksheetFile : null),
+      worksheetFileName: formData.worksheetFile?.name || null,
       assignmentFile: formData.assignmentFile,
+      assignmentFileUrl: formData.assignmentFile?.fileUrl || (typeof formData.assignmentFile === 'string' ? formData.assignmentFile : null),
+      assignmentFileName: formData.assignmentFile?.name || null,
       afterSessionAssessment
     };
 
@@ -390,11 +397,15 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     const asa = mod.afterSessionAssessment || null;
     let existingVideoId = '';
     if (mod.videoStorageRef) {
-      try {
-        const parsed = JSON.parse(mod.videoStorageRef);
-        existingVideoId = parsed.videoId || '';
-      } catch {
-        existingVideoId = mod.videoStorageRef;
+      if (typeof mod.videoStorageRef === 'object') {
+        existingVideoId = mod.videoStorageRef.videoId || '';
+      } else {
+        try {
+          const parsed = JSON.parse(mod.videoStorageRef);
+          existingVideoId = parsed.videoId || '';
+        } catch {
+          existingVideoId = mod.videoStorageRef;
+        }
       }
     }
 
@@ -610,11 +621,15 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                         </div>
                         {notes ? (
                           <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
-                            <div>📄 {notes.name} ({notes.size})</div>
+                            <div>📄 {notes.name} {notes.size ? `(${notes.size})` : ''}</div>
                             {notes.fileUrl && (
-                              <a href={resolveFileUrl(notes.fileUrl)} download={notes.name} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => openFileWithSignedLink(notes.fileUrl, notes.name)}
+                                className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
+                              >
                                 <Download className="w-3 h-3" /> Download / View
-                              </a>
+                              </button>
                             )}
                           </div>
                         ) : (
@@ -633,11 +648,15 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                         </div>
                         {worksheet ? (
                           <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
-                            <div>📑 {worksheet.name} ({worksheet.size})</div>
+                            <div>📑 {worksheet.name} {worksheet.size ? `(${worksheet.size})` : ''}</div>
                             {worksheet.fileUrl && (
-                              <a href={resolveFileUrl(worksheet.fileUrl)} download={worksheet.name} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => openFileWithSignedLink(worksheet.fileUrl, worksheet.name)}
+                                className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
+                              >
                                 <Download className="w-3 h-3" /> Download / View
-                              </a>
+                              </button>
                             )}
                           </div>
                         ) : (
@@ -656,11 +675,15 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                         </div>
                         {assignment ? (
                           <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
-                            <div>📝 {assignment.name} ({assignment.size})</div>
+                            <div>📝 {assignment.name} {assignment.size ? `(${assignment.size})` : ''}</div>
                             {assignment.fileUrl && (
-                              <a href={resolveFileUrl(assignment.fileUrl)} download={assignment.name} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => openFileWithSignedLink(assignment.fileUrl, assignment.name)}
+                                className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
+                              >
                                 <Download className="w-3 h-3" /> Download / View
-                              </a>
+                              </button>
                             )}
                           </div>
                         ) : (
@@ -689,9 +712,13 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                                 <ExternalLink className="w-3 h-3" /> Open Form URL
                               </a>
                             ) : mod.afterSessionAssessment.file?.fileUrl ? (
-                              <a href={mod.afterSessionAssessment.file.fileUrl} download={mod.afterSessionAssessment.file.name} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold">
-                                <Download className="w-3 h-3" /> Download / View File
-                              </a>
+                              <button
+                                type="button"
+                                onClick={() => openFileWithSignedLink(mod.afterSessionAssessment.file.fileUrl, mod.afterSessionAssessment.file.name)}
+                                className="text-purple-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
+                              >
+                                <Download className="w-3 h-3" /> Download / View ({mod.afterSessionAssessment.file.name})
+                              </button>
                             ) : (
                               <span className="text-[10px] text-slate-500 font-medium">Uploaded File attached</span>
                             )}

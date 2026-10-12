@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, Play, FileText, BookOpen, PlusCircle, Sparkles, ExternalLink, Calendar, Clock, Video, Lock, Layers, CheckCircle2, ShieldCheck, Eye, Send, Award } from 'lucide-react';
-import { getCourses } from '../../api/courseApi';
+import { ArrowLeft, CheckCircle, Play, FileText, BookOpen, PlusCircle, Sparkles, ExternalLink, Calendar, Clock, Video, Lock, Layers, CheckCircle2, Eye, Send, Award, Download } from 'lucide-react';
+import { getCourses, getCourseById } from '../../api/courseApi';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { createEnquiry, getMyEnquiries } from '../../api/enquiryApi';
 import { getStudentProgress, updateModuleProgress, authorizeVideoPlayback } from '../../api/progressApi';
 import { getSchedules } from '../../api/scheduleApi';
 import { getSubmissions, createSubmission } from '../../api/assignmentApi';
-import { uploadFile } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
 import { recordAttendance } from '../../api/attendanceApi';
 import { useAuth } from '../../context/AuthContext';
 import SecureVideoPlayer from '../common/SecureVideoPlayer';
@@ -163,26 +163,42 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
   };
 
   const selectCourseToLearn = async (course) => {
-    setSelectedCourse(course);
+    let fullCourse = course;
+    if (course?.id) {
+      try {
+        const cRes = await getCourseById(course.id);
+        if (cRes.success && cRes.data) {
+          fullCourse = {
+            ...course,
+            ...cRes.data,
+            batchName: course.batchName || course.batch || cRes.data.batchName || 'Unassigned',
+            assignedTrainer: course.assignedTrainer || cRes.data.assignedTrainer || 'Course Trainer'
+          };
+        }
+      } catch (err) {
+        console.warn('Failed to fetch full course details:', err);
+      }
+    }
+    setSelectedCourse(fullCourse);
     
     // Check Student Enrollment Authorization (Requirement #5 & #16)
-    const authRes = await authorizeVideoPlayback(studentIdentifier, course.id, course.modules?.[0]?.id);
+    const authRes = await authorizeVideoPlayback(studentIdentifier, fullCourse.id, fullCourse.modules?.[0]?.id);
     setIsAuthorized(authRes.success);
     setAuthMsg(authRes.message || '');
 
     // Load progress for this course
-    const progRes = await getStudentProgress(studentIdentifier, course.id);
+    const progRes = await getStudentProgress(studentIdentifier, fullCourse.id);
     const pMap = {};
     (progRes.data || []).forEach(p => {
       pMap[p.moduleId] = p;
     });
     setStudentProgressMap(pMap);
 
-    const firstMod = course.modules?.[0];
+    const firstMod = fullCourse.modules?.[0];
     setActiveModule(firstMod || null);
 
     // Default tab based on course mode (Online -> live, Recorded/Hybrid -> recorded)
-    const mode = course.mode || 'Online';
+    const mode = fullCourse.mode || 'Online';
     if (mode === 'Online') {
       setHybridTab('live');
     } else {
@@ -750,13 +766,20 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                 {/* Module Details & Download PDF Attachments */}
                 {activeModule && (
                   <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-md space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <div>
-                        <h3 className="text-lg font-black text-slate-900">{activeModule.title}</h3>
-                        <p className="text-xs text-slate-500 font-medium mt-0.5">{activeModule.description}</p>
+                    <div className="flex items-start justify-between border-b border-slate-100 pb-4 gap-4">
+                      <div className="flex items-start space-x-3">
+                        {activeModule.thumbnail && (
+                          <div className="w-24 h-18 rounded-2xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100">
+                            <img src={resolveFileUrl(activeModule.thumbnail)} alt={activeModule.title} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        <div>
+                          <h3 className="text-lg font-black text-slate-900">{activeModule.title}</h3>
+                          <p className="text-xs text-slate-500 font-medium mt-0.5">{activeModule.description}</p>
+                        </div>
                       </div>
 
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border shrink-0 ${
                         studentProgressMap[activeModule.id]?.status === 'Completed'
                           ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                           : studentProgressMap[activeModule.id]?.status === 'In Progress'
@@ -775,9 +798,12 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                             <FileText className="w-4 h-4 text-emerald-600" /> Notes PDF
                           </div>
                           <div className="text-[11px] text-slate-600 font-semibold truncate">{activeModule.notesPdf.name}</div>
-                          <div className="flex items-center space-x-2 pt-1">
+                          <div className="flex items-center space-x-3 pt-1">
                             <button onClick={() => setViewerFile(activeModule.notesPdf)} className="text-[10px] text-emerald-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
-                              <Eye className="w-3 h-3" /> View Document
+                              <Eye className="w-3 h-3" /> View
+                            </button>
+                            <button onClick={() => openFileWithSignedLink(activeModule.notesPdf.fileUrl, activeModule.notesPdf.name)} className="text-[10px] text-emerald-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
+                              <Download className="w-3 h-3" /> Download
                             </button>
                           </div>
                         </div>
@@ -789,9 +815,12 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                             <FileText className="w-4 h-4 text-blue-600" /> Activity Sheet
                           </div>
                           <div className="text-[11px] text-slate-600 font-semibold truncate">{activeModule.activitySheetPdf.name}</div>
-                          <div className="flex items-center space-x-2 pt-1">
+                          <div className="flex items-center space-x-3 pt-1">
                             <button onClick={() => setViewerFile(activeModule.activitySheetPdf)} className="text-[10px] text-blue-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
-                              <Eye className="w-3 h-3" /> View Document
+                              <Eye className="w-3 h-3" /> View
+                            </button>
+                            <button onClick={() => openFileWithSignedLink(activeModule.activitySheetPdf.fileUrl, activeModule.activitySheetPdf.name)} className="text-[10px] text-blue-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
+                              <Download className="w-3 h-3" /> Download
                             </button>
                           </div>
                         </div>
@@ -803,9 +832,12 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                             <FileText className="w-4 h-4 text-purple-600" /> Assignment PDF
                           </div>
                           <div className="text-[11px] text-slate-600 font-semibold truncate">{activeModule.assignmentPdf.name}</div>
-                          <div className="flex items-center space-x-2 pt-1">
+                          <div className="flex items-center space-x-3 pt-1">
                             <button onClick={() => setViewerFile(activeModule.assignmentPdf)} className="text-[10px] text-purple-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
-                              <Eye className="w-3 h-3" /> View Document
+                              <Eye className="w-3 h-3" /> View
+                            </button>
+                            <button onClick={() => openFileWithSignedLink(activeModule.assignmentPdf.fileUrl, activeModule.assignmentPdf.name)} className="text-[10px] text-purple-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
+                              <Download className="w-3 h-3" /> Download
                             </button>
                           </div>
                         </div>
@@ -883,12 +915,22 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                     <FileText className="w-4 h-4 text-purple-600" />
                                     <span>Task Document: {activeModule.afterSessionAssessment.file.name}</span>
                                   </div>
-                                  <button
-                                    onClick={() => setViewerFile(activeModule.afterSessionAssessment.file)}
-                                    className="text-[11px] font-extrabold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" /> View Task File
-                                  </button>
+                                  <div className="flex items-center gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewerFile(activeModule.afterSessionAssessment.file)}
+                                      className="text-[11px] font-extrabold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" /> View Task File
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openFileWithSignedLink(activeModule.afterSessionAssessment.file.fileUrl, activeModule.afterSessionAssessment.file.name)}
+                                      className="text-[11px] font-extrabold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Download className="w-3.5 h-3.5" /> Download
+                                    </button>
+                                  </div>
                                 </div>
                               )}
 
@@ -1042,25 +1084,36 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                               : 'bg-white border-slate-200 text-slate-800 hover:border-blue-300 cursor-pointer'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-1.5">
-                              <span className="font-black text-sm">Module {index + 1}</span>
-                              {locked && <Lock className="w-3.5 h-3.5 text-slate-400" />}
-                            </div>
-                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border uppercase ${
-                              locked
-                                ? 'bg-slate-200 text-slate-500 border-slate-300'
-                                : modStatus === 'Completed'
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                : modStatus === 'In Progress'
-                                ? 'bg-amber-100 text-amber-800 border-amber-200'
-                                : 'bg-slate-100 text-slate-500 border-slate-200'
-                            }`}>
-                              {locked ? 'LOCKED' : modStatus}
-                            </span>
-                          </div>
+                          <div className="flex items-center gap-3">
+                            {(mod.thumbnailUrl || mod.thumbnail) && (
+                              <img
+                                src={resolveFileUrl(mod.thumbnailUrl || mod.thumbnail)}
+                                alt=""
+                                className="w-12 h-12 object-cover rounded-xl border border-slate-200 shrink-0"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-1.5">
+                                  <span className="font-black text-sm">Module {index + 1}</span>
+                                  {locked && <Lock className="w-3.5 h-3.5 text-slate-400" />}
+                                </div>
+                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border uppercase ${
+                                  locked
+                                    ? 'bg-slate-200 text-slate-500 border-slate-300'
+                                    : modStatus === 'Completed'
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                    : modStatus === 'In Progress'
+                                    ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                    : 'bg-slate-100 text-slate-500 border-slate-200'
+                                }`}>
+                                  {locked ? 'LOCKED' : modStatus}
+                                </span>
+                              </div>
 
-                          <div className="text-xs font-bold line-clamp-1">{mod.title}</div>
+                              <div className="text-xs font-bold line-clamp-1 mt-0.5">{mod.title}</div>
+                            </div>
+                          </div>
 
                           {locked ? (
                             <div className="text-[10px] text-rose-500 font-semibold flex items-center gap-1 mt-1">

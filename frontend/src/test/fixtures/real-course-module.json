@@ -1,0 +1,138 @@
+﻿{
+    "success":  true,
+    "data":  {
+                 "id":  "crs_9edd9161-af74-4a9a-aef9-839a8eb14a6f",
+                 "slug":  "hphonis",
+                 "title":  "hphonis",
+                 "description":  "adflhaduf",
+                 "category":  null,
+                 "mode":  "Recorded",
+                 "level":  null,
+                 "audience":  "student",
+                 "duration":  "3 Months",
+                 "price":  23.00,
+                 "originalPrice":  0.00,
+                 "thumbnail":  "https://zoro-academy-files-cdn.b-cdn.net/public/thumbnail/ca9705da-c2d4-47f4-b5a3-6a6fe0ef646c.jpeg",
+                 "previewVideoUrl":  null,
+                 "enrolled":  1,
+                 "rating":  5.00,
+                 "status":  "Active",
+                 "assignedTrainer":  "None (Self-Paced)",
+                 "trainerId":  null,
+                 "modules":  [
+                                 {
+                                     "id":  "mod_db1c27af-4250-4181-8e1c-55a7749ed6a7",
+                                     "moduleOrder":  1,
+                                     "title":  "M1",
+                                     "description":  ".;iofhwkjl",
+                                     "duration":  "5:47",
+                                     "videoStorageRef":  {
+                                                             "status":  "Ready",
+                                                             "videoId":  "1125a29a-bb01-4cf3-af47-0288bab5724e"
+                                                         },
+                                     "afterSessionAssessment":  null,
+                                     "thumbnailUrl":  null,
+                                     "notesFileUrl":  null,
+                                     "notesFileName":  null,
+                                     "worksheetFileUrl":  null,
+                                     "worksheetFileName":  null,
+                                     "assignmentFileUrl":  null,
+                                     "assignmentFileName":  null,
+                                     "createdAt":  "2026-10-12T12:26:57.646141",
+                                     "updatedAt":  "2026-10-12T12:26:57.646141",
+                                     "thumbnail":  null,
+                                     "assignmentFile":  null,
+                                     "notesFile":  null,
+                                     "worksheetFile":  null
+                                 },
+                                 {
+                                     "id":  "mod_a7d06aee-1838-49a1-a236-117725e7d61a",
+                                     "moduleOrder":  1,
+                                     "title":  "Task 2 Test Module",
+                                     "description":  "Testing thumbnail, notes, worksheet, assignment, and assessment files",
+                                     "duration":  null,
+                                     "videoStorageRef":  {
+                                                             "status":  "ready",
+                                                             "videoId":  "test-vid-123"
+                                                         },
+                                     "afterSessionAssessment":  {
+                                                                    "file":  {
+                                                                                 "name":  "Test_Assessment.pdf",
+                                                                                 "fileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/assessment/Test_Assessment.pdf"
+                                                                             },
+                                                                    "type":  "uploaded",
+                                                                    "title":  "Session 1 Assessment Task"
+                                                                },
+                                     "thumbnailUrl":  "https://zoro-academy-files-cdn.b-cdn.net/public/test-thumb.jpg",
+                                     "notesFileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/notes/Test_Notes.pdf",
+                                     "notesFileName":  "Test_Notes.pdf",
+                                     "worksheetFileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/worksheet/Test_Worksheet.pdf",
+                                     "worksheetFileName":  "Test_Worksheet.pdf",
+                                     "assignmentFileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/assignment/Test_Assignment.pdf",
+                                     "assignmentFileName":  "Test_Assignment.pdf",
+                                     "createdAt":  "2026-10-12T14:16:02.019528",
+                                     "updatedAt":  "2026-10-12T14:16:02.019528",
+                                     "thumbnail":  "https://zoro-academy-files-cdn.b-cdn.net/public/test-thumb.jpg",
+                                     "assignmentFile":  {
+                                                            "name":  "Test_Assignment.pdf",
+                                                            "fileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/assignment/Test_Assignment.pdf"
+                                                        },
+                                     "notesFile":  {
+                                                       "name":  "Test_Notes.pdf",
+                                                       "fileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/notes/Test_Notes.pdf"
+                                                   },
+                                     "worksheetFile":  {
+                                                           "name":  "Test_Worksheet.pdf",
+                                                           "fileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/worksheet/Test_Worksheet.pdf"
+                                                       }
+                                 },
+                                 {
+                                     "id":  "mod_45ff022f-7521-4386-85f2-8dee0e5fb399",
+                                     "moduleOrder":  1,
+                                     "title":  "Real Backend Module",
+                                     "description":  "Module with real backend JSON fixture",
+                                     "duration":  null,
+                                     "videoStorageRef":  {
+                                                             "status":  "ready",
+                                                             "videoId":  "vid-backend-real"
+                                                         },
+                                     "afterSessionAssessment":  {
+                                                                    "file":  {
+                                                                                 "name":  "Real_Assessment.pdf",
+                                                                                 "fileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/assessment/Real_Assessment.pdf"
+                                                                             },
+                                                                    "type":  "uploaded",
+                                                                    "title":  "Real Assessment Document"
+                                                                },
+                                     "thumbnailUrl":  "https://zoro-academy-files-cdn.b-cdn.net/public/real-thumb.jpg",
+                                     "notesFileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/notes/Real_Notes.pdf",
+                                     "notesFileName":  "Real_Notes.pdf",
+                                     "worksheetFileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/worksheet/Real_Worksheet.pdf",
+                                     "worksheetFileName":  "Real_Worksheet.pdf",
+                                     "assignmentFileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/assignment/Real_Assignment.pdf",
+                                     "assignmentFileName":  "Real_Assignment.pdf",
+                                     "createdAt":  "2026-10-12T14:16:52.525059",
+                                     "updatedAt":  "2026-10-12T14:16:52.525059",
+                                     "thumbnail":  "https://zoro-academy-files-cdn.b-cdn.net/public/real-thumb.jpg",
+                                     "assignmentFile":  {
+                                                            "name":  "Real_Assignment.pdf",
+                                                            "fileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/assignment/Real_Assignment.pdf"
+                                                        },
+                                     "notesFile":  {
+                                                       "name":  "Real_Notes.pdf",
+                                                       "fileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/notes/Real_Notes.pdf"
+                                                   },
+                                     "worksheetFile":  {
+                                                           "name":  "Real_Worksheet.pdf",
+                                                           "fileUrl":  "https://zoro-academy-files-cdn.b-cdn.net/private/worksheet/Real_Worksheet.pdf"
+                                                       }
+                                 }
+                             ],
+                 "resources":  [
+
+                               ],
+                 "createdAt":  "2026-10-12T12:25:47.596399",
+                 "updatedAt":  "2026-10-12T12:30:28.22571"
+             },
+    "message":  "Success"
+}

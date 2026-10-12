@@ -4,6 +4,7 @@ import com.zoroacademy.common.ApiResponse;
 import com.zoroacademy.entity.Course;
 import com.zoroacademy.entity.CourseModule;
 import com.zoroacademy.entity.CourseResource;
+import com.zoroacademy.repository.EnrollmentRepository;
 import com.zoroacademy.service.CourseService;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,10 +15,12 @@ import java.util.List;
 public class CourseController {
 
     private final CourseService courseService;
-    public CourseController(CourseService courseService) {
-        this.courseService = courseService;
-    }
+    private final EnrollmentRepository enrollmentRepository;
 
+    public CourseController(CourseService courseService, EnrollmentRepository enrollmentRepository) {
+        this.courseService = courseService;
+        this.enrollmentRepository = enrollmentRepository;
+    }
 
     private boolean isStaffUser() {
         org.springframework.security.core.Authentication auth = 
@@ -32,6 +35,19 @@ public class CourseController {
         );
     }
 
+    private boolean isEnrolledStudent(String courseId) {
+        org.springframework.security.core.Authentication auth = 
+            org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || auth instanceof org.springframework.security.authentication.AnonymousAuthenticationToken) {
+            return false;
+        }
+        String email = auth.getName();
+        if (email == null || email.isBlank()) return false;
+        return enrollmentRepository.findByStudentEmailIgnoreCase(email).stream()
+                .anyMatch(e -> courseId != null && courseId.equalsIgnoreCase(e.getCourseId())
+                        && ("Active".equalsIgnoreCase(e.getStatus()) || "Completed".equalsIgnoreCase(e.getStatus())));
+    }
+
     @GetMapping
     public ApiResponse<List<Course>> getCourses(@RequestParam(required = false) String audience) {
         List<Course> courses = courseService.getAllCourses(audience);
@@ -44,7 +60,7 @@ public class CourseController {
     @GetMapping("/{id}")
     public ApiResponse<Course> getCourseById(@PathVariable String id) {
         Course course = courseService.getCourseById(id);
-        if (!isStaffUser()) {
+        if (!isStaffUser() && !isEnrolledStudent(course.getId())) {
             course = courseService.sanitizeCourseForPublic(course);
         }
         return ApiResponse.ok(course);

@@ -105,8 +105,15 @@ public class CourseService {
                 sm.setTitle(m.getTitle());
                 sm.setDescription(m.getDescription());
                 sm.setDuration(m.getDuration());
+                sm.setThumbnailUrl(m.getThumbnailUrl());
                 sm.setVideoStorageRef(null);
                 sm.setAfterSessionAssessment(null);
+                sm.setNotesFileUrl(null);
+                sm.setNotesFileName(null);
+                sm.setWorksheetFileUrl(null);
+                sm.setWorksheetFileName(null);
+                sm.setAssignmentFileUrl(null);
+                sm.setAssignmentFileName(null);
                 sm.setCreatedAt(m.getCreatedAt());
                 sm.setUpdatedAt(m.getUpdatedAt());
                 safeModules.add(sm);
@@ -258,7 +265,7 @@ public class CourseService {
 
     private void cleanupStoredFilesFromText(String text) {
         if (text == null || text.isBlank()) return;
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("/api/files/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})").matcher(text);
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})").matcher(text);
         while (matcher.find()) {
             try {
                 fileStorageService.deleteFile(matcher.group(1));
@@ -290,6 +297,10 @@ public class CourseService {
         if (module.getAfterSessionAssessment() != null) {
             cleanupStoredFilesFromText(module.getAfterSessionAssessment());
         }
+        cleanupStoredFilesFromText(module.getThumbnailUrl());
+        cleanupStoredFilesFromText(module.getNotesFileUrl());
+        cleanupStoredFilesFromText(module.getWorksheetFileUrl());
+        cleanupStoredFilesFromText(module.getAssignmentFileUrl());
     }
 
     @Transactional
@@ -382,7 +393,50 @@ public class CourseService {
                 }
             } catch (Exception ignored) {}
         }
-        if (updated.getAfterSessionAssessment() != null) existing.setAfterSessionAssessment(updated.getAfterSessionAssessment());
+
+        if (updated.getThumbnailUrl() != null) {
+            if (existing.getThumbnailUrl() != null && !existing.getThumbnailUrl().equals(updated.getThumbnailUrl())) {
+                cleanupStoredFilesFromText(existing.getThumbnailUrl());
+            }
+            existing.setThumbnailUrl(updated.getThumbnailUrl().isBlank() ? null : updated.getThumbnailUrl());
+        }
+
+        if (updated.getNotesFileUrl() != null) {
+            if (existing.getNotesFileUrl() != null && !existing.getNotesFileUrl().equals(updated.getNotesFileUrl())) {
+                cleanupStoredFilesFromText(existing.getNotesFileUrl());
+            }
+            existing.setNotesFileUrl(updated.getNotesFileUrl().isBlank() ? null : updated.getNotesFileUrl());
+            existing.setNotesFileName(updated.getNotesFileName());
+        } else if (updated.getNotesFileName() != null) {
+            existing.setNotesFileName(updated.getNotesFileName());
+        }
+
+        if (updated.getWorksheetFileUrl() != null) {
+            if (existing.getWorksheetFileUrl() != null && !existing.getWorksheetFileUrl().equals(updated.getWorksheetFileUrl())) {
+                cleanupStoredFilesFromText(existing.getWorksheetFileUrl());
+            }
+            existing.setWorksheetFileUrl(updated.getWorksheetFileUrl().isBlank() ? null : updated.getWorksheetFileUrl());
+            existing.setWorksheetFileName(updated.getWorksheetFileName());
+        } else if (updated.getWorksheetFileName() != null) {
+            existing.setWorksheetFileName(updated.getWorksheetFileName());
+        }
+
+        if (updated.getAssignmentFileUrl() != null) {
+            if (existing.getAssignmentFileUrl() != null && !existing.getAssignmentFileUrl().equals(updated.getAssignmentFileUrl())) {
+                cleanupStoredFilesFromText(existing.getAssignmentFileUrl());
+            }
+            existing.setAssignmentFileUrl(updated.getAssignmentFileUrl().isBlank() ? null : updated.getAssignmentFileUrl());
+            existing.setAssignmentFileName(updated.getAssignmentFileName());
+        } else if (updated.getAssignmentFileName() != null) {
+            existing.setAssignmentFileName(updated.getAssignmentFileName());
+        }
+
+        if (updated.getAfterSessionAssessment() != null) {
+            if (existing.getAfterSessionAssessment() != null && !existing.getAfterSessionAssessment().equals(updated.getAfterSessionAssessment())) {
+                cleanupStoredFilesFromText(existing.getAfterSessionAssessment());
+            }
+            existing.setAfterSessionAssessment(updated.getAfterSessionAssessment().isBlank() ? null : updated.getAfterSessionAssessment());
+        }
 
         return moduleRepository.save(existing);
     }

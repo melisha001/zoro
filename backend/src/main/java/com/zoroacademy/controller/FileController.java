@@ -81,7 +81,7 @@ public class FileController {
                     if (!isTrainer) {
                         return ApiResponse.error("Forbidden: You do not have permission to access this file link");
                     }
-                } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module")) {
+                } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("assessment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module")) {
                     if (!isStudent && !isTrainer) {
                         return ApiResponse.error("Forbidden: You do not have permission to access this file link");
                     }
@@ -129,7 +129,7 @@ public class FileController {
                         if (!isTrainer) {
                             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
                         }
-                    } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module")) {
+                    } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("assessment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module")) {
                         if (!isStudent && !isTrainer) {
                             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
                         }

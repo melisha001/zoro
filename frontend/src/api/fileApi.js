@@ -57,12 +57,25 @@ export function resolveFileUrl(urlOrPath) {
 
 /**
  * Fetch a temporary signed link for a private stored file.
+ * Accepts either a file UUID or a URL/path containing the UUID.
  * 
- * @param {string} fileId 
+ * @param {string} fileIdOrUrl 
  * @returns {Promise<{ id: string, url: string, expiresAt: number, isPublic: boolean }>}
  */
-export async function getFileLink(fileId) {
-  if (!fileId) return null;
+export async function getFileLink(fileIdOrUrl) {
+  if (!fileIdOrUrl) return null;
+  const str = String(fileIdOrUrl).trim();
+  if (!str) return null;
+
+  // If already an external CDN or absolute URL not pointing to backend file route
+  if ((str.startsWith('http://') || str.startsWith('https://')) && !str.includes('/api/files/')) {
+    return { id: '', url: str, expiresAt: 0, isPublic: true };
+  }
+
+  // Extract UUID if present
+  const match = str.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  const fileId = match ? match[0] : str.replace(/^\/?api\/files\//, '').replace(/\/link$/, '').replace(/\/download$/, '').split('?')[0];
+
   const token = getAuthToken();
   const headers = { 'Accept': 'application/json' };
   if (token) {
@@ -85,6 +98,37 @@ export async function getFileLink(fileId) {
     };
   }
   throw new Error(data?.message || 'Failed to retrieve file link');
+}
+
+/**
+ * Opens or downloads a file through the signed-link flow.
+ * Solves 401 on private files opened in new tabs by resolving signed token first.
+ * 
+ * @param {string} fileUrlOrId 
+ * @param {string} [fileName] 
+ */
+export async function openFileWithSignedLink(fileUrlOrId, fileName = '') {
+  if (!fileUrlOrId) return;
+  try {
+    const linkData = await getFileLink(fileUrlOrId);
+    const targetUrl = linkData?.url || resolveFileUrl(fileUrlOrId);
+    if (!targetUrl) return;
+
+    const link = document.createElement('a');
+    link.href = targetUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    if (fileName) {
+      link.download = fileName;
+    }
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (err) {
+    console.warn('Signed link retrieval failed, falling back to direct URL:', err);
+    const fallbackUrl = resolveFileUrl(fileUrlOrId);
+    window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+  }
 }
 
 /**

@@ -1,12 +1,40 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Download, FileText, Film, Music, Image as ImageIcon, FileSpreadsheet, Archive } from 'lucide-react';
-import { resolveFileUrl } from '../../api/fileApi';
+import { resolveFileUrl, getFileLink, openFileWithSignedLink } from '../../api/fileApi';
 
 export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDownload = false }) {
+  const [resolvedUrl, setResolvedUrl] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    if (!isOpen || !file) {
+      setResolvedUrl('');
+      return;
+    }
+    const raw = file.url || file.fileUrl || file.path || '';
+    if (!raw) {
+      setResolvedUrl('#');
+      return;
+    }
+    const match = String(raw).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    if (match) {
+      getFileLink(match[0])
+        .then(res => {
+          if (active) setResolvedUrl(res?.url || resolveFileUrl(raw));
+        })
+        .catch(() => {
+          if (active) setResolvedUrl(resolveFileUrl(raw));
+        });
+    } else {
+      setResolvedUrl(resolveFileUrl(raw));
+    }
+    return () => { active = false; };
+  }, [isOpen, file]);
+
   if (!isOpen || !file) return null;
 
   const fileName = file.name || file.title || file.filename || 'Attachment File';
-  const fileUrl = resolveFileUrl(file.url || file.fileUrl || file.path) || '#';
+  const fileUrl = resolvedUrl || resolveFileUrl(file.url || file.fileUrl || file.path) || '#';
   const fileSize = file.size || file.fileSize || 'Standard';
 
   // Extract Extension & MIME
@@ -132,16 +160,14 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
               </div>
 
               {!hideDownload && fileUrl && fileUrl !== '#' && (
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download={fileName}
+                <button
+                  type="button"
+                  onClick={() => openFileWithSignedLink(fileUrl, fileName)}
                   className="inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl text-xs shadow-md transition-all w-full cursor-pointer"
                 >
                   <Download className="w-4 h-4" />
                   <span>Download / Open File</span>
-                </a>
+                </button>
               )}
             </div>
           )}
@@ -154,16 +180,14 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
           </div>
           <div className="flex items-center space-x-3">
             {!hideDownload && fileUrl && fileUrl !== '#' && (
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                download={fileName}
-                className="inline-flex items-center space-x-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-4 py-2 rounded-xl border border-blue-200/60 transition-colors"
+              <button
+                type="button"
+                onClick={() => openFileWithSignedLink(fileUrl, fileName)}
+                className="inline-flex items-center space-x-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-4 py-2 rounded-xl border border-blue-200/60 transition-colors cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Download</span>
-              </a>
+              </button>
             )}
             <button
               onClick={onClose}

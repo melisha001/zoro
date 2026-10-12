@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Award, Layers, Clock, Video, FileText, CheckCircle2, UserCheck, Search, Send, AlertCircle, Plus, Check } from 'lucide-react';
+import { BookOpen, Award, Layers, Clock, Video, FileText, CheckCircle2, UserCheck, Search, Send, AlertCircle, Plus, Check, Download, ExternalLink, ChevronDown, ChevronUp, Image as ImageIcon } from 'lucide-react';
 import { getCourses, getTrainerCourseRequests, createTrainerCourseRequest } from '../../api/courseApi';
-import { resolveFileUrl } from '../../api/fileApi';
+import { resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
 import { useAuth } from '../../context/AuthContext';
 
 function matchesTrainer(course, user) {
@@ -64,6 +64,7 @@ export default function TrainerCoursesPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [toastMsg, setToastMsg] = useState('');
+  const [expandedCourseId, setExpandedCourseId] = useState(null);
 
   const loadTrainerCourses = async () => {
     setLoading(true);
@@ -313,10 +314,20 @@ export default function TrainerCoursesPage() {
                     </div>
 
                     {isAssignedToMe || (req && req.status === 'Approved') ? (
-                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center space-x-1">
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Enrolled / Active Access</span>
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center space-x-1">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Enrolled / Active Access</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCourseId(expandedCourseId === course.id ? null : course.id)}
+                          className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1 cursor-pointer transition-colors"
+                        >
+                          {expandedCourseId === course.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          <span>{expandedCourseId === course.id ? 'Hide Modules' : 'View Modules & Files'}</span>
+                        </button>
+                      </div>
                     ) : req && req.status === 'Pending' ? (
                       <button
                         type="button"
@@ -347,6 +358,162 @@ export default function TrainerCoursesPage() {
                     )}
                   </div>
                 </div>
+
+                {expandedCourseId === course.id && (
+                  <div className="border-t border-slate-100 p-6 bg-slate-50/70 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Course Modules & Attached Resources ({course.modules?.length || 0})
+                      </h3>
+                    </div>
+
+                    {(!course.modules || course.modules.length === 0) ? (
+                      <div className="text-center py-6 text-xs text-slate-400 font-semibold bg-white rounded-2xl border border-slate-200">
+                        No modules created for this course yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {course.modules.map((mod, idx) => {
+                          const notes = mod.notesFile || mod.notesPdf;
+                          const worksheet = mod.worksheetFile || mod.activitySheetPdf;
+                          const assignment = mod.assignmentFile || mod.assignmentPdf;
+                          const asa = mod.afterSessionAssessment;
+
+                          return (
+                            <div key={mod.id || idx} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start space-x-3">
+                                  {mod.thumbnail ? (
+                                    <div className="w-20 h-16 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100">
+                                      <img src={resolveFileUrl(mod.thumbnail)} alt={mod.title} className="w-full h-full object-cover" />
+                                    </div>
+                                  ) : (
+                                    <div className="w-20 h-16 rounded-xl flex flex-col items-center justify-center shrink-0 border border-dashed border-slate-200 bg-slate-50 text-[9px] text-slate-400 font-bold">
+                                      <ImageIcon className="w-4 h-4 mb-0.5" />
+                                      No Thumb
+                                    </div>
+                                  )}
+                                  <div>
+                                    <div className="text-[10px] font-extrabold text-purple-600 uppercase tracking-wider">
+                                      Module {mod.moduleOrder || idx + 1}{mod.duration ? ` • ${mod.duration}` : ''}
+                                    </div>
+                                    <h4 className="text-sm font-black text-slate-900 mt-0.5">{mod.title}</h4>
+                                    {mod.description && (
+                                      <p className="text-xs text-slate-500 font-medium line-clamp-2 mt-1">{mod.description}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Resources Row */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-2 border-t border-slate-100 text-xs">
+                                {/* Notes */}
+                                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                                  <div className="font-extrabold text-[11px] text-slate-700 flex items-center gap-1">
+                                    <FileText className="w-3.5 h-3.5 text-emerald-600" /> Notes
+                                  </div>
+                                  {notes ? (
+                                    <div className="space-y-1">
+                                      <div className="text-[10px] text-slate-600 font-semibold truncate">📄 {notes.name}</div>
+                                      {notes.fileUrl && (
+                                        <button
+                                          type="button"
+                                          onClick={() => openFileWithSignedLink(notes.fileUrl, notes.name)}
+                                          className="text-blue-600 hover:underline text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <Download className="w-3 h-3" /> Download
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 italic">None</span>
+                                  )}
+                                </div>
+
+                                {/* Worksheet */}
+                                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                                  <div className="font-extrabold text-[11px] text-slate-700 flex items-center gap-1">
+                                    <FileText className="w-3.5 h-3.5 text-blue-600" /> Worksheet
+                                  </div>
+                                  {worksheet ? (
+                                    <div className="space-y-1">
+                                      <div className="text-[10px] text-slate-600 font-semibold truncate">📑 {worksheet.name}</div>
+                                      {worksheet.fileUrl && (
+                                        <button
+                                          type="button"
+                                          onClick={() => openFileWithSignedLink(worksheet.fileUrl, worksheet.name)}
+                                          className="text-blue-600 hover:underline text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <Download className="w-3 h-3" /> Download
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 italic">None</span>
+                                  )}
+                                </div>
+
+                                {/* Assignment */}
+                                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                                  <div className="font-extrabold text-[11px] text-slate-700 flex items-center gap-1">
+                                    <FileText className="w-3.5 h-3.5 text-purple-600" /> Assignment
+                                  </div>
+                                  {assignment ? (
+                                    <div className="space-y-1">
+                                      <div className="text-[10px] text-slate-600 font-semibold truncate">📝 {assignment.name}</div>
+                                      {assignment.fileUrl && (
+                                        <button
+                                          type="button"
+                                          onClick={() => openFileWithSignedLink(assignment.fileUrl, assignment.name)}
+                                          className="text-blue-600 hover:underline text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <Download className="w-3 h-3" /> Download
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 italic">None</span>
+                                  )}
+                                </div>
+
+                                {/* Assessment */}
+                                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                                  <div className="font-extrabold text-[11px] text-slate-700 flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" /> Assessment
+                                  </div>
+                                  {asa ? (
+                                    <div className="space-y-1">
+                                      <div className="text-[10px] text-slate-600 font-semibold truncate">📋 {asa.title || 'Evaluation'}</div>
+                                      {asa.type === 'google_form' ? (
+                                        <a href={asa.googleFormUrl || '#'} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline text-[10px] font-bold inline-flex items-center gap-1">
+                                          <ExternalLink className="w-3 h-3" /> Google Form
+                                        </a>
+                                      ) : asa.file?.fileUrl ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => openFileWithSignedLink(asa.file.fileUrl, asa.file.name)}
+                                          className="text-purple-600 hover:underline text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <Download className="w-3 h-3" /> Download ({asa.file.name})
+                                        </button>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-500 font-medium">Task Configured</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 italic">None</span>
+                                  )}
+                                </div>
+
+                              </div>
+
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </div>
             );
