@@ -44,9 +44,37 @@ class AccountStatusTerminationTest {
     }
 
     @Test
-    void testInvalidJwtReturnsTokenExpiredCode() throws Exception {
+    void testInvalidJwtReturnsTokenInvalidCode() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer invalid-jwt-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        assertEquals(401, response.getStatus());
+        assertTrue(response.getContentAsString().contains("\"code\":\"TOKEN_INVALID\""));
+        assertTrue(response.getContentAsString().contains("\"message\":\"Invalid token signature or format\""));
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @Test
+    void testExpiredJwtReturnsTokenExpiredCode() throws Exception {
+        java.util.Date now = new java.util.Date(System.currentTimeMillis() - 20000);
+        java.util.Date expiryDate = new java.util.Date(System.currentTimeMillis() - 10000);
+        String expiredToken = io.jsonwebtoken.Jwts.builder()
+                .subject("usr-exp")
+                .claim("userId", "usr-exp")
+                .claim("email", "expired@zoro.com")
+                .claim("role", "STUDENT")
+                .claim("name", "Expired Student")
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(io.jsonwebtoken.io.Decoders.BASE64.decode("Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=")), io.jsonwebtoken.Jwts.SIG.HS256)
+                .compact();
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer " + expiredToken);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, filterChain);

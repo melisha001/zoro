@@ -26,8 +26,8 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         String message = (String) request.getAttribute("auth_error_message");
 
         if (code == null || code.isBlank()) {
-            code = "TOKEN_EXPIRED";
-            message = "Token expired or invalid";
+            code = "AUTH_REQUIRED";
+            message = "Please log in";
         }
 
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

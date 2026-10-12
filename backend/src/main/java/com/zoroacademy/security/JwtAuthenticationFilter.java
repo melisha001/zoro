@@ -40,12 +40,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = getJwtFromRequest(request);
 
             if (StringUtils.hasText(jwt)) {
-                if (!tokenProvider.validateToken(jwt)) {
+                JwtTokenProvider.JwtValidationStatus status = tokenProvider.validateTokenStatus(jwt);
+                if (status == JwtTokenProvider.JwtValidationStatus.EXPIRED) {
                     if (isPublicRoute(request)) {
                         filterChain.doFilter(request, response);
                         return;
                     }
                     sendErrorResponse(response, "TOKEN_EXPIRED", "Token expired or invalid");
+                    return;
+                }
+                if (status == JwtTokenProvider.JwtValidationStatus.INVALID) {
+                    if (isPublicRoute(request)) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
+                    sendErrorResponse(response, "TOKEN_INVALID", "Invalid token signature or format");
                     return;
                 }
 
@@ -92,6 +101,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         } catch (Exception ex) {
             log.error("Could not set user authentication in security context", ex);
+            if (isPublicRoute(request)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+            sendErrorResponse(response, "TOKEN_INVALID", "Failed to resolve authenticated user");
+            return;
         }
 
         filterChain.doFilter(request, response);

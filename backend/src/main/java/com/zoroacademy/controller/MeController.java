@@ -30,6 +30,8 @@ public class MeController {
     private final UserService userService;
     private final StudentFeeRepository studentFeeRepository;
     private final AttendanceRecordRepository attendanceRecordRepository;
+    private final NotificationRepository notificationRepository;
+    private final EnquiryRepository enquiryRepository;
 
     public MeController(UserRepository userRepository,
                         CourseRepository courseRepository,
@@ -42,7 +44,9 @@ public class MeController {
                         TrainerCourseRequestRepository trainerCourseRequestRepository,
                         UserService userService,
                         StudentFeeRepository studentFeeRepository,
-                        AttendanceRecordRepository attendanceRecordRepository) {
+                        AttendanceRecordRepository attendanceRecordRepository,
+                        NotificationRepository notificationRepository,
+                        EnquiryRepository enquiryRepository) {
         this.userRepository = userRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
@@ -55,6 +59,8 @@ public class MeController {
         this.userService = userService;
         this.studentFeeRepository = studentFeeRepository;
         this.attendanceRecordRepository = attendanceRecordRepository;
+        this.notificationRepository = notificationRepository;
+        this.enquiryRepository = enquiryRepository;
     }
 
     private User getCurrentUser() {
@@ -361,5 +367,41 @@ public class MeController {
                 .filter(ar -> ar.getScheduleId() != null && scheduleIds.contains(ar.getScheduleId()))
                 .collect(Collectors.toList());
         return ApiResponse.ok(records);
+    }
+
+    @GetMapping("/notifications")
+    public ApiResponse<List<Notification>> getMyNotifications() {
+        User user = getCurrentUser();
+        String role = user.getRole().toUpperCase();
+
+        List<Notification> roleNotifs = notificationRepository.findByRecipientRoleIgnoreCaseOrRecipientRoleIgnoreCase("ALL", role);
+        List<Notification> userNotifs = new ArrayList<>(notificationRepository.findByRecipientId(user.getId()));
+        if (user.getEmail() != null) {
+            userNotifs.addAll(notificationRepository.findByRecipientId(user.getEmail()));
+        }
+
+        Set<String> seenIds = new HashSet<>();
+        List<Notification> merged = new ArrayList<>();
+        for (Notification n : userNotifs) {
+            if (seenIds.add(n.getId())) {
+                merged.add(n);
+            }
+        }
+        for (Notification n : roleNotifs) {
+            if (seenIds.add(n.getId())) {
+                merged.add(n);
+            }
+        }
+        return ApiResponse.ok(merged);
+    }
+
+    @GetMapping("/enquiries")
+    public ApiResponse<List<Enquiry>> getMyEnquiries() {
+        User user = getCurrentUser();
+        String role = user.getRole().toUpperCase();
+        if ("ADMIN".equals(role)) {
+            return ApiResponse.ok(enquiryRepository.findAll());
+        }
+        return ApiResponse.ok(enquiryRepository.findByEmailIgnoreCaseOrNameIgnoreCase(user.getEmail(), user.getName()));
     }
 }

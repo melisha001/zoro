@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface EnquiryRepository extends JpaRepository<Enquiry, String> {
     List<Enquiry> findByStatusIgnoreCase(String status);
+    List<Enquiry> findByEmailIgnoreCaseOrNameIgnoreCase(String email, String name);
 }

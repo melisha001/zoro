@@ -20,6 +20,26 @@ export const getEnquiries = async () => {
   return apiResponse([], false, res?.message || 'Failed to fetch enquiries');
 };
 
+export const getMyEnquiries = async () => {
+  const res = await apiGet('/me/enquiries');
+  if (res && res.success && Array.isArray(res.data)) {
+    const normalized = res.data.map(e => ({
+      id: e.id,
+      name: e.name || '',
+      phone: e.phone || '',
+      email: e.email || '',
+      courseId: e.courseId || null,
+      course: e.courseInterest || e.course || '',
+      courseInterest: e.courseInterest || e.course || '',
+      message: e.message || '',
+      status: e.status || 'New',
+      submittedAt: e.createdAt ? new Date(e.createdAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : (e.submittedAt || '')
+    }));
+    return apiResponse(normalized);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch my enquiries');
+};
+
 export const createEnquiry = async (enquiryData) => {
   if (!enquiryData?.name) {
     return apiResponse(null, false, 'Name is required');

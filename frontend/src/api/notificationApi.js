@@ -1,5 +1,25 @@
 import { apiGet, apiPost, apiPut, apiDelete, apiResponse } from './client';
 
+export const getMyNotifications = async () => {
+  const res = await apiGet('/me/notifications');
+  if (res && res.success && Array.isArray(res.data)) {
+    const normalized = res.data.map(n => ({
+      id: n.id,
+      trainerName: n.recipientId || '',
+      recipientRole: n.recipientRole || 'ALL',
+      title: n.title || '',
+      desc: n.message || '',
+      message: n.message || '',
+      readStatus: n.readStatus || false,
+      time: n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+      date: n.createdAt ? new Date(n.createdAt).toISOString().split('T')[0] : '',
+      type: 'system'
+    }));
+    return apiResponse(normalized);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch notifications');
+};
+
 export const getNotifications = async () => {
   const res = await apiGet('/notifications');
   if (res && res.success && Array.isArray(res.data)) {

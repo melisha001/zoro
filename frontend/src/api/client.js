@@ -125,8 +125,9 @@ export const clearAuthSession = () => {
 };
 
 export const notifySessionExpired = (message = 'Your session expired, please log in again') => {
+  const hadToken = !!getAuthToken();
   clearAuthSession();
-  if (typeof window !== 'undefined') {
+  if (hadToken && typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('auth:unauthorized', {
       detail: { code: 'TOKEN_EXPIRED', message }
     }));
@@ -159,9 +160,12 @@ export const requestTokenRefresh = async () => {
     return activeRefreshPromise;
   }
 
+  const currentToken = getAuthToken();
   const currentRefreshToken = getRefreshToken();
   if (!currentRefreshToken) {
-    notifySessionExpired();
+    if (currentToken) {
+      notifySessionExpired();
+    }
     return null;
   }
 
@@ -175,7 +179,12 @@ export const requestTokenRefresh = async () => {
 
       let json = null;
       try {
-        json = await res.json();
+        if (typeof res.json === 'function') {
+          json = await res.json();
+        } else if (typeof res.text === 'function') {
+          const txt = await res.text();
+          json = txt ? JSON.parse(txt) : null;
+        }
       } catch (e) {}
 
       if (res.ok && json?.success && json?.data) {
@@ -235,18 +244,29 @@ export const apiFetch = async (endpoint, options = {}, isRetry = false) => {
   }
 
   const token = getAuthToken();
+  const shouldAttachToken = token && !cleanEndpoint.includes('/auth/login') && !cleanEndpoint.includes('/auth/refresh') && !cleanEndpoint.includes('/auth/register');
 
   const headers = {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(shouldAttachToken ? { 'Authorization': `Bearer ${token}` } : {}),
     ...(options.headers || {})
   };
 
+  if (cleanEndpoint.includes('/auth/login') || cleanEndpoint.includes('/auth/refresh') || cleanEndpoint.includes('/auth/register')) {
+    delete headers['Authorization'];
+    delete headers['authorization'];
+  }
+
   try {
     const res = await fetch(url, { ...options, headers });
-    let json;
+    let json = null;
     try {
-      json = await res.json();
+      if (typeof res.json === 'function') {
+        json = await res.json();
+      } else if (typeof res.text === 'function') {
+        const txt = await res.text();
+        json = txt ? JSON.parse(txt) : null;
+      }
     } catch (e) {
       json = null;
     }
@@ -254,10 +274,22 @@ export const apiFetch = async (endpoint, options = {}, isRetry = false) => {
     if (res.status === 401) {
       const code = json?.code || 'UNAUTHORIZED';
       const message = json?.message || 'Session expired or unauthorized. Please log in.';
+      const hadToken = !!token;
 
-      // If token expired, single-flight refresh and retry original request
+      // Unauthenticated request without token to protected endpoint: never clear session or show banner
+      if (code === 'AUTH_REQUIRED') {
+        return {
+          success: false,
+          status: 401,
+          code,
+          message: message || 'Please log in.',
+          data: null
+        };
+      }
+
+      // If token expired or invalid with a token present, attempt single-flight refresh and retry
       const isAuthEndpoint = cleanEndpoint.startsWith('/auth/');
-      if (!isRetry && !isAuthEndpoint && (code === 'TOKEN_EXPIRED' || token)) {
+      if (!isRetry && !isAuthEndpoint && hadToken && (code === 'TOKEN_EXPIRED' || code === 'TOKEN_INVALID' || code === 'UNAUTHORIZED')) {
         const newAccessToken = await requestTokenRefresh();
         if (newAccessToken) {
           const retryHeaders = {
@@ -268,8 +300,16 @@ export const apiFetch = async (endpoint, options = {}, isRetry = false) => {
         }
       }
 
-      // Terminal auth failure
-      if (code === 'ACCOUNT_REMOVED' || code === 'ACCOUNT_DISABLED' || code === 'TOKEN_EXPIRED') {
+      // Terminal auth failure:
+      // Only show "Session expired" when a token existed in this tab and a refresh attempt failed
+      if ((code === 'TOKEN_EXPIRED' || code === 'TOKEN_INVALID') && hadToken) {
+        if (getAuthToken()) {
+          clearAuthSession();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code, message } }));
+          }
+        }
+      } else if (code === 'ACCOUNT_REMOVED' || code === 'ACCOUNT_DISABLED') {
         clearAuthSession();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code, message } }));

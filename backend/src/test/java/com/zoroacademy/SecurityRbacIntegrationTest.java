@@ -37,6 +37,8 @@ class SecurityRbacIntegrationTest {
     private UserService userService;
     private StudentFeeRepository studentFeeRepository;
     private AttendanceRecordRepository attendanceRecordRepository;
+    private NotificationRepository notificationRepository;
+    private EnquiryRepository enquiryRepository;
 
     private MeController meController;
 
@@ -54,6 +56,8 @@ class SecurityRbacIntegrationTest {
         userService = mock(UserService.class);
         studentFeeRepository = mock(StudentFeeRepository.class);
         attendanceRecordRepository = mock(AttendanceRecordRepository.class);
+        notificationRepository = mock(NotificationRepository.class);
+        enquiryRepository = mock(EnquiryRepository.class);
 
         meController = new MeController(
                 userRepository,
@@ -67,7 +71,9 @@ class SecurityRbacIntegrationTest {
                 trainerCourseRequestRepository,
                 userService,
                 studentFeeRepository,
-                attendanceRecordRepository
+                attendanceRecordRepository,
+                notificationRepository,
+                enquiryRepository
         );
     }
 

@@ -101,19 +101,35 @@ public class JwtTokenProvider {
         return (email != null && !email.isBlank()) ? email : claims.getSubject();
     }
 
-    public boolean validateToken(String authToken) {
+    public enum JwtValidationStatus {
+        VALID,
+        EXPIRED,
+        INVALID
+    }
+
+    public JwtValidationStatus validateTokenStatus(String authToken) {
         try {
             Jwts.parser().verifyWith(getSigningKey()).build().parseSignedClaims(authToken);
-            return true;
-        } catch (SecurityException | MalformedJwtException e) {
-            log.error("Invalid JWT signature: {}", e.getMessage());
+            return JwtValidationStatus.VALID;
         } catch (ExpiredJwtException e) {
             log.warn("Expired JWT token: {}", e.getMessage());
+            return JwtValidationStatus.EXPIRED;
+        } catch (SecurityException | MalformedJwtException e) {
+            log.error("Invalid JWT signature: {}", e.getMessage());
+            return JwtValidationStatus.INVALID;
         } catch (UnsupportedJwtException e) {
             log.error("Unsupported JWT token: {}", e.getMessage());
+            return JwtValidationStatus.INVALID;
         } catch (IllegalArgumentException e) {
             log.error("JWT claims string is empty: {}", e.getMessage());
+            return JwtValidationStatus.INVALID;
+        } catch (Exception e) {
+            log.error("Unexpected JWT validation error: {}", e.getMessage());
+            return JwtValidationStatus.INVALID;
         }
-        return false;
+    }
+
+    public boolean validateToken(String authToken) {
+        return validateTokenStatus(authToken) == JwtValidationStatus.VALID;
     }
 }

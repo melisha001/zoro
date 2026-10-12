@@ -35,4 +35,5 @@ run-local.ps1
 backend/run-local.ps1
 uploads/
 backend/uploads/
+scratch/
 

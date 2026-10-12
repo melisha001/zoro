@@ -22,7 +22,11 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.MediaType;
 
 @Configuration
 @EnableWebSecurity
@@ -56,9 +60,22 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            response.setCharacterEncoding("UTF-8");
+                            Map<String, Object> body = new HashMap<>();
+                            body.put("success", false);
+                            body.put("code", "FORBIDDEN");
+                            body.put("message", "Access denied: insufficient permissions");
+                            new com.fasterxml.jackson.databind.ObjectMapper().writeValue(response.getWriter(), body);
+                        })
+                )
                 .authorizeHttpRequests(auth -> auth
                         // 1. Strictly Public Endpoints
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/enquiries", "/api/enquiries/").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/courses/**").permitAll()

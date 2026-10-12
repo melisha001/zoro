@@ -224,9 +224,11 @@ export const replaceTrainer = async (id, payload) => {
 // --- AUTHENTICATION API ---
 export const authenticateUser = async (email, password) => {
   const lowerEmail = (email || '').toLowerCase().trim();
-  
+  clearAuthSession();
+
   const res = await apiPost('/auth/login', { email: lowerEmail, password });
   if (res.success && res.data && res.data.user) {
+    clearAuthSession();
     const accessToken = res.data.accessToken || res.data.token;
     const refreshToken = res.data.refreshToken;
     if (accessToken) {

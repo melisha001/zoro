@@ -4,11 +4,11 @@ import {
   Clock, ArrowRight, Play, CheckCircle, AlertTriangle, CalendarX 
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { getFeeRecords } from '../../api/feesApi';
+import { getMyFeeRecords } from '../../api/feesApi';
 import { getSchedules } from '../../api/scheduleApi';
 import { getAssignments, getSubmissions } from '../../api/assignmentApi';
 import { getDoubts } from '../../api/doubtApi';
-import { getAttendanceRecords } from '../../api/attendanceApi';
+import { getMyAttendanceRecords } from '../../api/attendanceApi';
 
 export default function StudentDashboard({ setActiveScreen }) {
   const { user } = useAuth();
@@ -34,12 +34,12 @@ export default function StudentDashboard({ setActiveScreen }) {
   const loadAllStudentData = async () => {
     try {
       const [feeRes, schRes, asgRes, subRes, dbtRes, attRes] = await Promise.all([
-        getFeeRecords(),
+        getMyFeeRecords(),
         getSchedules(),
         getAssignments(),
         getSubmissions(),
         getDoubts(),
-        getAttendanceRecords()
+        getMyAttendanceRecords()
       ]);
 
       // 1. Fees

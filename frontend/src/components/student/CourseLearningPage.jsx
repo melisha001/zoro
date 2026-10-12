@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, Play, FileText, BookOpen, PlusCircle, Sparkles, ExternalLink, Calendar, Clock, Video, Lock, Layers, CheckCircle2, ShieldCheck, Eye, Send, Award } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
-import { createEnquiry, getEnquiries } from '../../api/enquiryApi';
+import { createEnquiry, getMyEnquiries } from '../../api/enquiryApi';
 import { getStudentProgress, updateModuleProgress, authorizeVideoPlayback } from '../../api/progressApi';
 import { getSchedules } from '../../api/scheduleApi';
 import { getSubmissions, createSubmission } from '../../api/assignmentApi';
@@ -91,7 +91,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
       const schRes = await getSchedules();
       setAllSchedules(schRes.data || []);
 
-      const enqRes = await getEnquiries();
+      const enqRes = await getMyEnquiries();
       setEnquiriesList(enqRes.data || []);
 
       await loadSubmissionsData();
@@ -214,7 +214,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
       const courseTitle = courseObj?.title || courseObj?.name || 'Course';
       const courseId = courseObj?.id || courseOrId;
 
-      const enquiriesRes = await getEnquiries();
+      const enquiriesRes = await getMyEnquiries();
       const existingEnquiries = enquiriesRes.data || [];
 
       const hasPending = existingEnquiries.some(e =>
@@ -242,7 +242,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
       setMsg(`Request for "${courseTitle}" submitted successfully! Admin will review your request.`);
       setTimeout(() => setMsg(''), 4000);
 
-      const updatedEnq = await getEnquiries();
+      const updatedEnq = await getMyEnquiries();
       setEnquiriesList(updatedEnq.data || []);
     } catch (err) {
       console.error('Enrollment enquiry error:', err);
