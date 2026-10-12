@@ -1,24 +1,31 @@
 import { apiGet, apiPost, apiPut, apiDelete, apiResponse } from './client';
 import { logActivity } from './activityLogApi';
+import { parseJsonField } from '../utils/jsonUtils';
+
+export function normalizeCompetitionModule(m, compId = null) {
+  if (!m) return m;
+  const assessmentData = parseJsonField(m.assessmentData);
+  return {
+    id: m.id,
+    competitionId: compId || m.competitionId || m.competition?.id,
+    title: m.title || '',
+    description: m.description || '',
+    roundNumber: m.roundNumber || 1,
+    url: m.url || '',
+    thumbnail: m.thumbnail || '',
+    notesFile: m.notesFile || null,
+    worksheetFile: m.worksheetFile || null,
+    assignmentFile: m.assignmentFile || null,
+    assessmentData: assessmentData || null,
+    createdAt: m.createdAt ? new Date(m.createdAt).toISOString().split('T')[0] : ''
+  };
+}
 
 export const getCompetitionModules = async (competitionId = null) => {
   if (competitionId) {
     const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/modules`);
     if (res && res.success && Array.isArray(res.data)) {
-      const normalized = res.data.map(m => ({
-        id: m.id,
-        competitionId,
-        title: m.title || '',
-        description: m.description || '',
-        roundNumber: m.roundNumber || 1,
-        url: '',
-        thumbnail: '',
-        notesFile: null,
-        worksheetFile: null,
-        assignmentFile: null,
-        createdAt: m.createdAt ? new Date(m.createdAt).toISOString().split('T')[0] : ''
-      }));
-      return apiResponse(normalized);
+      return apiResponse(res.data.map(m => normalizeCompetitionModule(m, competitionId)));
     }
     return apiResponse([], false, res?.message || 'Failed to fetch competition modules');
   }
@@ -30,19 +37,7 @@ export const getCompetitionModules = async (competitionId = null) => {
     compRes.data.forEach(comp => {
       if (Array.isArray(comp.modules)) {
         comp.modules.forEach(m => {
-          allModules.push({
-            id: m.id,
-            competitionId: comp.id,
-            title: m.title || '',
-            description: m.description || '',
-            roundNumber: m.roundNumber || 1,
-            url: '',
-            thumbnail: '',
-            notesFile: null,
-            worksheetFile: null,
-            assignmentFile: null,
-            createdAt: m.createdAt ? new Date(m.createdAt).toISOString().split('T')[0] : ''
-          });
+          allModules.push(normalizeCompetitionModule(m, comp.id));
         });
       }
     });

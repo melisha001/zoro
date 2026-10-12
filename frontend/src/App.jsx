@@ -5,6 +5,7 @@ import { DialogProvider } from './context/DialogContext';
 import PublicNavbar from './components/layout/PublicNavbar';
 import DashboardSidebar from './components/layout/DashboardSidebar';
 import DashboardHeader from './components/layout/DashboardHeader';
+import ErrorBoundary from './components/common/ErrorBoundary';
 
 import HomePage from './components/public/HomePage';
 import CoursePage from './components/public/CoursePage';
@@ -349,11 +350,13 @@ function DashboardLayout({ expectedRole }) {
         />
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
           <Suspense fallback={<PortalLoadingFallback />}>
-            <Outlet context={{ 
-              setActiveScreen: handleSetActiveScreen, 
-              setSelectedCourseIdForEdit, 
-              setSelectedCompIdForModules 
-            }} />
+            <ErrorBoundary>
+              <Outlet context={{ 
+                setActiveScreen: handleSetActiveScreen, 
+                setSelectedCourseIdForEdit, 
+                setSelectedCompIdForModules 
+              }} />
+            </ErrorBoundary>
           </Suspense>
         </main>
       </div>

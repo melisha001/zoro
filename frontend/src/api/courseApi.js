@@ -1,33 +1,7 @@
 import { apiGet, apiPost, apiPut, apiDelete, apiResponse } from './client';
+import { parseJsonField } from '../utils/jsonUtils';
 
-/**
- * Course Management API
- * 100% Database-backed via Spring Boot REST endpoints.
- * ZERO mock data. ZERO localStorage persistence.
- */
-
-/**
- * Safely parses a value that may be a JSON string, a JSON object, or null/undefined.
- * Always returns an Object or null, never throws and never returns an invalid React child.
- * 
- * @param {any} value 
- * @returns {object|null}
- */
-export function parseJsonField(value) {
-  if (value == null) return null;
-  if (typeof value === 'object') return value;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null;
-    try {
-      const parsed = JSON.parse(trimmed);
-      return typeof parsed === 'object' && parsed !== null ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
+export { parseJsonField };
 
 /**
  * Normalizes a module object so the UI always receives predictable shapes:

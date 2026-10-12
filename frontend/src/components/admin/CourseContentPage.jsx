@@ -6,9 +6,10 @@ import {
   Music, Download
 } from 'lucide-react';
 import * as tus from 'tus-js-client';
-import { getCourseById, addModule, updateModule, deleteModule } from '../../api/courseApi';
+import { parseJsonField, getCourseById, addModule, updateModule, deleteModule } from '../../api/courseApi';
 import { uploadFile, resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
 import { createVideoUploadSession, getVideoDetails } from '../../api/videoApi';
+import { useDialog } from '../../context/DialogContext';
 import ConfirmModal from '../common/ConfirmModal';
 
 const ALLOWED_EXTENSIONS = [
@@ -21,6 +22,7 @@ const ALLOWED_EXTENSIONS = [
 export default function CourseContentPage({ courseId: propCourseId, setActiveScreen }) {
   const { courseId: paramCourseId } = useParams();
   const navigate = useNavigate();
+  const { showSuccess, showError } = useDialog();
   const courseId = propCourseId || paramCourseId;
   const [course, setCourse] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -62,19 +64,17 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     const initial = {};
     for (const mod of modulesList) {
       if (!mod.videoStorageRef) continue;
-      try {
-        const parsed = typeof mod.videoStorageRef === 'string' ? JSON.parse(mod.videoStorageRef) : mod.videoStorageRef;
-        const vId = parsed?.videoId || (typeof mod.videoStorageRef === 'string' && !mod.videoStorageRef.startsWith('{') ? mod.videoStorageRef : null);
-        if (vId) {
-          initial[mod.id] = parsed?.status || 'Processing';
-          getVideoDetails(vId).then(res => {
-            if (res.success && res.data) {
-              const liveStatus = res.data.statusLabel || (res.data.status === 3 ? 'Ready' : (res.data.status === 4 ? 'Failed' : 'Processing'));
-              setModuleVideoStatuses(prev => ({ ...prev, [mod.id]: liveStatus }));
-            }
-          }).catch(() => {});
-        }
-      } catch {}
+      const parsed = parseJsonField(mod.videoStorageRef);
+      const vId = parsed?.videoId || (typeof mod.videoStorageRef === 'string' && !mod.videoStorageRef.startsWith('{') ? mod.videoStorageRef : null);
+      if (vId) {
+        initial[mod.id] = parsed?.status || 'Processing';
+        getVideoDetails(vId).then(res => {
+          if (res.success && res.data) {
+            const liveStatus = res.data.statusLabel || (res.data.status === 3 ? 'Ready' : (res.data.status === 4 ? 'Failed' : 'Processing'));
+            setModuleVideoStatuses(prev => ({ ...prev, [mod.id]: liveStatus }));
+          }
+        }).catch(() => {});
+      }
     }
     setModuleVideoStatuses(prev => ({ ...prev, ...initial }));
   };
@@ -374,45 +374,56 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     };
 
     if (editingModule) {
-      await updateModule(course.id, editingModule.id, payload);
-      setEditingModule(null);
+      const res = await updateModule(course.id, editingModule.id, payload);
+      if (res.success) {
+        setEditingModule(null);
+        resetForm();
+        await showSuccess(res.message || 'Module updated successfully', 'Module Updated');
+        loadCourse();
+      } else {
+        await showError(res.message || 'Failed to update module', 'Update Error');
+      }
     } else {
-      await addModule(course.id, payload);
-      setShowAddModal(false);
+      const res = await addModule(course.id, payload);
+      if (res.success) {
+        setShowAddModal(false);
+        resetForm();
+        await showSuccess(res.message || 'Module added successfully', 'Module Added');
+        loadCourse();
+      } else {
+        await showError(res.message || 'Failed to add module', 'Creation Error');
+      }
     }
-    resetForm();
-    loadCourse();
   };
 
   const handleConfirmDelete = async () => {
     if (deleteModalData) {
-      await deleteModule(course.id, deleteModalData.id);
-      setDeleteModalData(null);
-      loadCourse();
+      const res = await deleteModule(course.id, deleteModalData.id);
+      if (res.success) {
+        setDeleteModalData(null);
+        await showSuccess(res.message || 'Module deleted successfully', 'Module Deleted');
+        loadCourse();
+      } else {
+        await showError(res.message || 'Failed to delete module', 'Delete Error');
+      }
     }
   };
 
   const openEditModal = (mod) => {
     setEditingModule(mod);
-    const asa = mod.afterSessionAssessment || null;
+    const asa = parseJsonField(mod.afterSessionAssessment);
+    const videoRef = parseJsonField(mod.videoStorageRef);
     let existingVideoId = '';
-    if (mod.videoStorageRef) {
-      if (typeof mod.videoStorageRef === 'object') {
-        existingVideoId = mod.videoStorageRef.videoId || '';
-      } else {
-        try {
-          const parsed = JSON.parse(mod.videoStorageRef);
-          existingVideoId = parsed.videoId || '';
-        } catch {
-          existingVideoId = mod.videoStorageRef;
-        }
-      }
+    if (videoRef && typeof videoRef === 'object') {
+      existingVideoId = videoRef.videoId || '';
+    } else if (typeof mod.videoStorageRef === 'string') {
+      existingVideoId = mod.videoStorageRef.startsWith('{') ? '' : mod.videoStorageRef;
     }
 
     setFormData({
       title: mod.title || '',
       description: mod.description || '',
-      videoId: existingVideoId,
+      videoId: typeof existingVideoId === 'string' ? existingVideoId : '',
       thumbnail: mod.thumbnail || '',
       notesFile: mod.notesFile || mod.notesPdf || null,
       worksheetFile: mod.worksheetFile || mod.activitySheetPdf || null,
@@ -424,7 +435,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
       assessmentFile: asa?.file || null
     });
 
-    if (existingVideoId) {
+    if (existingVideoId && typeof existingVideoId === 'string') {
       setVideoUploadState(prev => ({ ...prev, videoId: existingVideoId }));
       pollVideoStatus(existingVideoId);
     }
@@ -525,18 +536,10 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="text-base font-black tracking-tight">{mod.title}</h3>
                           {(() => {
-                            let vInfo = null;
-                            if (mod.videoStorageRef) {
-                              try {
-                                const parsed = typeof mod.videoStorageRef === 'string' ? JSON.parse(mod.videoStorageRef) : mod.videoStorageRef;
-                                vInfo = { videoId: parsed?.videoId, status: parsed?.status || 'Ready' };
-                              } catch {
-                                vInfo = { videoId: mod.videoStorageRef, status: 'Ready' };
-                              }
-                            }
-                            const status = moduleVideoStatuses[mod.id] || vInfo?.status;
-                            if (!vInfo && !status) return null;
-                            const statusNorm = status || 'Processing';
+                            const vInfo = parseJsonField(mod.videoStorageRef);
+                            const rawStatus = moduleVideoStatuses[mod.id] || vInfo?.status;
+                            if (!vInfo && !rawStatus) return null;
+                            const statusNorm = typeof rawStatus === 'string' ? rawStatus : 'Processing';
                             return (
                               <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                                 statusNorm === 'Ready'
