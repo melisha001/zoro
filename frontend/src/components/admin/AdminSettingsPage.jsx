@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Building, Check, Save, Globe, Info } from 'lucide-react';
+import { Building, Check, Save, Globe, Info, Loader2 } from 'lucide-react';
 import { getWebsiteSettings, saveWebsiteSettings } from '../../api/websiteSettingsApi';
+import { useDialog } from '../../context/DialogContext';
+import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
 export default function AdminSettingsPage() {
+  const { showSuccess, showError } = useDialog();
+  const { isOfflineFallback, offlineMessage, reloadSettings } = useWebsiteSettings();
   const [activeTab, setActiveTab] = useState('landing_content');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [generalInfo, setGeneralInfo] = useState({
     academyName: 'Zoro English Academy',
@@ -23,7 +28,9 @@ export default function AdminSettingsPage() {
     heroPrimaryBtnText: 'Explore Courses',
     heroSecondaryBtnText: 'Join a Competition',
     featuresTitle: 'Featured Learning Programs',
-    featuresSubtitle: 'Empowering children with lifelong cognitive abilities and practical skills.'
+    featuresSubtitle: 'Empowering children with lifelong cognitive abilities and practical skills.',
+    spotlightTitle: 'National Championship & Competitions Spotlight',
+    spotlightSubtitle: 'Participate in nationwide academic showdowns and win certificates and badges.'
   });
 
   const [aboutPageContent, setAboutPageContent] = useState({
@@ -41,7 +48,8 @@ export default function AdminSettingsPage() {
     contactPhone: '+91 98765 43210',
     contactEmail: 'contact@zoroacademy.com',
     contactAddress: 'No. 12, Main Road, Skill Nagar, Chennai - 600001, Tamil Nadu, India',
-    businessHours: 'Monday – Saturday: 9:00 AM – 7:00 PM IST'
+    businessHours: 'Monday – Saturday: 9:00 AM – 7:00 PM IST',
+    googleMapLink: 'https://maps.google.com'
   });
 
   useEffect(() => {
@@ -64,18 +72,28 @@ export default function AdminSettingsPage() {
 
   const handleSaveAll = async (e) => {
     if (e) e.preventDefault();
+    setIsSaving(true);
     try {
-      await saveWebsiteSettings({
+      const res = await saveWebsiteSettings({
         landingPageContent,
         aboutPageContent,
         contactPageContent,
         generalInfo
       });
 
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
+      if (res && res.success) {
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 3000);
+        await reloadSettings();
+        await showSuccess('Settings saved and published successfully', 'Settings Published');
+      } else {
+        await showError(res?.message || 'Failed to save website settings', 'Save Failed');
+      }
     } catch (err) {
       console.error('Failed to save settings:', err);
+      await showError(err?.message || 'Failed to save settings', 'Save Failed');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -123,6 +141,13 @@ export default function AdminSettingsPage() {
           General Information
         </button>
       </div>
+
+      {isOfflineFallback && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2">
+          <Info className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>{offlineMessage || 'Using default content (server unreachable)'}</span>
+        </div>
+      )}
 
       {savedSuccess && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl text-xs font-bold flex items-center gap-2">
@@ -216,15 +241,38 @@ export default function AdminSettingsPage() {
                 />
               </div>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Spotlight Section Title</label>
+                <input
+                  type="text"
+                  value={landingPageContent.spotlightTitle || ''}
+                  onChange={(e) => setLandingPageContent({ ...landingPageContent, spotlightTitle: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Spotlight Section Subtitle</label>
+                <input
+                  type="text"
+                  value={landingPageContent.spotlightSubtitle || ''}
+                  onChange={(e) => setLandingPageContent({ ...landingPageContent, spotlightSubtitle: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-700"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="pt-2">
             <button
               type="submit"
-              className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2 cursor-pointer"
+              disabled={isSaving}
+              className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
-              <span>Save Landing Page Content</span>
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>{isSaving ? 'Saving...' : 'Save and Publish'}</span>
             </button>
           </div>
         </form>
@@ -346,15 +394,27 @@ export default function AdminSettingsPage() {
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
               />
             </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Google Map Directions Link</label>
+              <input
+                type="url"
+                placeholder="https://maps.google.com/?q=..."
+                value={contactPageContent.googleMapLink || ''}
+                onChange={(e) => setContactPageContent({ ...contactPageContent, googleMapLink: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800"
+              />
+            </div>
           </div>
 
           <div className="pt-2">
             <button
               type="submit"
-              className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2 cursor-pointer"
+              disabled={isSaving}
+              className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl shadow-md inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
-              <span>Save About & Contact Info</span>
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>{isSaving ? 'Saving...' : 'Save and Publish'}</span>
             </button>
           </div>
         </form>
@@ -423,10 +483,11 @@ export default function AdminSettingsPage() {
           <div className="pt-2">
             <button
               type="submit"
-              className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-6 py-2.5 rounded-xl shadow-xs inline-flex items-center gap-2 cursor-pointer"
+              disabled={isSaving}
+              className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-6 py-2.5 rounded-xl shadow-xs inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
-              <span>Save General Info</span>
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>{isSaving ? 'Saving...' : 'Save and Publish'}</span>
             </button>
           </div>
         </form>

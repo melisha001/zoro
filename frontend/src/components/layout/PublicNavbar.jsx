@@ -1,24 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { PhoneCall, LogIn, Menu, X } from 'lucide-react';
-import { getWebsiteSettings } from '../../api/websiteSettingsApi';
+import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
 export default function PublicNavbar({ activeScreen, setActiveScreen, onOpenLogin, onOpenEnquire, siteSettings: propSettings }) {
-  const [internalSettings, setInternalSettings] = useState(null);
+  const { settings: contextSettings } = useWebsiteSettings();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    if (!propSettings) {
-      let isMounted = true;
-      getWebsiteSettings()
-        .then(res => {
-          if (isMounted && res && res.data) setInternalSettings(res.data);
-        })
-        .catch(() => {});
-      return () => { isMounted = false; };
-    }
-  }, [propSettings]);
-
-  const siteSettings = propSettings || internalSettings;
+  const siteSettings = propSettings || contextSettings;
 
   const handleLoginClick = () => {
     onOpenLogin();
@@ -35,7 +23,7 @@ export default function PublicNavbar({ activeScreen, setActiveScreen, onOpenLogi
         >
           <img 
             src="/assets/logo.png" 
-            alt="Zoro English Academy Logo" 
+            alt={`${siteSettings?.generalInfo?.academyName || 'Zoro English Academy'} Logo`} 
             className="h-10 sm:h-11 w-auto object-contain group-hover:scale-105 transition-transform" 
           />
           <div className="ml-2.5 sm:ml-3">

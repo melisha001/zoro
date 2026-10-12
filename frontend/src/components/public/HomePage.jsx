@@ -5,8 +5,10 @@ import { getCompetitions } from '../../api/competitionApi';
 import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 import { resolveFileUrl } from '../../api/fileApi';
 import { formatDate } from '../../utils/dateFormatter';
+import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
 export default function HomePage({ setActiveScreen, onOpenEnquire }) {
+  const { settings: globalSettings } = useWebsiteSettings();
   const [courses, setCourses] = useState([]);
   const [featuredComp, setFeaturedComp] = useState(null);
   const [siteSettings, setSiteSettings] = useState(null);
@@ -52,7 +54,8 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
 
   const defaultThumbnailFallback = 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=800';
 
-  const landingContent = siteSettings?.landingPageContent || {
+  const currentSettings = siteSettings || globalSettings;
+  const landingContent = currentSettings?.landingPageContent || {
     heroBadge: 'Learn Today. Grow Tomorrow.',
     heroHeading: 'Skills for a Brighter Tomorrow',
     heroDescription: 'Build skills. Boost confidence. Unlock potential through world-class interactive live classes tailored for children aged 5 to 16.',
@@ -60,7 +63,8 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
     heroSecondaryBtnText: 'Join a Competition',
     featuresTitle: 'Featured Learning Programs',
     featuresSubtitle: 'Empowering children with lifelong cognitive abilities and practical skills.',
-    spotlightTitle: 'National Championship & Competitions Spotlight'
+    spotlightTitle: 'National Championship & Competitions Spotlight',
+    spotlightSubtitle: 'Participate in nationwide academic showdowns and win certificates and badges.'
   };
 
   const showCourses = true;
@@ -194,7 +198,22 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
 
         return (
           <section className="bg-slate-900 text-white py-16">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              {(landingContent.spotlightTitle || landingContent.spotlightSubtitle) && (
+                <div className="mb-6 space-y-1">
+                  {landingContent.spotlightTitle && (
+                    <span className="text-xs font-black uppercase tracking-wider text-blue-400 block">
+                      {landingContent.spotlightTitle}
+                    </span>
+                  )}
+                  {landingContent.spotlightSubtitle && (
+                    <p className="text-sm text-slate-400 font-medium">
+                      {landingContent.spotlightSubtitle}
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="flex flex-col md:flex-row items-center justify-between gap-8">
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider">
@@ -263,6 +282,7 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
               >
                 Explore Competition
               </button>
+              </div>
             </div>
           </section>
         );
@@ -273,40 +293,40 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           <div className="text-center max-w-3xl mx-auto space-y-4">
             <span className="text-xs font-black tracking-wider uppercase bg-blue-100 text-blue-700 px-3.5 py-1.5 rounded-full">
-              About Zoro Academy
+              About {currentSettings?.generalInfo?.academyName || 'Zoro Academy'}
             </span>
             <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-              {siteSettings?.aboutPageContent?.heading || 'About Zoro English Academy'}
+              {currentSettings?.aboutPageContent?.heading || 'About Zoro English Academy'}
             </h2>
             <p className="text-base text-slate-600 font-medium">
-              {siteSettings?.aboutPageContent?.subtitle || 'Nurturing Young Minds Through Small Steps and Big Communication.'}
+              {currentSettings?.aboutPageContent?.subtitle || 'Nurturing Young Minds Through Small Steps and Big Communication.'}
             </p>
           </div>
 
           <div className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200 shadow-sm space-y-8">
             <p className="text-slate-700 leading-relaxed text-base font-normal">
-              {siteSettings?.aboutPageContent?.introParagraph || 'Zoro English Academy is dedicated to empowering students with exceptional communication, phonics, grammar, public speaking, and analytical skills. Our structured curriculum and passionate educators ensure every child steps forward with confidence.'}
+              {currentSettings?.aboutPageContent?.introParagraph || 'Zoro English Academy is dedicated to empowering students with exceptional communication, phonics, grammar, public speaking, and analytical skills. Our structured curriculum and passionate educators ensure every child steps forward with confidence.'}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-100">
               <div className="p-6 rounded-2xl bg-blue-50/60 border border-blue-100 space-y-2">
                 <span className="text-xs font-extrabold text-blue-800 uppercase tracking-wider">Our Mission</span>
                 <p className="text-sm text-slate-700 font-medium">
-                  {siteSettings?.aboutPageContent?.missionStatement || 'To make world-class skill development accessible, engaging, and transformative for every child.'}
+                  {currentSettings?.aboutPageContent?.missionStatement || 'To make world-class skill development accessible, engaging, and transformative for every child.'}
                 </p>
               </div>
 
               <div className="p-6 rounded-2xl bg-emerald-50/60 border border-emerald-100 space-y-2">
                 <span className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider">Our Vision</span>
                 <p className="text-sm text-slate-700 font-medium">
-                  {siteSettings?.aboutPageContent?.visionStatement || 'Creating a global generation of articulate, confident, and empathetic leaders of tomorrow.'}
+                  {currentSettings?.aboutPageContent?.visionStatement || 'Creating a global generation of articulate, confident, and empathetic leaders of tomorrow.'}
                 </p>
               </div>
 
               <div className="p-6 rounded-2xl bg-purple-50/60 border border-purple-100 space-y-2">
                 <span className="text-xs font-extrabold text-purple-800 uppercase tracking-wider">Core Values</span>
                 <p className="text-sm text-slate-700 font-medium">
-                  {siteSettings?.aboutPageContent?.coreValues || 'Excellence, Continuous Growth, Integrity, Student-Centric Empathy'}
+                  {currentSettings?.aboutPageContent?.coreValues || 'Excellence, Continuous Growth, Integrity, Student-Centric Empathy'}
                 </p>
               </div>
             </div>

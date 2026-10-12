@@ -4,6 +4,7 @@ import { Plus, BookOpen, Edit, Layers, Trash2, User, Search } from 'lucide-react
 import { getCourses, deleteCourse } from '../../api/courseApi';
 import ConfirmModal from '../common/ConfirmModal';
 import { resolveFileUrl } from '../../api/fileApi';
+import { useDialog } from '../../context/DialogContext';
 
 const formatModulesDuration = (modules) => {
   if (!modules || modules.length === 0) return '';
@@ -41,6 +42,7 @@ const formatModulesDuration = (modules) => {
 };
 
 export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseIdForEdit }) {
+  const { showSuccess, showError } = useDialog();
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,9 +68,19 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
 
   const handleConfirmDelete = async () => {
     if (deleteModalData) {
-      await deleteCourse(deleteModalData.id);
-      setDeleteModalData(null);
-      loadCourses();
+      try {
+        const res = await deleteCourse(deleteModalData.id);
+        setDeleteModalData(null);
+        if (res && res.success) {
+          await showSuccess(res.message || 'Course deleted successfully', 'Course Deleted');
+          loadCourses();
+        } else {
+          await showError(res?.message || 'Failed to delete course', 'Delete Failed');
+        }
+      } catch (err) {
+        setDeleteModalData(null);
+        await showError(err?.message || 'Failed to delete course', 'Delete Failed');
+      }
     }
   };
 

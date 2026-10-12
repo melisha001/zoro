@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { X, LogIn, Lock, Mail, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 import { authenticateUser } from '../../api/userApi';
 
 export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   const { login, authNotice, clearAuthNotice } = useAuth();
+  const { academyName } = useWebsiteSettings();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -57,14 +59,14 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
         <div className="text-center space-y-2 mb-6">
           <img 
             src="/assets/logo.png" 
-            alt="Zoro English Academy Logo" 
+            alt={`${academyName} Logo`} 
             className="h-14 w-auto mx-auto object-contain" 
           />
           <h3 className="text-2xl font-black text-slate-900 tracking-tight">
             Sign In
           </h3>
           <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">
-            Zoro English Academy Portal
+            {academyName} Portal
           </p>
         </div>
 

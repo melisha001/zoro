@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DialogProvider } from './context/DialogContext';
+import { WebsiteSettingsProvider, useWebsiteSettings } from './context/WebsiteSettingsContext';
 import PublicNavbar from './components/layout/PublicNavbar';
 import DashboardSidebar from './components/layout/DashboardSidebar';
 import DashboardHeader from './components/layout/DashboardHeader';
@@ -219,19 +220,7 @@ function PublicLayout({ onOpenLogin, onOpenEnquire }) {
   const location = useLocation();
   const navigate = useNavigate();
   const activeScreen = getActiveScreenFromPath(location.pathname);
-  const [siteSettings, setSiteSettings] = useState(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    getWebsiteSettings()
-      .then(res => {
-        if (isMounted && res && res.data) {
-          setSiteSettings(res.data);
-        }
-      })
-      .catch(() => {});
-    return () => { isMounted = false; };
-  }, []);
+  const { settings: siteSettings, academyName, contactEmail, contactPhone, address } = useWebsiteSettings();
 
   const handleSetActiveScreen = (screen) => {
     if (screen === 'public-login') {
@@ -240,11 +229,6 @@ function PublicLayout({ onOpenLogin, onOpenEnquire }) {
       navigate(screenToPath(screen));
     }
   };
-
-  const academyName = siteSettings?.generalInfo?.academyName || 'Zoro English Academy';
-  const contactEmail = siteSettings?.contactPageContent?.contactEmail || siteSettings?.generalInfo?.contactEmail || 'contact@zoroacademy.com';
-  const contactPhone = siteSettings?.contactPageContent?.contactPhone || siteSettings?.generalInfo?.contactPhone || '+91 98765 43210';
-  const address = siteSettings?.contactPageContent?.contactAddress || siteSettings?.generalInfo?.address;
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 font-sans antialiased text-slate-900">
@@ -261,7 +245,7 @@ function PublicLayout({ onOpenLogin, onOpenEnquire }) {
       <footer className="bg-slate-900 text-slate-400 py-12 border-t border-slate-800 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex flex-col sm:flex-row items-center space-x-3 text-center sm:text-left gap-2 sm:gap-0">
-            <img src="/assets/logo.png" alt="Zoro English Academy Logo" className="h-7 w-auto object-contain" />
+            <img src="/assets/logo.png" alt={`${academyName} Logo`} className="h-7 w-auto object-contain" />
             <div>
               <span className="font-extrabold text-white text-sm block sm:inline">{academyName}</span>
               <span className="block sm:inline sm:ml-2">© 2026 {academyName}. All rights reserved.</span>
@@ -565,7 +549,9 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <DialogProvider>
-          <AppRoutes />
+          <WebsiteSettingsProvider>
+            <AppRoutes />
+          </WebsiteSettingsProvider>
         </DialogProvider>
       </AuthProvider>
     </BrowserRouter>

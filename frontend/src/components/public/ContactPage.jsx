@@ -5,8 +5,10 @@ import { createEnquiry } from '../../api/enquiryApi';
 import { getCourses } from '../../api/courseApi';
 import { validatePhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
 import PhoneInput from '../common/PhoneInput';
+import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
 export default function ContactPage({ onOpenEnquire }) {
+  const { settings: globalSettings } = useWebsiteSettings();
   const [siteSettings, setSiteSettings] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
@@ -56,13 +58,14 @@ export default function ContactPage({ onOpenEnquire }) {
     loadActiveCourses();
   }, []);
 
-  const contactContent = siteSettings?.contactPageContent || {
+  const contactContent = siteSettings?.contactPageContent || globalSettings?.contactPageContent || {
     heading: 'Contact Us',
     subtitle: "We are here to support your child's learning journey. Get in touch with our expert academic team.",
     contactPhone: '+91 98765 43210',
     contactEmail: 'contact@zoroacademy.com',
     contactAddress: 'No. 12, Main Road, Skill Nagar, Chennai - 600001, Tamil Nadu, India',
-    businessHours: 'Monday – Saturday: 9:00 AM – 7:00 PM IST'
+    businessHours: 'Monday – Saturday: 9:00 AM – 7:00 PM IST',
+    googleMapLink: 'https://maps.google.com'
   };
 
   const handleSubmit = async (e) => {
@@ -164,6 +167,16 @@ export default function ContactPage({ onOpenEnquire }) {
                     <p className="text-sm font-semibold text-slate-800 leading-relaxed">
                       {contactContent.contactAddress}
                     </p>
+                    {contactContent.googleMapLink && (
+                      <a
+                        href={contactContent.googleMapLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline mt-1 cursor-pointer"
+                      >
+                        Get directions &rarr;
+                      </a>
+                    )}
                   </div>
                 </div>
 

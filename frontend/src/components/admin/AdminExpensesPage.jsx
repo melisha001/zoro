@@ -6,6 +6,7 @@ import { getCompetitionRegistrations } from '../../api/competitionRegistrationAp
 import { exportToExcel } from '../../utils/excelExporter';
 import ConfirmModal from '../common/ConfirmModal';
 import MoneyInput from '../common/MoneyInput';
+import { useDialog } from '../../context/DialogContext';
 
 // Salary is EXCLUDED from manual expense categories because trainer salary is fetched automatically from Trainer Salary Management
 const MANUAL_EXPENSE_CATEGORIES = [
@@ -25,6 +26,7 @@ const MANUAL_EXPENSE_CATEGORIES = [
 const ALL_FILTER_CATEGORIES = ['All', 'Salary', ...MANUAL_EXPENSE_CATEGORIES];
 
 export default function AdminExpensesPage({ setActiveScreen }) {
+  const { showSuccess, showError } = useDialog();
   const [expenses, setExpenses] = useState([]);
   const [feeRecords, setFeeRecords] = useState([]);
   const [compRegistrations, setCompRegistrations] = useState([]);
@@ -93,22 +95,42 @@ export default function AdminExpensesPage({ setActiveScreen }) {
     e.preventDefault();
     if (!formData.title.trim() || !formData.amount) return;
 
-    if (editingExpense) {
-      await updateExpense(editingExpense.id, formData);
-    } else {
-      await createExpense(formData);
-    }
+    try {
+      let res;
+      if (editingExpense) {
+        res = await updateExpense(editingExpense.id, formData);
+      } else {
+        res = await createExpense(formData);
+      }
 
-    resetForm();
-    setShowAddModal(false);
-    loadFinancialData();
+      if (res && res.success) {
+        resetForm();
+        setShowAddModal(false);
+        await showSuccess(res.message || (editingExpense ? 'Expense updated successfully' : 'Expense recorded successfully'), editingExpense ? 'Expense Saved' : 'Expense Recorded');
+        loadFinancialData();
+      } else {
+        await showError(res?.message || (editingExpense ? 'Failed to update expense' : 'Failed to record expense'), 'Save Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to save expense', 'Save Failed');
+    }
   };
 
   const handleConfirmDelete = async () => {
     if (deleteExpenseData) {
-      await deleteExpense(deleteExpenseData.id);
-      setDeleteExpenseData(null);
-      loadFinancialData();
+      try {
+        const res = await deleteExpense(deleteExpenseData.id);
+        setDeleteExpenseData(null);
+        if (res && res.success) {
+          await showSuccess(res.message || 'Expense deleted successfully', 'Expense Deleted');
+          loadFinancialData();
+        } else {
+          await showError(res?.message || 'Failed to delete expense', 'Delete Failed');
+        }
+      } catch (err) {
+        setDeleteExpenseData(null);
+        await showError(err?.message || 'Failed to delete expense', 'Delete Failed');
+      }
     }
   };
 

@@ -1,6 +1,6 @@
 import { apiGet, apiPut, apiResponse } from './client';
 
-const DEFAULT_WEBSITE_SETTINGS = {
+export const DEFAULT_WEBSITE_SETTINGS = {
   landingPageContent: {
     heroBadge: 'Learn Today. Grow Tomorrow.',
     heroHeading: 'Skills for a Brighter Tomorrow',
@@ -84,9 +84,11 @@ export const getWebsiteSettings = async () => {
       }
     };
     delete merged.portalControls;
-    return apiResponse(merged);
+    const baseRes = await apiResponse(merged);
+    return { ...baseRes, isOfflineFallback: false };
   }
-  return apiResponse(DEFAULT_WEBSITE_SETTINGS, true);
+  const fallbackRes = await apiResponse(DEFAULT_WEBSITE_SETTINGS, true);
+  return { ...fallbackRes, isOfflineFallback: true, offlineMessage: 'Using default content (server unreachable)' };
 };
 
 export const saveWebsiteSettings = async (newSettingsData) => {

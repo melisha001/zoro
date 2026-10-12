@@ -19,7 +19,7 @@ const ALLOWED_EXTENSIONS = [
 ];
 
 export default function AdminSchedulePage() {
-  const { showError, showWarning } = useDialog();
+  const { showSuccess, showError, showWarning } = useDialog();
   const [selectedDateFilter, setSelectedDateFilter] = useState('');
   const [selectedBatchFilter, setSelectedBatchFilter] = useState('All');
   const [selectedTrainerFilter, setSelectedTrainerFilter] = useState('All');
@@ -246,14 +246,16 @@ export default function AdminSchedulePage() {
 
     try {
       if (editingSchedule) {
-        await updateSchedule(editingSchedule.id, {
+        const res = await updateSchedule(editingSchedule.id, {
           ...formData
         });
-        logActivity('Schedule Updated', `Updated session "${formData.title}" for ${formData.batch}`, 'Schedule');
-        setNotifToast({
-          title: 'Schedule Updated',
-          message: `Session "${formData.title}" updated successfully.`
-        });
+        if (res && res.success) {
+          logActivity('Schedule Updated', `Updated session "${formData.title}" for ${formData.batch}`, 'Schedule');
+          await showSuccess(res.message || `Session "${formData.title}" updated successfully.`, 'Schedule Updated');
+        } else {
+          await showError(res?.message || 'Failed to update schedule', 'Update Failed');
+          return;
+        }
       } else {
         const res = await createSchedule({
           ...formData,
@@ -264,11 +266,10 @@ export default function AdminSchedulePage() {
         if (res?.success) {
           logActivity('Schedule Created', `Scheduled session "${formData.title}" for ${formData.batch} on ${formData.date} (${formData.time})`, 'Schedule');
           await notifyScheduleCreated(res.data || formData);
-
-          setNotifToast({
-            title: 'Schedule Created & Notifications Dispatched',
-            message: `Session "${formData.title}" created for ${formData.batch}. Automatic notifications sent to Trainer ${formData.trainer} and batch students.`
-          });
+          await showSuccess(`Session "${formData.title}" created for ${formData.batch}. Automatic notifications dispatched.`, 'Schedule Created');
+        } else {
+          await showError(res?.message || 'Failed to create schedule', 'Creation Failed');
+          return;
         }
       }
 
@@ -295,6 +296,7 @@ export default function AdminSchedulePage() {
       setFileErrors({});
     } catch (err) {
       console.error('Failed to save schedule:', err);
+      await showError(err?.message || 'Failed to save schedule', 'Save Error');
     }
   };
 
@@ -315,40 +317,50 @@ export default function AdminSchedulePage() {
       rescheduledTime: rescheduleFormData.newTime
     };
 
-    await updateSchedule(rescheduleItem.id, updatedPayload);
-    await notifyScheduleChange(
-      rescheduleItem, 
-      'Rescheduled', 
-      originalDate, 
-      originalTime, 
-      rescheduleFormData.newDate, 
-      rescheduleFormData.newTime
-    );
+    try {
+      const res = await updateSchedule(rescheduleItem.id, updatedPayload);
+      if (res && res.success) {
+        await notifyScheduleChange(
+          rescheduleItem, 
+          'Rescheduled', 
+          originalDate, 
+          originalTime, 
+          rescheduleFormData.newDate, 
+          rescheduleFormData.newTime
+        );
 
-    logActivity('Schedule Rescheduled', `Rescheduled "${rescheduleItem.title}" (${rescheduleItem.batch}) from ${originalDate} ${originalTime} to ${rescheduleFormData.newDate} ${rescheduleFormData.newTime}`, 'Schedule');
+        logActivity('Schedule Rescheduled', `Rescheduled "${rescheduleItem.title}" (${rescheduleItem.batch}) from ${originalDate} ${originalTime} to ${rescheduleFormData.newDate} ${rescheduleFormData.newTime}`, 'Schedule');
 
-    setNotifToast({
-      title: 'Session Rescheduled & Notifications Dispatched',
-      message: `${rescheduleItem.batch} (${rescheduleItem.course}) updated to ${rescheduleFormData.newDate} at ${rescheduleFormData.newTime}. Affected trainer (${rescheduleItem.trainer}) and students notified.`
-    });
+        await showSuccess(`${rescheduleItem.batch} (${rescheduleItem.course}) updated to ${rescheduleFormData.newDate} at ${rescheduleFormData.newTime}. Affected trainer and students notified.`, 'Session Rescheduled');
 
-    setRescheduleItem(null);
-    loadSchedules();
+        setRescheduleItem(null);
+        loadSchedules();
+      } else {
+        await showError(res?.message || 'Failed to reschedule session', 'Reschedule Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to reschedule session', 'Reschedule Failed');
+    }
   };
 
   const confirmDelete = async () => {
     if (!deleteId) return;
     try {
       const itemToDelete = (schedules || []).find(s => s.id === deleteId);
-      await deleteSchedule(deleteId);
-      if (itemToDelete) {
-        logActivity('Schedule Deleted', `Deleted scheduled session "${itemToDelete.title}" for ${itemToDelete.batch}`, 'Schedule');
-      }
-      await loadSchedules();
-    } catch (err) {
-      console.error('Failed to delete schedule:', err);
-    } finally {
+      const res = await deleteSchedule(deleteId);
       setDeleteId(null);
+      if (res && res.success) {
+        if (itemToDelete) {
+          logActivity('Schedule Deleted', `Deleted scheduled session "${itemToDelete.title}" for ${itemToDelete.batch}`, 'Schedule');
+        }
+        await showSuccess(res.message || 'Schedule deleted successfully', 'Schedule Deleted');
+        await loadSchedules();
+      } else {
+        await showError(res?.message || 'Failed to delete schedule', 'Delete Failed');
+      }
+    } catch (err) {
+      setDeleteId(null);
+      await showError(err?.message || 'Failed to delete schedule', 'Delete Failed');
     }
   };
 

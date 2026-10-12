@@ -4,8 +4,10 @@ import { getTrainers } from '../../api/userApi';
 import { getSchedules } from '../../api/scheduleApi';
 import { getMyNotifications } from '../../api/notificationApi';
 import { resolveFileUrl } from '../../api/fileApi';
+import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
 export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScreen }) {
+  const { academyName } = useWebsiteSettings();
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [notifList, setNotifList] = useState([]);
 
@@ -116,7 +118,7 @@ export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScr
           </button>
         )}
         <div className="text-xs font-black text-slate-800 tracking-tight">
-          Zoro English Academy
+          {academyName}
         </div>
       </div>
 

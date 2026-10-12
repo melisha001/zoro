@@ -1,7 +1,10 @@
 import React from 'react';
 import { Lock, LogIn } from 'lucide-react';
+import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
 export default function YouTubeVideo({ url, title, isProtected = false, isAuthenticated = false, onLoginClick, watermarkText }) {
+  const { academyName } = useWebsiteSettings();
+
   // Extract YouTube Video ID from various URL formats
   const getEmbedUrl = (rawUrl) => {
     if (!rawUrl) return null;
@@ -26,7 +29,7 @@ export default function YouTubeVideo({ url, title, isProtected = false, isAuthen
         </div>
         <h3 className="text-xl font-black tracking-tight mb-2">Login required to access this course</h3>
         <p className="text-xs text-slate-300 max-w-md mb-6 leading-relaxed">
-          Please sign in to your Zoro English Academy student account to view enrolled video lessons and learning materials.
+          Please sign in to your {academyName} student account to view enrolled video lessons and learning materials.
         </p>
         <button
           onClick={onLoginClick}
@@ -54,7 +57,7 @@ export default function YouTubeVideo({ url, title, isProtected = false, isAuthen
     >
       <iframe
         src={embedUrl}
-        title={title || 'Zoro English Academy Video'}
+        title={title || `${academyName} Video`}
         className="w-full h-full border-0 pointer-events-auto"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen

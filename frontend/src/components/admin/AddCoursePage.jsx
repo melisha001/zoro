@@ -4,10 +4,12 @@ import { createCourse } from '../../api/courseApi';
 import { getTrainers } from '../../api/userApi';
 import FileUploader from '../common/FileUploader';
 import MoneyInput from '../common/MoneyInput';
+import { useDialog } from '../../context/DialogContext';
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function AddCoursePage({ setActiveScreen }) {
+  const { showSuccess, showError } = useDialog();
   const [trainersList, setTrainersList] = useState([]);
   const [formData, setFormData] = useState({
     title: '',
@@ -65,16 +67,26 @@ export default function AddCoursePage({ setActiveScreen }) {
     }
     setErrorMsg('');
     setSaving(true);
-    const submitPrice = formData.price !== '' ? Number(formData.price) : 0;
-    await createCourse({
-      ...formData,
-      price: submitPrice,
-      trainerId: formData.trainerId || null,
-      assignedTrainer: formData.assignedTrainer || (formData.mode === 'Recorded' ? 'None (Self-Paced)' : ''),
-      audience: formData.audience || 'student'
-    });
-    setSaving(false);
-    setActiveScreen('admin-manage-courses');
+    try {
+      const submitPrice = formData.price !== '' ? Number(formData.price) : 0;
+      const res = await createCourse({
+        ...formData,
+        price: submitPrice,
+        trainerId: formData.trainerId || null,
+        assignedTrainer: formData.assignedTrainer || (formData.mode === 'Recorded' ? 'None (Self-Paced)' : ''),
+        audience: formData.audience || 'student'
+      });
+      setSaving(false);
+      if (res && res.success) {
+        await showSuccess(res.message || 'Course created successfully', 'Course Created');
+        setActiveScreen('admin-manage-courses');
+      } else {
+        await showError(res?.message || 'Failed to create course', 'Creation Failed');
+      }
+    } catch (err) {
+      setSaving(false);
+      await showError(err?.message || 'Failed to create course', 'Creation Failed');
+    }
   };
 
   const isOnlineOrHybrid = formData.mode === 'Online' || formData.mode === 'Hybrid';

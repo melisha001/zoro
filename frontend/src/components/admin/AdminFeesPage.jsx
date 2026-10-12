@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, CreditCard, Search, Download, Send, CheckCircle2, Clock, AlertTriangle, Plus, X, Trash2 } from 'lucide-react';
+import { Search, Download, Plus, X, Trash2 } from 'lucide-react';
 import { getFeeRecords, recordStudentPayment, createFeeRecord, deleteFeeRecord } from '../../api/feesApi';
 import { getStudents } from '../../api/userApi';
 import { getCourses } from '../../api/courseApi';
@@ -7,8 +7,10 @@ import { logActivity } from '../../api/activityLogApi';
 import { exportToExcel } from '../../utils/excelExporter';
 import ConfirmModal from '../common/ConfirmModal';
 import MoneyInput from '../common/MoneyInput';
+import { useDialog } from '../../context/DialogContext';
 
 export default function AdminFeesPage() {
+  const { showSuccess, showError, showWarning } = useDialog();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -101,33 +103,41 @@ export default function AdminFeesPage() {
 
     const { totalFee, paid, due, status } = calculateAddFeeTotals();
     if (initialPayment && parseFloat(initialPayment) > totalFee) {
-      alert(`Initial payment cannot exceed total fee of ₹${totalFee.toLocaleString()}`);
+      await showWarning(`Initial payment cannot exceed total fee of ₹${totalFee.toLocaleString()}`, 'Invalid Payment Amount');
       return;
     }
 
     const courseSummary = Object.keys(selectedFeeCourses).join(', ');
     const batchSummary = targetStudent.courseBatches?.[0]?.batch || targetStudent.batch || 'Unassigned';
 
-    await createFeeRecord({
-      studentId: targetStudent.id,
-      student: targetStudent.name,
-      course: courseSummary,
-      batch: batchSummary,
-      courses: Object.entries(selectedFeeCourses).map(([cName, cFee]) => ({ course: cName, fee: cFee })),
-      totalFee,
-      paidAmount: paid,
-      dueAmount: due,
-      status,
-      date: new Date().toISOString().split('T')[0]
-    });
+    try {
+      const res = await createFeeRecord({
+        studentId: targetStudent.id,
+        student: targetStudent.name,
+        course: courseSummary,
+        batch: batchSummary,
+        courses: Object.entries(selectedFeeCourses).map(([cName, cFee]) => ({ course: cName, fee: cFee })),
+        totalFee,
+        paidAmount: paid,
+        dueAmount: due,
+        status,
+        date: new Date().toISOString().split('T')[0]
+      });
 
-    await logActivity('Student Fees', 'Fee Record Created', `Created fee record of ₹${totalFee.toLocaleString()} for student "${targetStudent.name}" (${courseSummary})`);
-
-    setShowAddFeeModal(false);
-    setAddFeeStudentId('');
-    setSelectedFeeCourses({});
-    setInitialPayment('');
-    loadFees();
+      if (res && res.success) {
+        await logActivity('Student Fees', 'Fee Record Created', `Created fee record of ₹${totalFee.toLocaleString()} for student "${targetStudent.name}" (${courseSummary})`);
+        setShowAddFeeModal(false);
+        setAddFeeStudentId('');
+        setSelectedFeeCourses({});
+        setInitialPayment('');
+        await showSuccess(res.message || `Fee record of ₹${totalFee.toLocaleString()} created successfully.`, 'Fee Record Created');
+        loadFees();
+      } else {
+        await showError(res?.message || 'Failed to create fee record', 'Creation Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to create fee record', 'Creation Failed');
+    }
   };
 
   const handleRecordPaymentSubmit = async (e) => {
@@ -135,25 +145,43 @@ export default function AdminFeesPage() {
     if (!selectedStudent || !paymentAmount) return;
     const amount = parseFloat(paymentAmount);
     if (amount > selectedStudent.dueAmount) {
-      alert(`Payment amount cannot exceed pending due of ₹${selectedStudent.dueAmount.toLocaleString()}`);
+      await showWarning(`Payment amount cannot exceed pending due of ₹${selectedStudent.dueAmount.toLocaleString()}`, 'Invalid Payment Amount');
       return;
     }
     
-    await recordStudentPayment(selectedStudent.id, amount);
-    await logActivity('Student Fees', 'Payment Recorded', `Recorded fee payment of ₹${amount.toLocaleString()} for student "${selectedStudent.student}"`);
-    
-    setShowPaymentModal(false);
-    setSelectedStudent(null);
-    setPaymentAmount('');
-    loadFees();
+    try {
+      const res = await recordStudentPayment(selectedStudent.id, amount);
+      if (res && res.success) {
+        await logActivity('Student Fees', 'Payment Recorded', `Recorded fee payment of ₹${amount.toLocaleString()} for student "${selectedStudent.student}"`);
+        setShowPaymentModal(false);
+        setSelectedStudent(null);
+        setPaymentAmount('');
+        await showSuccess(res.message || `Payment of ₹${amount.toLocaleString()} recorded successfully.`, 'Payment Recorded');
+        loadFees();
+      } else {
+        await showError(res?.message || 'Failed to record payment', 'Payment Error');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to record payment', 'Payment Error');
+    }
   };
 
   const handleConfirmDeleteFee = async () => {
     if (deleteFeeData) {
-      await deleteFeeRecord(deleteFeeData.id);
-      await logActivity('Student Fees', 'Fee Record Deleted', `Deleted fee record for student "${deleteFeeData.student}" (${deleteFeeData.course})`);
-      setDeleteFeeData(null);
-      await loadFees();
+      try {
+        const res = await deleteFeeRecord(deleteFeeData.id);
+        setDeleteFeeData(null);
+        if (res && res.success) {
+          await logActivity('Student Fees', 'Fee Record Deleted', `Deleted fee record for student "${deleteFeeData.student}" (${deleteFeeData.course})`);
+          await showSuccess(res.message || 'Fee record deleted successfully', 'Fee Record Deleted');
+          await loadFees();
+        } else {
+          await showError(res?.message || 'Failed to delete fee record', 'Delete Failed');
+        }
+      } catch (err) {
+        setDeleteFeeData(null);
+        await showError(err?.message || 'Failed to delete fee record', 'Delete Failed');
+      }
     }
   };
 

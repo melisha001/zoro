@@ -13,6 +13,7 @@ import { sanitizePhone, validatePhone, SUBMIT_PHONE_ERROR } from '../../utils/ph
 import PhoneInput from '../common/PhoneInput';
 import ConfirmModal from '../common/ConfirmModal';
 import { useDialog } from '../../context/DialogContext';
+import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
 // Helper to determine if student belongs to batch (match by ID only)
 export const isStudentInBatch = (student, batchObj) => {
@@ -24,7 +25,8 @@ export const isStudentInBatch = (student, batchObj) => {
 };
 
 export default function ManageStudentsPage() {
-  const { showError } = useDialog();
+  const { showError, showSuccess } = useDialog();
+  const { academyName } = useWebsiteSettings();
   const [students, setStudents] = useState([]);
   const [coursesList, setCoursesList] = useState([]);
   const [batchesList, setBatchesList] = useState([]);
@@ -132,11 +134,14 @@ export default function ManageStudentsPage() {
         setShowPasswords(prev => ({ ...prev, [passwordModalStudent.id]: true }));
         logActivity('Student Password Updated', `Admin updated password for student "${passwordModalStudent.name}"`, 'Student');
         setPasswordModalStudent(null);
+        await showSuccess(`Password updated successfully for ${passwordModalStudent.name}`, 'Password Updated');
       } else {
         setPasswordModalError(res.message || 'Failed to update password.');
+        await showError(res.message || 'Failed to update password.', 'Update Failed');
       }
     } catch (err) {
       setPasswordModalError(err?.message || 'Server error updating password.');
+      await showError(err?.message || 'Server error updating password.', 'Update Failed');
     } finally {
       setPasswordModalLoading(false);
     }
@@ -386,10 +391,12 @@ export default function ManageStudentsPage() {
     const res = await updateStudent(editingStudent.id, updatePayload);
     if (!res.success) {
       setFormError(res.message || 'Failed to update student');
+      await showError(res.message || 'Failed to update student', 'Update Failed');
       return;
     }
 
     logActivity('Student Updated', `Updated student details for "${formData.name}" (@${formData.username})`, 'Student');
+    await showSuccess('Student details updated successfully', 'Student Updated');
 
     setEditingStudent(null);
     resetForm();
@@ -413,12 +420,14 @@ export default function ManageStudentsPage() {
       if (!res.success) {
         setDeleteError(res.message || 'Failed to delete student');
         setShowForceOption(true);
+        await showError(res.message || 'Failed to delete student', 'Delete Failed');
         return;
       }
       logActivity('Student Deleted', `Deleted student account for "${deleteStudentData.name}"`, 'Student');
       setDeleteStudentData(null);
       setDeleteError(null);
       setShowForceOption(false);
+      await showSuccess('Student account deleted successfully', 'Student Deleted');
       loadData();
     }
   };
@@ -479,7 +488,8 @@ export default function ManageStudentsPage() {
         s.status || 'Active'
       ];
     });
-    const filename = `Zoro_Academy_All_Students_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const safeAcademyName = (academyName || 'Academy').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${safeAcademyName}_All_Students_${new Date().toISOString().split('T')[0]}.xlsx`;
     exportToExcel(filename, 'All Students', headers, rows);
   };
 
@@ -497,8 +507,9 @@ export default function ManageStudentsPage() {
       s.joinedOn || s.dateOfJoining || '',
       s.status || 'Active'
     ]);
+    const safeAcademyName = (academyName || 'Academy').replace(/[^a-zA-Z0-9]/g, '_');
     const safeBatchName = (batchObj.name || 'Batch').replace(/[^a-zA-Z0-9]/g, '_');
-    const filename = `Zoro_Students_${safeBatchName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const filename = `${safeAcademyName}_Students_${safeBatchName}_${new Date().toISOString().split('T')[0]}.xlsx`;
     exportToExcel(filename, safeBatchName, headers, rows);
   };
 
@@ -1176,7 +1187,7 @@ export default function ManageStudentsPage() {
 
             <div className="bg-slate-900 text-slate-200 p-4 rounded-2xl space-y-2 border border-slate-800 font-mono text-[11px]">
               <div className="text-emerald-400 font-bold border-b border-slate-800 pb-2">
-                Subject: Welcome to Zoro English Academy
+                Subject: Welcome to {academyName}
               </div>
               <p>Hello <strong>{createdEmailModalData.studentName}</strong>,</p>
               <p>Your student account has been created successfully.</p>
@@ -1211,7 +1222,7 @@ export default function ManageStudentsPage() {
                 ))}
               </ul>
               <p className="pt-2 text-[10px] text-slate-400">You can use these details to access your student portal.</p>
-              <div className="text-slate-500 font-bold">Regards,<br />Zoro English Academy</div>
+              <div className="text-slate-500 font-bold">Regards,<br />{academyName}</div>
             </div>
 
             <button

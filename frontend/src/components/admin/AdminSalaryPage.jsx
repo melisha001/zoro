@@ -4,8 +4,10 @@ import { getSalaryPayments, createSalaryPayment, updateSalaryPayment, deleteSala
 import { getTrainers } from '../../api/userApi';
 import ConfirmModal from '../common/ConfirmModal';
 import MoneyInput from '../common/MoneyInput';
+import { useDialog } from '../../context/DialogContext';
 
 export default function AdminSalaryPage() {
+  const { showSuccess, showError } = useDialog();
   const [salaries, setSalaries] = useState([]);
   const [trainers, setTrainers] = useState([]);
   const [stats, setStats] = useState({ totalPaid: 0, currentMonthPaid: 0, uniqueTrainersPaid: 0, totalRecords: 0 });
@@ -58,33 +60,61 @@ export default function AdminSalaryPage() {
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!formData.amount || !formData.trainerName) return;
-    await createSalaryPayment({
-      ...formData,
-      amount: parseFloat(formData.amount),
-      status: 'Paid'
-    });
-    setShowAddModal(false);
-    resetForm();
-    loadData();
+    try {
+      const res = await createSalaryPayment({
+        ...formData,
+        amount: parseFloat(formData.amount),
+        status: 'Paid'
+      });
+      if (res && res.success) {
+        setShowAddModal(false);
+        resetForm();
+        await showSuccess(res.message || 'Salary payment recorded successfully', 'Payment Recorded');
+        loadData();
+      } else {
+        await showError(res?.message || 'Failed to record salary payment', 'Payment Error');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to record salary payment', 'Payment Error');
+    }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!editingRecord || !formData.amount) return;
-    await updateSalaryPayment(editingRecord.id, {
-      ...formData,
-      amount: parseFloat(formData.amount)
-    });
-    setEditingRecord(null);
-    resetForm();
-    loadData();
+    try {
+      const res = await updateSalaryPayment(editingRecord.id, {
+        ...formData,
+        amount: parseFloat(formData.amount)
+      });
+      if (res && res.success) {
+        setEditingRecord(null);
+        resetForm();
+        await showSuccess(res.message || 'Salary record updated successfully', 'Salary Updated');
+        loadData();
+      } else {
+        await showError(res?.message || 'Failed to update salary payment', 'Update Error');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to update salary payment', 'Update Error');
+    }
   };
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    await deleteSalaryPayment(deleteId);
-    setDeleteId(null);
-    loadData();
+    try {
+      const res = await deleteSalaryPayment(deleteId);
+      setDeleteId(null);
+      if (res && res.success) {
+        await showSuccess(res.message || 'Salary payment record deleted successfully', 'Salary Deleted');
+        loadData();
+      } else {
+        await showError(res?.message || 'Failed to delete salary record', 'Delete Failed');
+      }
+    } catch (err) {
+      setDeleteId(null);
+      await showError(err?.message || 'Failed to delete salary record', 'Delete Failed');
+    }
   };
 
   const resetForm = () => {

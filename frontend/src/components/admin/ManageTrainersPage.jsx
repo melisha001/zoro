@@ -9,7 +9,7 @@ import PhoneInput from '../common/PhoneInput';
 import { useDialog } from '../../context/DialogContext';
 
 export default function ManageTrainersPage() {
-  const { showError, showWarning } = useDialog();
+  const { showSuccess, showError, showWarning } = useDialog();
   const [trainers, setTrainers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [joinedDate, setJoinedDate] = useState('');
@@ -248,6 +248,7 @@ export default function ManageTrainersPage() {
         setFormError(res.message || 'Failed to update trainer.');
         return;
       }
+      await showSuccess(res.message || 'Trainer updated successfully', 'Trainer Updated');
       setEditingTrainer(null);
       resetForm();
       loadData();
@@ -279,10 +280,12 @@ export default function ManageTrainersPage() {
       const res = await deleteTrainer(deleteTrainerData.id);
       if (!res.success) {
         setDeleteError(res.message || 'Failed to delete trainer');
+        await showError(res.message || 'Failed to delete trainer', 'Delete Failed');
         return;
       }
       setDeleteTrainerData(null);
       setDeleteError(null);
+      await showSuccess(res.message || 'Trainer deleted successfully', 'Trainer Deleted');
       loadData();
     }
   };
@@ -308,9 +311,10 @@ export default function ManageTrainersPage() {
     const newStatus = trainer.status === 'Inactive' ? 'Active' : 'Inactive';
     const res = await updateUserStatus(trainer.id, newStatus);
     if (!res.success) {
-      showError(res.message || 'Failed to update trainer status', 'Status Update Error');
+      await showError(res.message || 'Failed to update trainer status', 'Status Update Error');
       return;
     }
+    await showSuccess(`Trainer status updated to ${newStatus}`, 'Status Updated');
     logActivity('Trainer Status Changed', `Changed status of trainer "${trainer.name}" to ${newStatus}`, 'Trainer');
     loadData();
   };
@@ -337,9 +341,13 @@ export default function ManageTrainersPage() {
         'Trainer'
       );
       setTrainerDepModalData(null);
+      await showSuccess(
+        action === 'DELETE' ? 'Trainer replaced and deleted successfully' : 'Trainer replaced and marked inactive',
+        'Replacement Complete'
+      );
       loadData();
     } else {
-      showError(res.message || 'Failed to replace trainer.', 'Replacement Error');
+      await showError(res.message || 'Failed to replace trainer.', 'Replacement Error');
     }
   };
 

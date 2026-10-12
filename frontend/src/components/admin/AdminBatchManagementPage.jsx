@@ -4,10 +4,12 @@ import { getBatches, createBatch, updateBatch, deleteBatch } from '../../api/bat
 import { getCourses } from '../../api/courseApi';
 import { getTrainers } from '../../api/userApi';
 import ConfirmModal from '../common/ConfirmModal';
+import { useDialog } from '../../context/DialogContext';
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function AdminBatchManagementPage() {
+  const { showSuccess, showError } = useDialog();
   const [batches, setBatches] = useState([]);
   const [coursesList, setCoursesList] = useState([]);
   const [trainersList, setTrainersList] = useState([]);
@@ -111,26 +113,55 @@ export default function AdminBatchManagementPage() {
       status: formData.status
     };
 
-    if (editingBatch) {
-      await updateBatch(editingBatch.id, payload);
-    } else {
-      await createBatch(payload);
+    try {
+      let res;
+      if (editingBatch) {
+        res = await updateBatch(editingBatch.id, payload);
+      } else {
+        res = await createBatch(payload);
+      }
+      if (res && res.success) {
+        await showSuccess(res.message || (editingBatch ? 'Batch updated successfully' : 'Batch created successfully'), editingBatch ? 'Batch Updated' : 'Batch Created');
+        resetForm();
+        loadData();
+      } else {
+        await showError(res?.message || (editingBatch ? 'Failed to update batch' : 'Failed to create batch'), 'Save Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to save batch', 'Save Failed');
     }
-    resetForm();
-    loadData();
   };
 
   const handleToggleStatus = async (batch) => {
-    const newStatus = batch.status === 'Active' ? 'Inactive' : 'Active';
-    await updateBatch(batch.id, { status: newStatus });
-    loadData();
+    try {
+      const newStatus = batch.status === 'Active' ? 'Inactive' : 'Active';
+      const res = await updateBatch(batch.id, { status: newStatus });
+      if (res && res.success) {
+        await showSuccess(`Batch marked as ${newStatus}`, 'Status Updated');
+        loadData();
+      } else {
+        await showError(res?.message || 'Failed to update status', 'Update Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to update status', 'Update Failed');
+    }
   };
 
   const handleConfirmDelete = async () => {
     if (deleteBatchData) {
-      await deleteBatch(deleteBatchData.id);
-      setDeleteBatchData(null);
-      loadData();
+      try {
+        const res = await deleteBatch(deleteBatchData.id);
+        setDeleteBatchData(null);
+        if (res && res.success) {
+          await showSuccess(res.message || 'Batch deleted successfully', 'Batch Deleted');
+          loadData();
+        } else {
+          await showError(res?.message || 'Failed to delete batch', 'Delete Failed');
+        }
+      } catch (err) {
+        setDeleteBatchData(null);
+        await showError(err?.message || 'Failed to delete batch', 'Delete Failed');
+      }
     }
   };
 

@@ -6,10 +6,12 @@ import { getTrainers } from '../../api/userApi';
 import FileUploader from '../common/FileUploader';
 import MoneyInput from '../common/MoneyInput';
 import { resolveFileUrl } from '../../api/fileApi';
+import { useDialog } from '../../context/DialogContext';
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function EditCoursePage({ courseId: propCourseId, setActiveScreen }) {
+  const { showSuccess, showError } = useDialog();
   const { courseId: paramCourseId } = useParams();
   const navigate = useNavigate();
   const courseId = propCourseId || paramCourseId;
@@ -77,16 +79,26 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
     }
     setErrorMsg('');
     setSaving(true);
-    const submitPrice = formData.price !== '' ? Number(formData.price) : 0;
-    await updateCourse(courseId, {
-      ...formData,
-      price: submitPrice,
-      trainerId: formData.trainerId || null,
-      assignedTrainer: formData.assignedTrainer || (formData.mode === 'Recorded' ? 'None (Self-Paced)' : '')
-    });
-    setSaving(false);
-    if (setActiveScreen) setActiveScreen('admin-manage-courses');
-    navigate('/admin/courses');
+    try {
+      const submitPrice = formData.price !== '' ? Number(formData.price) : 0;
+      const res = await updateCourse(courseId, {
+        ...formData,
+        price: submitPrice,
+        trainerId: formData.trainerId || null,
+        assignedTrainer: formData.assignedTrainer || (formData.mode === 'Recorded' ? 'None (Self-Paced)' : '')
+      });
+      setSaving(false);
+      if (res && res.success) {
+        await showSuccess(res.message || 'Course updated successfully', 'Course Updated');
+        if (setActiveScreen) setActiveScreen('admin-manage-courses');
+        navigate('/admin/courses');
+      } else {
+        await showError(res?.message || 'Failed to update course', 'Update Failed');
+      }
+    } catch (err) {
+      setSaving(false);
+      await showError(err?.message || 'Failed to update course', 'Update Failed');
+    }
   };
 
   const isOnlineOrHybrid = formData.mode === 'Online' || formData.mode === 'Hybrid';

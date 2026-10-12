@@ -4,8 +4,10 @@ import {
   CreditCard, FileText, HelpCircle, BarChart3, Settings, 
   User, Video, Clock, LogOut, Bell, CheckSquare, X, Wallet, FileSpreadsheet, Layers, Trophy, MessageSquare
 } from 'lucide-react';
+import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
 export default function DashboardSidebar({ role, activeScreen, setActiveScreen, isMobileOpen, onMobileClose }) {
+  const { academyName } = useWebsiteSettings();
   let menuItems = [];
 
   if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'Admin') {
@@ -63,11 +65,11 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
         <div className="flex items-center space-x-3">
           <img 
             src="/assets/logo.png" 
-            alt="Zoro English Academy Logo" 
+            alt={`${academyName} Logo`} 
             className="h-9 w-auto object-contain" 
           />
           <div>
-            <h1 className="font-extrabold text-xs text-white tracking-tight leading-none">Zoro English Academy</h1>
+            <h1 className="font-extrabold text-xs text-white tracking-tight leading-none">{academyName}</h1>
             <p className="text-[10px] text-blue-400 font-semibold tracking-wide uppercase mt-0.5">{role} Portal</p>
           </div>
         </div>

@@ -13,6 +13,7 @@ import {
   deleteCompetitionModule 
 } from '../../api/competitionModuleApi';
 import ConfirmModal from '../common/ConfirmModal';
+import { useDialog } from '../../context/DialogContext';
 
 const ALLOWED_EXTENSIONS = [
   'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt',
@@ -22,6 +23,7 @@ const ALLOWED_EXTENSIONS = [
 ];
 
 export default function AdminCompetitionModulesPage({ competitionId: propCompetitionId, setActiveScreen }) {
+  const { showSuccess, showError } = useDialog();
   const { competitionId: paramCompetitionId } = useParams();
   const navigate = useNavigate();
   const competitionId = propCompetitionId || paramCompetitionId;
@@ -167,22 +169,42 @@ export default function AdminCompetitionModulesPage({ competitionId: propCompeti
     e.preventDefault();
     if (!formData.title.trim()) return;
 
-    if (editingModule) {
-      await updateCompetitionModule(editingModule.id, formData);
-    } else {
-      await addCompetitionModule(competition.id, formData);
-    }
+    try {
+      let res;
+      if (editingModule) {
+        res = await updateCompetitionModule(editingModule.id, formData);
+      } else {
+        res = await addCompetitionModule(competition.id, formData);
+      }
 
-    resetForm();
-    setShowAddModal(false);
-    loadData();
+      if (res && res.success) {
+        resetForm();
+        setShowAddModal(false);
+        await showSuccess(res.message || (editingModule ? 'Module updated successfully' : 'Module added successfully'), editingModule ? 'Module Updated' : 'Module Added');
+        loadData();
+      } else {
+        await showError(res?.message || (editingModule ? 'Failed to update module' : 'Failed to add module'), 'Save Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to save module', 'Save Failed');
+    }
   };
 
   const handleConfirmDelete = async () => {
     if (deleteModalData) {
-      await deleteCompetitionModule(deleteModalData.id);
-      setDeleteModalData(null);
-      loadData();
+      try {
+        const res = await deleteCompetitionModule(deleteModalData.id);
+        setDeleteModalData(null);
+        if (res && res.success) {
+          await showSuccess(res.message || 'Module deleted successfully', 'Module Deleted');
+          loadData();
+        } else {
+          await showError(res?.message || 'Failed to delete module', 'Delete Failed');
+        }
+      } catch (err) {
+        setDeleteModalData(null);
+        await showError(err?.message || 'Failed to delete module', 'Delete Failed');
+      }
     }
   };
 

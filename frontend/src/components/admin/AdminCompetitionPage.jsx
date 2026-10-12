@@ -14,7 +14,7 @@ import { useDialog } from '../../context/DialogContext';
 
 export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
   const navigate = useNavigate();
-  const { showError, showWarning } = useDialog();
+  const { showSuccess, showError, showWarning } = useDialog();
 
   const [competitions, setCompetitions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -161,10 +161,19 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
       ...formData,
       registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0
     };
-    await createCompetition(payload);
-    setShowAddModal(false);
-    resetForm();
-    await loadData();
+    try {
+      const res = await createCompetition(payload);
+      if (res && res.success) {
+        setShowAddModal(false);
+        resetForm();
+        await showSuccess(res.message || 'Competition created successfully', 'Competition Created');
+        await loadData();
+      } else {
+        await showError(res?.message || 'Failed to create competition', 'Creation Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to create competition', 'Creation Failed');
+    }
   };
 
   const handleUpdateSubmit = async (e) => {
@@ -175,17 +184,36 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
       ...formData,
       registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0
     };
-    await updateCompetition(editingComp.id, payload);
-    setEditingComp(null);
-    resetForm();
-    await loadData();
+    try {
+      const res = await updateCompetition(editingComp.id, payload);
+      if (res && res.success) {
+        setEditingComp(null);
+        resetForm();
+        await showSuccess(res.message || 'Competition updated successfully', 'Competition Updated');
+        await loadData();
+      } else {
+        await showError(res?.message || 'Failed to update competition', 'Update Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to update competition', 'Update Failed');
+    }
   };
 
   const handleConfirmDelete = async () => {
     if (deleteId) {
-      await deleteCompetition(deleteId);
-      setDeleteId(null);
-      await loadData();
+      try {
+        const res = await deleteCompetition(deleteId);
+        setDeleteId(null);
+        if (res && res.success) {
+          await showSuccess(res.message || 'Competition deleted successfully', 'Competition Deleted');
+          await loadData();
+        } else {
+          await showError(res?.message || 'Failed to delete competition', 'Delete Failed');
+        }
+      } catch (err) {
+        setDeleteId(null);
+        await showError(err?.message || 'Failed to delete competition', 'Delete Failed');
+      }
     }
   };
 
