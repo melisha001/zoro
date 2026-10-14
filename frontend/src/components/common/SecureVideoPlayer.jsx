@@ -1,36 +1,48 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize, RefreshCw, Lock, AlertCircle, ShieldCheck } from 'lucide-react';
-
+import { RefreshCw, Lock, VideoOff, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { resolveFileUrl } from '../../api/fileApi';
+import { sendVideoHeartbeat } from '../../api/progressApi';
 import usePolling from '../../hooks/usePolling';
 
 export default function SecureVideoPlayer({
   videoRefData,
   videoTitle,
   courseTitle,
+  poster,
   studentName = 'Student',
-  studentEmail = 'student@zoro.com',
+  studentEmail = '',
   isAuthorized = true,
   authErrorMsg = '',
   initialPosition = 0,
-  onProgressUpdate
+  moduleId,
+  courseId,
+  onProgressUpdate,
+  onTokenExpired
 }) {
-  const videoRef = useRef(null);
+  const { user } = useAuth();
+  // Watermark requirement: authenticated user's real email as stored (no name, no course, no forced uppercase)
+  const authenticatedEmail = user?.email || studentEmail || '';
+
+  const iframeRef = useRef(null);
   const containerRef = useRef(null);
+  const isResumedRef = useRef(false);
+  const positionRef = useRef(initialPosition || 0);
+  const durationRef = useRef(0);
+  const isPlayingRef = useRef(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [_currentTime, setCurrentTime] = useState(initialPosition || 0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isResumed, setIsResumed] = useState(false);
+  const [isPlayerReady, setIsPlayerReady] = useState(false);
 
-  // Requirement #7: Moving Watermark Position State (changes position periodically)
-  const [watermarkPos, setWatermarkPos] = useState({ top: '10%', left: '10%' });
+  // Moving Watermark Position State (shifts position periodically)
+  const [watermarkPos, setWatermarkPos] = useState({ top: '15%', left: '15%' });
 
   // Watermark position shifting every 6 seconds using visibility-aware usePolling
   usePolling(() => {
-    const topPositions = ['10%', '25%', '65%', '80%', '40%'];
-    const leftPositions = ['10%', '60%', '15%', '70%', '45%'];
+    const topPositions = ['12%', '28%', '65%', '78%', '42%'];
+    const leftPositions = ['10%', '55%', '15%', '65%', '40%'];
     const randIdx = Math.floor(Math.random() * topPositions.length);
     setWatermarkPos({
       top: topPositions[randIdx],
@@ -38,86 +50,7 @@ export default function SecureVideoPlayer({
     });
   }, 6000, true);
 
-  const handleLoadedMetadata = () => {
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration);
-      // Requirement #9: Resume from last watched position
-      if (initialPosition > 0 && !isResumed) {
-        videoRef.current.currentTime = initialPosition;
-        setIsResumed(true);
-      }
-    }
-  };
-
-  const handleTimeUpdate = () => {
-    if (!videoRef.current) return;
-    const cur = videoRef.current.currentTime;
-    const dur = videoRef.current.duration || 1;
-    setCurrentTime(cur);
-
-    const pct = Math.min(100, Math.round((cur / dur) * 100));
-    const isCompleted = pct >= 80;
-
-    if (onProgressUpdate) {
-      onProgressUpdate({
-        lastPosition: Math.floor(cur),
-        completionPercentage: pct,
-        status: isCompleted ? 'Completed' : pct > 0 ? 'In Progress' : 'Not Started'
-      });
-    }
-  };
-
-  const togglePlay = () => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-    } else {
-      videoRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleSeek = (e) => {
-    const seekTime = parseFloat(e.target.value);
-    if (videoRef.current) {
-      videoRef.current.currentTime = seekTime;
-      setCurrentTime(seekTime);
-    }
-  };
-
-  const handleVolumeChange = (e) => {
-    const val = parseFloat(e.target.value);
-    setVolume(val);
-    if (videoRef.current) {
-      videoRef.current.volume = val;
-      setIsMuted(val === 0);
-    }
-  };
-
-  const toggleMute = () => {
-    if (videoRef.current) {
-      videoRef.current.muted = !isMuted;
-      setIsMuted(!isMuted);
-    }
-  };
-
-  const toggleFullScreen = () => {
-    if (containerRef.current) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        containerRef.current.requestFullscreen();
-      }
-    }
-  };
-
-  const formatTime = (secs) => {
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
-
-  // Secure Bunny Stream or protected video source
+  // Parse video reference data
   let parsedRef = videoRefData;
   if (typeof videoRefData === 'string' && videoRefData.trim().startsWith('{')) {
     try {
@@ -127,14 +60,184 @@ export default function SecureVideoPlayer({
     }
   }
 
-  const videoSrc = (typeof parsedRef === 'string' && (parsedRef.startsWith('http://') || parsedRef.startsWith('https://')))
-    ? parsedRef
-    : (parsedRef?.streamUrl 
-      || parsedRef?.fallbackUrl 
-      || parsedRef?.directStreamUrl 
-      || (parsedRef?.storageKey 
-        ? `https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4#t=${initialPosition}`
-        : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'));
+  // Resolve embed URL for Bunny Stream iframe player
+  let embedUrl = null;
+  if (typeof parsedRef === 'string') {
+    if (parsedRef.includes('/embed/')) {
+      embedUrl = parsedRef;
+    }
+  } else if (parsedRef && typeof parsedRef === 'object') {
+    embedUrl = parsedRef.embedUrl || null;
+    if (!embedUrl && parsedRef.videoId && parsedRef.token) {
+      const libId = parsedRef.libraryId || '770045';
+      const expParam = parsedRef.expiresAt ? `&expires=${parsedRef.expiresAt}` : '';
+      embedUrl = `https://iframe.mediadelivery.net/embed/${libId}/${parsedRef.videoId}?token=${parsedRef.token}${expParam}`;
+    }
+  }
+
+  const isProcessing = Boolean(
+    parsedRef?.status === 'Processing' ||
+    parsedRef?.statusLabel === 'Processing' ||
+    (typeof authErrorMsg === 'string' && authErrorMsg.toLowerCase().includes('processing'))
+  );
+
+  // Resolve thumbnail/poster fallback
+  const resolvedPoster = poster
+    ? resolveFileUrl(poster)
+    : (parsedRef?.thumbnailUrl
+        ? resolveFileUrl(parsedRef.thumbnailUrl)
+        : (parsedRef?.videoId && parsedRef?.cdnHost
+            ? `https://${parsedRef.cdnHost}/${parsedRef.videoId}/thumbnail.jpg`
+            : null));
+
+  // PostMessage helper for Player.js protocol
+  const postToPlayer = (method, value) => {
+    try {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(
+          JSON.stringify({
+            context: 'player.js',
+            method: method,
+            value: value
+          }),
+          '*'
+        );
+      }
+    } catch {
+      // ignore cross-origin postMessage errors
+    }
+  };
+
+  // Register Player.js event listeners on message
+  useEffect(() => {
+    isResumedRef.current = false;
+    setIsPlayerReady(false);
+
+    const handleMessage = (event) => {
+      let data = event.data;
+      if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      if (!data || data.context !== 'player.js') return;
+
+      if (data.event === 'ready') {
+        setIsPlayerReady(true);
+        postToPlayer('addEventListener', 'play');
+        postToPlayer('addEventListener', 'pause');
+        postToPlayer('addEventListener', 'timeupdate');
+        postToPlayer('addEventListener', 'ended');
+
+        if (initialPosition > 0 && !isResumedRef.current) {
+          postToPlayer('setCurrentTime', initialPosition);
+          isResumedRef.current = true;
+        }
+      } else if (data.event === 'play') {
+        setIsPlaying(true);
+        isPlayingRef.current = true;
+      } else if (data.event === 'pause') {
+        setIsPlaying(false);
+        isPlayingRef.current = false;
+      } else if (data.event === 'timeupdate') {
+        const val = data.value || {};
+        const pos = val.seconds != null ? val.seconds : val.currentTime;
+        const dur = val.duration;
+        if (pos != null) {
+          setCurrentTime(pos);
+          positionRef.current = pos;
+        }
+        if (dur != null && dur > 0) {
+          setDuration(dur);
+          durationRef.current = dur;
+        }
+      } else if (data.event === 'ended') {
+        setIsPlaying(false);
+        isPlayingRef.current = false;
+
+        const effectiveModuleId = moduleId || parsedRef?.moduleId;
+        const effectiveCourseId = courseId || parsedRef?.courseId;
+        const finalDur = durationRef.current || duration || 0;
+        if (effectiveModuleId && finalDur > 0) {
+          sendVideoHeartbeat({
+            moduleId: effectiveModuleId,
+            position: finalDur,
+            duration: finalDur,
+            courseId: effectiveCourseId,
+            studentId: user?.id || user?.email
+          }).then(res => {
+            if (res?.success && res?.data) {
+              onProgressUpdate?.(res.data);
+            }
+          });
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [embedUrl, initialPosition, moduleId, courseId, user, onProgressUpdate]);
+
+  // Heartbeat every 5 seconds while playing
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const interval = setInterval(() => {
+      if (!isPlayingRef.current) return;
+      const pos = positionRef.current || 0;
+      const dur = durationRef.current || duration || 0;
+      const effectiveModuleId = moduleId || parsedRef?.moduleId;
+      const effectiveCourseId = courseId || parsedRef?.courseId;
+
+      if (effectiveModuleId && dur > 0) {
+        sendVideoHeartbeat({
+          moduleId: effectiveModuleId,
+          position: pos,
+          duration: dur,
+          courseId: effectiveCourseId,
+          studentId: user?.id || user?.email
+        }).then(res => {
+          if (res?.success && res?.data) {
+            onProgressUpdate?.(res.data);
+          }
+        });
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, moduleId, courseId, duration, user, onProgressUpdate, parsedRef]);
+
+  // Token expiration refresher (requests new embed token before expiry without interrupting playback)
+  useEffect(() => {
+    const expiresAt = parsedRef?.expiresAt;
+    if (!expiresAt) return;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const remainingSec = expiresAt - nowSec;
+    // Request fresh token 2 minutes before expiration
+    const refreshTimeoutMs = Math.max((remainingSec - 120) * 1000, 10000);
+    const timer = setTimeout(() => {
+      onTokenExpired?.();
+    }, refreshTimeoutMs);
+    return () => clearTimeout(timer);
+  }, [parsedRef?.expiresAt, onTokenExpired]);
+
+  const handleIframeLoad = () => {
+    // Send Player.js handshake
+    postToPlayer('addEventListener', 'ready');
+    postToPlayer('addEventListener', 'play');
+    postToPlayer('addEventListener', 'pause');
+    postToPlayer('addEventListener', 'timeupdate');
+    postToPlayer('addEventListener', 'ended');
+
+    if (initialPosition > 0 && !isResumedRef.current) {
+      setTimeout(() => {
+        postToPlayer('setCurrentTime', initialPosition);
+        isResumedRef.current = true;
+      }, 600);
+    }
+  };
 
   if (!isAuthorized) {
     return (
@@ -153,100 +256,71 @@ export default function SecureVideoPlayer({
     );
   }
 
+  if (isProcessing) {
+    return (
+      <div className="relative w-full aspect-video bg-slate-950 rounded-3xl overflow-hidden flex flex-col items-center justify-center p-8 text-center text-white border border-slate-900 shadow-2xl">
+        <div className="w-16 h-16 bg-amber-500/20 border border-amber-500/40 rounded-full flex items-center justify-center mb-3 text-amber-400">
+          <RefreshCw className="w-8 h-8 animate-spin" />
+        </div>
+        <h3 className="text-lg font-black tracking-tight mb-1 text-slate-200">Video is still processing</h3>
+        <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+          The video lesson is currently being encoded and optimized by Bunny Stream. Please check back in a few minutes.
+        </p>
+      </div>
+    );
+  }
+
+  if (!embedUrl) {
+    return (
+      <div className="relative w-full aspect-video bg-slate-950 rounded-3xl overflow-hidden flex flex-col items-center justify-center p-8 text-center text-white border border-slate-900 shadow-2xl">
+        <div className="w-16 h-16 bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center mb-3 text-slate-400">
+          <VideoOff className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-black tracking-tight mb-1 text-slate-200">Video is not available yet</h3>
+        <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+          The video lesson for this module is being processed or will be uploaded shortly by your trainer.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
-      onContextMenu={(e) => e.preventDefault()} // Requirement #6: Anti-download context menu protection
-      className="relative w-full aspect-video rounded-3xl overflow-hidden shadow-2xl border border-slate-900 bg-slate-950 group select-none flex flex-col justify-between"
+      onContextMenu={(e) => e.preventDefault()}
+      className="relative w-full aspect-video rounded-3xl overflow-hidden shadow-2xl border border-slate-900 bg-slate-950 select-none"
     >
-      {/* HTML5 Video Element with no-download controls */}
-      <video
-        ref={videoRef}
-        src={videoSrc}
-        controlsList="nodownload noplaybackrate"
-        disablePictureInPicture
-        onLoadedMetadata={handleLoadedMetadata}
-        onTimeUpdate={handleTimeUpdate}
-        onEnded={() => {
-          setIsPlaying(false);
-          if (onProgressUpdate) {
-            onProgressUpdate({ lastPosition: Math.floor(duration), completionPercentage: 100, status: 'Completed' });
-          }
-        }}
-        onClick={togglePlay}
-        className="w-full h-full object-contain cursor-pointer"
+      {/* Bunny Stream Embed Player iframe */}
+      <iframe
+        ref={iframeRef}
+        src={embedUrl}
+        title={videoTitle || courseTitle || 'Recorded Lesson Video'}
+        onLoad={handleIframeLoad}
+        loading="lazy"
+        className="w-full h-full border-0 absolute inset-0 z-10"
+        allow="autoplay; fullscreen; picture-in-picture"
+        allowFullScreen={true}
       />
 
-      {/* Requirement #7: DYNAMIC MOVING WATERMARK OVERLAY */}
-      <div
-        style={{ top: watermarkPos.top, left: watermarkPos.left }}
-        className="absolute pointer-events-none transition-all duration-1000 ease-in-out bg-black/50 backdrop-blur-xs px-3.5 py-1.5 rounded-full border border-white/20 text-[10px] font-mono font-bold text-white/80 tracking-widest uppercase shadow-lg z-20 flex items-center gap-1.5"
-      >
-        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-        <span>{studentName} • {studentEmail} • {courseTitle || 'ZORO ACADEMY'}</span>
-      </div>
+      {/* DYNAMIC MOVING WATERMARK OVERLAY: Email only, real casing, semi-transparent, pointer-events none */}
+      {authenticatedEmail && (
+        <div
+          style={{ top: watermarkPos.top, left: watermarkPos.left }}
+          className="absolute pointer-events-none transition-all duration-1000 ease-in-out bg-black/40 backdrop-blur-xs px-3 py-1 rounded-full border border-white/10 text-xs font-mono font-medium text-white/70 shadow-lg z-20 flex items-center gap-1.5 select-none"
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span>{authenticatedEmail}</span>
+        </div>
+      )}
 
-      {/* Top Header Overlay */}
-      <div className="absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-slate-950/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between z-10 text-white">
+      {/* Optional Top Header Bar */}
+      <div className="absolute top-0 inset-x-0 p-3 bg-gradient-to-b from-slate-950/80 to-transparent pointer-events-none z-20 flex items-center justify-between text-white opacity-0 hover:opacity-100 transition-opacity">
         <div className="text-xs font-black truncate max-w-md">
           {videoTitle || 'Private Recorded Lesson'}
         </div>
-        <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-full border border-emerald-800">
-          🔒 SECURE SIGNED STREAM
+        <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800">
+          🔒 SECURE EMBED STREAM
         </div>
-      </div>
-
-      {/* Custom Player Controls Bar (Requirement #6 & #8: No Download Option) */}
-      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-950/95 via-slate-950/80 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity space-y-2 z-10">
-        
-        {/* Progress Range Bar */}
-        <input
-          type="range"
-          min="0"
-          max={duration || 100}
-          value={currentTime}
-          onChange={handleSeek}
-          className="w-full accent-blue-600 h-1.5 bg-white/30 rounded-lg cursor-pointer appearance-none"
-        />
-
-        <div className="flex items-center justify-between text-white text-xs">
-          <div className="flex items-center space-x-3">
-            <button onClick={togglePlay} className="p-1.5 hover:bg-white/20 rounded-full transition-colors cursor-pointer">
-              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 fill-current" />}
-            </button>
-
-            <button onClick={toggleMute} className="p-1.5 hover:bg-white/20 rounded-full transition-colors cursor-pointer">
-              {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-            </button>
-
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={volume}
-              onChange={handleVolumeChange}
-              className="w-16 h-1 accent-blue-500 bg-white/30 rounded-lg cursor-pointer"
-            />
-
-            <span className="font-mono text-[11px] text-slate-300">
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            {initialPosition > 0 && (
-              <span className="text-[10px] text-sky-300 font-mono font-bold flex items-center gap-1">
-                <RefreshCw className="w-3 h-3" /> Resumed from {formatTime(initialPosition)}
-              </span>
-            )}
-
-            <button onClick={toggleFullScreen} className="p-1.5 hover:bg-white/20 rounded-full transition-colors cursor-pointer">
-              <Maximize className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
       </div>
     </div>
   );

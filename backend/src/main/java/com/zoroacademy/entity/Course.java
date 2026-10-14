@@ -68,6 +68,12 @@ public class Course {
     @Column(name = "trainer_id", length = 64)
     private String trainerId;
 
+    @Column(name = "google_meet_url", columnDefinition = "TEXT")
+    private String googleMeetUrl;
+
+    @Column(name = "assigned_trainer_id", length = 64)
+    private String assignedTrainerId;
+
     @OneToMany(mappedBy = "course", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("moduleOrder ASC")
     @JsonManagedReference
@@ -254,6 +260,22 @@ public class Course {
         this.trainerId = trainerId;
     }
 
+    public String getGoogleMeetUrl() {
+        return googleMeetUrl;
+    }
+
+    public void setGoogleMeetUrl(String googleMeetUrl) {
+        this.googleMeetUrl = googleMeetUrl;
+    }
+
+    public String getAssignedTrainerId() {
+        return assignedTrainerId;
+    }
+
+    public void setAssignedTrainerId(String assignedTrainerId) {
+        this.assignedTrainerId = assignedTrainerId;
+    }
+
     public List<CourseModule> getModules() {
         return modules;
     }
@@ -376,6 +398,18 @@ public class Course {
             this.assignedTrainer = assignedTrainer;
             return this;
         }
+        private String googleMeetUrl;
+        private String assignedTrainerId;
+
+        public Builder googleMeetUrl(String googleMeetUrl) {
+            this.googleMeetUrl = googleMeetUrl;
+            return this;
+        }
+
+        public Builder assignedTrainerId(String assignedTrainerId) {
+            this.assignedTrainerId = assignedTrainerId;
+            return this;
+        }
         public Builder modules(List<CourseModule> modules) {
             this.modules = modules;
             return this;
@@ -403,6 +437,8 @@ public class Course {
         public Course build() {
             Course c = new Course(id, title, description, category, mode, level, audience, duration, price, originalPrice, thumbnail, previewVideoUrl, enrolled, rating, status, assignedTrainer, modules, resources, createdAt, updatedAt);
             c.setSlug(slug);
+            c.setGoogleMeetUrl(googleMeetUrl);
+            c.setAssignedTrainerId(assignedTrainerId);
             return c;
         }
     }

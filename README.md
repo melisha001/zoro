@@ -133,3 +133,34 @@ Flyway automatically applies all schema migrations (V1 through V19) on applicati
 - **Per-Tab Session Storage**: Tokens and auth session state are stored in browser `sessionStorage` (with automatic startup purging of legacy `localStorage` keys). This guarantees strict per-tab session isolation, allowing different roles or accounts in separate browser tabs without cross-tab session clobbering.
 - **Navbar Behavior**: Public navigation always displays "Login" and "Enquire Now". Clicking "Login" navigates directly to `/login` without unwanted auto-redirects.
 - Unauthenticated access to any protected route immediately redirects to the public landing page. Roles are strictly validated from authenticated JWT tokens retrieved via `/api/auth/me` on session restoration.
+
+---
+
+## Bunny Storage & Bunny Stream Cost Optimization (Part C Guidance)
+
+To maintain low cloud infrastructure costs while providing high-quality streaming and download performance, configure the following settings in your Bunny dashboard:
+
+### 1. Bunny Stream Dashboard Settings
+- **Encoding Resolutions**:
+  - Keep **360p**, **480p**, and **720p** enabled. These resolutions provide crisp playback on mobile and desktop while minimizing bandwidth usage for learners on cellular/broadband connections.
+  - Disable **1080p**, **1440p**, and **4K** encoding. High-definition transcoding incurs significant CPU encoding credits and increases video storage by 300%–500% with negligible educational benefit for whiteboard/lecture videos.
+- **Keep Original Video**:
+  - Set **"Keep original video"** to **OFF** (Disabled). Bunny automatically deletes the raw uploaded MP4 file once HLS/transcoding completes, saving ~50% video storage space immediately.
+- **Token Authentication & Security**:
+  - Enable **Token Authentication** in your Bunny Stream Video Library settings.
+  - Configure the URL token security key (`BUNNY_TOKEN_AUTH_KEY`) to match your backend environment variable.
+  - Configure Token Expiration: the backend generates short-lived signed tokens with Asia/Kolkata timestamps, preventing hotlinking and unauthorized ripping.
+- **Watermarking**:
+  - Enable dynamic watermarking with student email/ID overlay if desired to deter screen-record distribution.
+
+### 2. Bunny Storage Dashboard Settings
+- **Storage Tier & Region**:
+  - Choose a **Single Region** storage zone (e.g., Singapore for APAC/India or Falkenstein/Frankfurt for EU) rather than multi-region geo-replication. Multi-region replication doubles or triples storage pricing per GB.
+- **Edge Rule Caching**:
+  - Configure caching headers on your Pull Zone: cache static public documents, icons, and thumbnails at the CDN edge for 30+ days.
+  - Private documents (`/private/**`) are served via short-lived signed token URLs or backend proxy streaming.
+- **Deduplication & Orphan Purging**:
+  - The application backend automatically calculates SHA-256 hashes on upload to prevent duplicate file storage. Identical files reuse existing storage paths with reference counting.
+  - An automated scheduled job runs daily at 2:00 AM IST to purge orphaned files and videos unreferenced by any module, schedule, or submission for > 24 hours.
+  - Administrators can review storage metrics, configure student submission retention periods, and trigger dry-run or live cleanup operations from the **Academy Settings -> Storage & Cost Control** dashboard.
+

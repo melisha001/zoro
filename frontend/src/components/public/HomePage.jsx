@@ -6,6 +6,7 @@ import { getWebsiteSettings } from '../../api/websiteSettingsApi';
 import { resolveFileUrl } from '../../api/fileApi';
 import { formatDate } from '../../utils/dateFormatter';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
+import SafeImage from '../common/SafeImage';
 
 export default function HomePage({ setActiveScreen, onOpenEnquire }) {
   const { settings: globalSettings } = useWebsiteSettings();
@@ -52,7 +53,7 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
     { title: 'Certified Programs', desc: 'Govt. recognized skill certificates', icon: Award, color: 'bg-amber-50 text-amber-600' },
   ];
 
-  const defaultThumbnailFallback = 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=800';
+  const defaultThumbnailFallback = '/assets/course-placeholder.svg';
 
   const currentSettings = siteSettings || globalSettings;
   const landingContent = currentSettings?.landingPageContent || {
@@ -154,13 +155,11 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
               <div key={course.id} className="bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-md hover:shadow-xl transition-all group flex flex-col justify-between">
                 <div>
                   <div className="relative h-48 overflow-hidden bg-slate-100">
-                    <img 
+                    <SafeImage 
                       src={courseImg} 
                       alt={course.title} 
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        e.target.src = defaultThumbnailFallback;
-                      }}
+                      fallbackSrc={defaultThumbnailFallback}
                     />
                   </div>
                   <div className="p-6">

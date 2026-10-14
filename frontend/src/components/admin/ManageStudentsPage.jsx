@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   UserPlus, Search, Edit, Trash2, Key, X, Calendar, 
   Download, CheckCircle2, AlertCircle, Users as UsersIcon,
-  Copy, Check, Eye, EyeOff
+  Copy, Check, Eye, EyeOff, Video
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, updateUserStatus, getAdminVisiblePassword, setAdminUserPassword } from '../../api/userApi';
-import { getCourses } from '../../api/courseApi';
+import { getCourses, getCourseStudents } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { logActivity } from '../../api/activityLogApi';
 import { exportToExcel } from '../../utils/excelExporter';
@@ -33,7 +33,10 @@ export default function ManageStudentsPage() {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [joinedDate, setJoinedDate] = useState('');
-  const [viewMode, setViewMode] = useState('batch-wise'); // 'batch-wise' or 'table'
+  const [viewMode, setViewMode] = useState('batch-wise'); // 'batch-wise', 'table', or 'recorded'
+  const [selectedRecordedCourseId, setSelectedRecordedCourseId] = useState('');
+  const [recordedStudents, setRecordedStudents] = useState([]);
+  const [loadingRecordedStudents, setLoadingRecordedStudents] = useState(false);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
@@ -159,6 +162,25 @@ export default function ManageStudentsPage() {
     joinedOn: new Date().toISOString().split('T')[0]
   });
 
+  const recordedCourses = (coursesList || []).filter(c => (c.mode || '').toLowerCase() === 'recorded');
+  const selectedRecordedCourse = recordedCourses.find(c => c.id === selectedRecordedCourseId);
+
+  const loadRecordedStudents = async (cId) => {
+    if (!cId) {
+      setRecordedStudents([]);
+      return;
+    }
+    setLoadingRecordedStudents(true);
+    try {
+      const res = await getCourseStudents(cId);
+      setRecordedStudents(res.data || []);
+    } catch {
+      setRecordedStudents([]);
+    } finally {
+      setLoadingRecordedStudents(false);
+    }
+  };
+
   const loadData = async () => {
     const sRes = await getStudents();
     setStudents(sRes.data || []);
@@ -168,11 +190,25 @@ export default function ManageStudentsPage() {
 
     const bRes = await getBatches();
     setBatchesList(bRes.data || []);
+
+    if (selectedRecordedCourseId) {
+      loadRecordedStudents(selectedRecordedCourseId);
+    }
   };
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (viewMode === 'recorded') {
+      if (!selectedRecordedCourseId && recordedCourses.length > 0) {
+        setSelectedRecordedCourseId(recordedCourses[0].id);
+      } else if (selectedRecordedCourseId) {
+        loadRecordedStudents(selectedRecordedCourseId);
+      }
+    }
+  }, [viewMode, selectedRecordedCourseId, coursesList]);
 
   const validateEmail = (emailStr) => {
     const trimmed = (emailStr || '').trim();
@@ -221,10 +257,11 @@ export default function ManageStudentsPage() {
     } else {
       const updatedCourses = [...current, courseTitle];
       const crsObj = coursesList.find(c => c.title === courseTitle);
+      const isRecorded = crsObj && (crsObj.mode || '').toLowerCase() === 'recorded';
       const courseBatches = batchesList.filter(b => 
         ((crsObj && b.courseId === crsObj.id) || b.courseName === courseTitle) && b.status === 'Active'
       );
-      currentMap[courseTitle] = courseBatches.length > 0 ? courseBatches[0].name : '';
+      currentMap[courseTitle] = isRecorded ? '' : (courseBatches.length > 0 ? courseBatches[0].name : '');
       setFormData({ ...formData, selectedCourses: updatedCourses, courseBatchMap: currentMap });
     }
   };
@@ -271,19 +308,34 @@ export default function ManageStudentsPage() {
       return;
     }
 
-    const courseBatches = (formData.selectedCourses || []).map(crs => {
+    const courseBatches = [];
+    for (const crs of (formData.selectedCourses || [])) {
       const crsObj = coursesList.find(c => c.title === crs || c.id === crs);
-      const bName = (formData.courseBatchMap && formData.courseBatchMap[crs]) || '';
-      const bObj = batchesList.find(b => b.name === bName && ((crsObj && b.courseId === crsObj.id) || b.courseName === crs));
-      return {
-        course: crsObj ? crsObj.title : crs,
-        courseId: crsObj ? crsObj.id : null,
-        batch: bName || (bObj ? bObj.name : 'Unassigned'),
-        batchId: bObj ? bObj.id : null
-      };
-    });
+      const isRecorded = crsObj && (crsObj.mode || '').toLowerCase() === 'recorded';
+      if (isRecorded) {
+        courseBatches.push({
+          course: crsObj ? crsObj.title : crs,
+          courseId: crsObj ? crsObj.id : null,
+          batch: null,
+          batchId: null
+        });
+      } else {
+        const bName = (formData.courseBatchMap && formData.courseBatchMap[crs]) || '';
+        const bObj = batchesList.find(b => b.name === bName && ((crsObj && b.courseId === crsObj.id) || b.courseName === crs));
+        if (!bObj && !bName) {
+          setFormError(`Please select a batch for course "${crsObj ? crsObj.title : crs}".`);
+          return;
+        }
+        courseBatches.push({
+          course: crsObj ? crsObj.title : crs,
+          courseId: crsObj ? crsObj.id : null,
+          batch: bName || (bObj ? bObj.name : ''),
+          batchId: bObj ? bObj.id : null
+        });
+      }
+    }
 
-    const courseString = courseBatches.map(cb => `${cb.course} (${cb.batch})`).join(', ');
+    const courseString = courseBatches.map(cb => cb.batch ? `${cb.course} (${cb.batch})` : cb.course).join(', ');
 
     const newStudentObj = {
       name: formData.name.trim(),
@@ -360,19 +412,34 @@ export default function ManageStudentsPage() {
       }
     }
 
-    const courseBatches = (formData.selectedCourses || []).map(crs => {
+    const courseBatches = [];
+    for (const crs of (formData.selectedCourses || [])) {
       const crsObj = coursesList.find(c => c.title === crs || c.id === crs);
-      const bName = (formData.courseBatchMap && formData.courseBatchMap[crs]) || '';
-      const bObj = batchesList.find(b => b.name === bName && ((crsObj && b.courseId === crsObj.id) || b.courseName === crs));
-      return {
-        course: crsObj ? crsObj.title : crs,
-        courseId: crsObj ? crsObj.id : null,
-        batch: bName || (bObj ? bObj.name : 'Unassigned'),
-        batchId: bObj ? bObj.id : null
-      };
-    });
+      const isRecorded = crsObj && (crsObj.mode || '').toLowerCase() === 'recorded';
+      if (isRecorded) {
+        courseBatches.push({
+          course: crsObj ? crsObj.title : crs,
+          courseId: crsObj ? crsObj.id : null,
+          batch: null,
+          batchId: null
+        });
+      } else {
+        const bName = (formData.courseBatchMap && formData.courseBatchMap[crs]) || '';
+        const bObj = batchesList.find(b => b.name === bName && ((crsObj && b.courseId === crsObj.id) || b.courseName === crs));
+        if (!bObj && !bName) {
+          setFormError(`Please select a batch for course "${crsObj ? crsObj.title : crs}".`);
+          return;
+        }
+        courseBatches.push({
+          course: crsObj ? crsObj.title : crs,
+          courseId: crsObj ? crsObj.id : null,
+          batch: bName || (bObj ? bObj.name : ''),
+          batchId: bObj ? bObj.id : null
+        });
+      }
+    }
 
-    const courseString = courseBatches.map(cb => `${cb.course} (${cb.batch})`).join(', ');
+    const courseString = courseBatches.map(cb => cb.batch ? `${cb.course} (${cb.batch})` : cb.course).join(', ');
 
     const updatePayload = {
       name: formData.name.trim(),
@@ -536,6 +603,63 @@ export default function ManageStudentsPage() {
     return true;
   });
 
+  const filteredRecordedStudents = recordedStudents.filter(student => {
+    const query = searchTerm.toLowerCase().trim();
+    if (query) {
+      const matchesSearch = (
+        (student.name && student.name.toLowerCase().includes(query)) ||
+        (student.username && student.username.toLowerCase().includes(query)) ||
+        (student.email && student.email.toLowerCase().includes(query)) ||
+        (student.phone && student.phone.toLowerCase().includes(query)) ||
+        (student.id && String(student.id).toLowerCase().includes(query)) ||
+        (student.status && student.status.toLowerCase().includes(query))
+      );
+      if (!matchesSearch) return false;
+    }
+
+    if (joinedDate) {
+      const sDate = student.enrolledDate || student.joinedOn || student.dateOfJoining;
+      if (!sDate) return false;
+      if (sDate !== joinedDate) return false;
+    }
+
+    return true;
+  });
+
+  const handleExportRecordedCourseToExcel = () => {
+    const crsTitle = selectedRecordedCourse ? selectedRecordedCourse.title : 'Recorded_Course';
+    const headers = [
+      'Student Name',
+      'Username',
+      'Email',
+      'Phone',
+      'Course',
+      'Enrolled Date',
+      'Completed Modules',
+      'Total Modules',
+      'Progress',
+      'Progress %',
+      'Status'
+    ];
+    const rows = filteredRecordedStudents.map(s => [
+      s.name || '',
+      s.username || '',
+      s.email || '',
+      s.phone || '',
+      crsTitle,
+      s.enrolledDate || '',
+      s.completedModules ?? 0,
+      s.totalModules ?? 0,
+      s.progress || `${s.completedModules || 0} / ${s.totalModules || 0}`,
+      `${s.progressPercentage || 0}%`,
+      s.status || 'Active'
+    ]);
+    const safeAcademyName = (academyName || 'Academy').replace(/[^a-zA-Z0-9]/g, '_');
+    const safeCourseName = crsTitle.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${safeAcademyName}_Students_${safeCourseName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    exportToExcel(filename, safeCourseName, headers, rows);
+  };
+
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
       
@@ -624,6 +748,14 @@ export default function ManageStudentsPage() {
               }`}
             >
               All Table View
+            </button>
+            <button
+              onClick={() => setViewMode('recorded')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                viewMode === 'recorded' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Recorded Courses
             </button>
           </div>
 
@@ -790,7 +922,7 @@ export default function ManageStudentsPage() {
             })
           )}
         </div>
-      ) : (
+      ) : viewMode === 'table' ? (
         /* Global Table View */
         <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-md">
           <div className="overflow-x-auto">
@@ -922,6 +1054,205 @@ export default function ManageStudentsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      ) : (
+        /* Recorded Courses View */
+        <div className="space-y-6">
+          {/* Top selection banner */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md p-6 sm:p-8 space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+              <div className="flex items-center space-x-3.5">
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                  <Video className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-slate-900">Recorded Courses Management</h2>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Self-paced students enrolled in on-demand recorded courses with module completion tracking.
+                  </p>
+                </div>
+              </div>
+
+              {recordedCourses.length > 0 && selectedRecordedCourseId && (
+                <button
+                  onClick={handleExportRecordedCourseToExcel}
+                  disabled={filteredRecordedStudents.length === 0}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold px-4 py-2.5 rounded-xl shadow-xs flex items-center space-x-2 text-xs cursor-pointer self-start md:self-auto transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Export to Excel</span>
+                </button>
+              )}
+            </div>
+
+            {/* Course Selector Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex-1 max-w-md space-y-1.5">
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                  Select Recorded Course:
+                </label>
+                <select
+                  value={selectedRecordedCourseId}
+                  onChange={(e) => setSelectedRecordedCourseId(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                >
+                  {recordedCourses.length === 0 ? (
+                    <option value="">No recorded courses found</option>
+                  ) : (
+                    recordedCourses.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.title} ({c.level || 'All Levels'}) — {c.modules?.length || 0} Modules
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {selectedRecordedCourse && (
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 text-xs">
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase">Total Enrolled</span>
+                    <span className="text-slate-900 font-black">{recordedStudents.length} Students</span>
+                  </div>
+                  <div className="bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 text-xs">
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase">Course Modules</span>
+                    <span className="text-slate-900 font-black">{selectedRecordedCourse.modules?.length || 0} Modules</span>
+                  </div>
+                  <div className="bg-indigo-50 px-3.5 py-2 rounded-xl border border-indigo-200 text-xs">
+                    <span className="text-indigo-600 font-bold block text-[10px] uppercase">Mode</span>
+                    <span className="text-indigo-900 font-black">Recorded (Self-Paced)</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Students Table */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-md">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                <thead>
+                  <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider font-bold">
+                    <th className="py-3 px-4">Student Name</th>
+                    <th className="py-3 px-4">Username</th>
+                    <th className="py-3 px-4">Email</th>
+                    <th className="py-3 px-4">Phone</th>
+                    <th className="py-3 px-4">Enrolled Date</th>
+                    <th className="py-3 px-4">Progress (Completed / Total)</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                  {loadingRecordedStudents ? (
+                    <tr>
+                      <td colSpan="8" className="py-10 text-center text-slate-400 font-bold text-xs">
+                        Loading enrolled students...
+                      </td>
+                    </tr>
+                  ) : filteredRecordedStudents.length > 0 ? (
+                    filteredRecordedStudents.map(student => {
+                      const isActive = (student.status || 'Active').toLowerCase() === 'active';
+                      const pct = student.progressPercentage || 0;
+                      return (
+                        <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-4 px-4 font-black text-slate-900">
+                            {student.name}
+                          </td>
+                          <td className="py-4 px-4 font-bold text-slate-800 font-mono">
+                            @{student.username || 'n/a'}
+                          </td>
+                          <td className="py-4 px-4 text-blue-900 font-bold">
+                            {student.email}
+                          </td>
+                          <td className="py-4 px-4 text-slate-600 font-mono font-bold">
+                            {student.phone || 'N/A'}
+                          </td>
+                          <td className="py-4 px-4 text-slate-600 font-medium">
+                            {student.enrolledDate || 'N/A'}
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="flex flex-col gap-1 w-44">
+                              <div className="flex justify-between items-center text-[11px] font-bold">
+                                <span className="text-slate-800">
+                                  {student.completedModules || 0} / {student.totalModules || 0} Modules
+                                </span>
+                                <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded ${
+                                  pct === 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {pct}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200/50">
+                                <div 
+                                  className={`h-full transition-all duration-300 rounded-full ${
+                                    pct === 100 ? 'bg-emerald-500' : 'bg-blue-600'
+                                  }`} 
+                                  style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4">
+                            <button
+                              onClick={() => handleToggleStudentStatus(student)}
+                              className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer transition-colors ${
+                                isActive
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : 'bg-slate-100 text-slate-500 border border-slate-200'
+                              }`}
+                            >
+                              <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                              <span>{isActive ? 'ACTIVE' : 'INACTIVE'}</span>
+                            </button>
+                          </td>
+                          <td className="py-4 px-4 text-right space-x-2">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSetPasswordModal(student)}
+                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
+                              title="Set New Password"
+                            >
+                              <Key className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const fullStudent = students.find(s => s.id === student.id) || student;
+                                openEditModal(fullStudent);
+                              }}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
+                              title="Edit Account"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDeleteStudentData(student);
+                                setDeleteError(null);
+                                setShowForceOption(false);
+                              }}
+                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                              title="Delete Account"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="8" className="py-8 text-center text-slate-500 font-bold text-xs">
+                        {recordedCourses.length === 0 
+                          ? 'No recorded courses exist yet.'
+                          : 'No students enrolled in this recorded course matching your filter.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1086,30 +1417,39 @@ export default function ManageStudentsPage() {
 
                           {isChecked && (
                             <div className="mt-2.5 pl-6 space-y-1">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-[11px] font-bold text-slate-500">Select Batch:</span>
-                                <select
-                                  value={selectedBatchForCourse}
-                                  onChange={(e) => handleBatchChangeForCourse(crs.title, e.target.value)}
-                                  disabled={courseBatches.length === 0}
-                                  className="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-bold text-[#0F52BA] focus:outline-none"
-                                >
-                                  {courseBatches.length > 0 ? (
-                                    courseBatches.map(b => (
-                                      <option key={b.id} value={b.name}>
-                                        {b.name} ({b.day} {b.session})
-                                      </option>
-                                    ))
-                                  ) : (
-                                    <option value="">No batches available</option>
-                                  )}
-                                </select>
-                              </div>
+                              {((crs.mode || '').toLowerCase() === 'recorded') ? (
+                                <div className="flex items-center space-x-2 text-[11px] font-bold text-indigo-700 bg-indigo-50/80 px-2.5 py-1.5 rounded-lg border border-indigo-100 w-fit">
+                                  <Video className="w-3.5 h-3.5 text-indigo-600" />
+                                  <span>Recorded Course (Self-paced, no batch required)</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-[11px] font-bold text-slate-500">Select Batch:</span>
+                                    <select
+                                      value={selectedBatchForCourse}
+                                      onChange={(e) => handleBatchChangeForCourse(crs.title, e.target.value)}
+                                      disabled={courseBatches.length === 0}
+                                      className="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-bold text-[#0F52BA] focus:outline-none"
+                                    >
+                                      {courseBatches.length > 0 ? (
+                                        courseBatches.map(b => (
+                                          <option key={b.id} value={b.name}>
+                                            {b.name} ({b.day} {b.session})
+                                          </option>
+                                        ))
+                                      ) : (
+                                        <option value="">No batches available</option>
+                                      )}
+                                    </select>
+                                  </div>
 
-                              {courseBatches.length === 0 && (
-                                <p className="text-[10px] text-amber-600 font-bold">
-                                  ⚠️ No batches available for this course. Please create a batch in Batch Management first.
-                                </p>
+                                  {courseBatches.length === 0 && (
+                                    <p className="text-[10px] text-amber-600 font-bold">
+                                      ⚠️ No batches available for this course. Please create a batch in Batch Management first.
+                                    </p>
+                                  )}
+                                </>
                               )}
                             </div>
                           )}
@@ -1301,41 +1641,74 @@ export default function ManageStudentsPage() {
       )}
 
       {/* Delete Confirmation Modal */}
-      <ConfirmModal
-        isOpen={Boolean(deleteStudentData)}
-        title="Delete Student Account"
-        message={`Are you sure you want to delete student account for "${deleteStudentData?.name}" (@${deleteStudentData?.username})?`}
-        confirmText="Delete Student"
-        error={deleteError}
-        onConfirm={() => handleConfirmDelete(false)}
-        onCancel={() => {
-          setDeleteStudentData(null);
-          setDeleteError(null);
-          setShowForceOption(false);
-        }}
-      >
-        {showForceOption && (
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-3">
-            <div className="text-amber-800 text-xs font-bold">
-              ⚠️ Warning: Force deleting will permanently remove:
+      {(() => {
+        const fullDeleteStudent = students.find(s => s.id === deleteStudentData?.id) || deleteStudentData;
+        const activeEnrollmentCount = fullDeleteStudent?.courseBatches?.length || 
+          (fullDeleteStudent?.course ? fullDeleteStudent.course.split(',').map(s => s.trim()).filter(Boolean).length : 0);
+        const enrolledCoursesSummary = fullDeleteStudent?.course || 
+          (fullDeleteStudent?.courseBatches?.map(cb => cb.batch ? `${cb.course} (${cb.batch})` : cb.course).join(', ')) || 
+          'None';
+
+        return (
+          <ConfirmModal
+            isOpen={Boolean(deleteStudentData)}
+            title="Delete Student Account"
+            message={`Are you sure you want to delete student account for "${deleteStudentData?.name}" (@${deleteStudentData?.username})?`}
+            confirmText={activeEnrollmentCount > 0 ? "Remove from all courses and delete" : "Delete Student"}
+            error={deleteError}
+            onConfirm={() => handleConfirmDelete(activeEnrollmentCount > 0)}
+            onCancel={() => {
+              setDeleteStudentData(null);
+              setDeleteError(null);
+              setShowForceOption(false);
+            }}
+          >
+            <div className="space-y-3">
+              {activeEnrollmentCount > 0 ? (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-amber-800">
+                    <span>Active Course Enrollments:</span>
+                    <span className="px-2 py-0.5 bg-amber-200 text-amber-900 rounded-full font-mono text-[11px] font-black">
+                      {activeEnrollmentCount} {activeEnrollmentCount === 1 ? 'Course' : 'Courses'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-700">
+                    <span className="font-semibold text-amber-900">Enrolled:</span> {enrolledCoursesSummary}
+                  </p>
+                  <p className="text-[11px] text-amber-800 font-medium">
+                    ⚠️ Deleting this student will remove them from all active courses and cascade their attendance, submissions, fees, and doubts.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] text-slate-600">
+                  Student has 0 active course enrollments.
+                </div>
+              )}
+
+              {showForceOption && (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-3">
+                  <div className="text-rose-800 text-xs font-bold">
+                    ⚠️ Permanent Deletion Notice:
+                  </div>
+                  <ul className="list-disc pl-5 text-[11px] text-rose-700 space-y-1">
+                    <li>All active course enrollments ({activeEnrollmentCount})</li>
+                    <li>All attendance and schedule join records</li>
+                    <li>All assignment submissions and doubt inquiries</li>
+                    <li>All fee payment history and records</li>
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmDelete(true)}
+                    className="w-full py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl text-xs transition-colors cursor-pointer shadow-md"
+                  >
+                    Remove from all courses and delete
+                  </button>
+                </div>
+              )}
             </div>
-            <ul className="list-disc pl-5 text-[11px] text-amber-700 space-y-1">
-              <li>All active and past course enrollments & batch assignments</li>
-              <li>All pending and recorded fee records & payment history</li>
-              <li>All attendance records</li>
-              <li>All assignment submissions & doubts</li>
-              <li>All student notifications & learning progress</li>
-            </ul>
-            <button
-              type="button"
-              onClick={() => handleConfirmDelete(true)}
-              className="w-full py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl text-xs transition-colors cursor-pointer"
-            >
-              Remove from all courses and delete
-            </button>
-          </div>
-        )}
-      </ConfirmModal>
+          </ConfirmModal>
+        );
+      })()}
 
     </div>
   );

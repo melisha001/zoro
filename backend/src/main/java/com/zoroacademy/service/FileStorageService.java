@@ -1,22 +1,27 @@
 package com.zoroacademy.service;
 
 import com.zoroacademy.entity.StoredFile;
+import com.zoroacademy.event.StorageFilePurgeEvent;
 import com.zoroacademy.exception.BadRequestException;
 import com.zoroacademy.exception.ResourceNotFoundException;
 import com.zoroacademy.repository.StoredFileRepository;
 import com.zoroacademy.service.storage.StorageProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
 import java.util.*;
 
 @Service
@@ -25,13 +30,18 @@ public class FileStorageService {
     private final StoredFileRepository storedFileRepository;
     private final StorageProvider storageProvider;
     private final BunnyTokenService bunnyTokenService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${jwt.secret:defaultSecretForFileLinksOnlyNotForJwtAuthKey123}")
     private String linkSecret;
 
+    // Size limits by category (C3)
     private static final long MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
-    private static final long MAX_DOC_SIZE = 100 * 1024 * 1024; // 100 MB
+    private static final long MAX_AUDIO_SIZE = 25 * 1024 * 1024; // 25 MB
+    private static final long MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500 MB
+    private static final long MAX_SUBMISSION_SIZE = 25 * 1024 * 1024; // 25 MB
     private static final long MAX_PUBLIC_DOC_SIZE = 10 * 1024 * 1024; // 10 MB
+    private static final long MAX_DOC_SIZE = 50 * 1024 * 1024; // 50 MB
 
     private static final Set<String> IMAGE_CATEGORIES = Set.of(
             "image", "images", "avatar", "thumbnail", "banner", "profile"
@@ -45,11 +55,13 @@ public class FileStorageService {
     public FileStorageService(
             StoredFileRepository storedFileRepository,
             StorageProvider storageProvider,
-            @Autowired(required = false) BunnyTokenService bunnyTokenService
+            @Autowired(required = false) BunnyTokenService bunnyTokenService,
+            @Autowired(required = false) ApplicationEventPublisher eventPublisher
     ) {
         this.storedFileRepository = storedFileRepository;
         this.storageProvider = storageProvider;
         this.bunnyTokenService = bunnyTokenService;
+        this.eventPublisher = eventPublisher;
     }
 
     public StoredFile storeFile(MultipartFile file, String category, String ownerId) {
@@ -60,16 +72,30 @@ public class FileStorageService {
         String normCategory = (category != null ? category.trim().toLowerCase(Locale.ROOT) : "document");
         boolean isImage = IMAGE_CATEGORIES.contains(normCategory);
 
-        // Size check
+        // Size limit check per category (Requirement C3)
         long size = file.getSize();
         if ("public-document".equals(normCategory)) {
             if (size > MAX_PUBLIC_DOC_SIZE) {
                 throw new BadRequestException("Public document file size exceeds maximum limit of 10 MB.");
             }
-        } else if (isImage && size > MAX_IMAGE_SIZE) {
-            throw new BadRequestException("Image file size exceeds maximum limit of 5 MB.");
+        } else if (isImage) {
+            if (size > MAX_IMAGE_SIZE) {
+                throw new BadRequestException("Image file size exceeds maximum limit of 5 MB.");
+            }
+        } else if ("audio".equals(normCategory) || "audio-recording".equals(normCategory)) {
+            if (size > MAX_AUDIO_SIZE) {
+                throw new BadRequestException("Audio file size exceeds maximum limit of 25 MB.");
+            }
+        } else if ("video".equals(normCategory) || "video-recording".equals(normCategory)) {
+            if (size > MAX_VIDEO_SIZE) {
+                throw new BadRequestException("Video file size exceeds maximum limit of 500 MB.");
+            }
+        } else if ("assignment-submission".equals(normCategory) || "submission".equals(normCategory)) {
+            if (size > MAX_SUBMISSION_SIZE) {
+                throw new BadRequestException("Submission file size exceeds maximum limit of 25 MB.");
+            }
         } else if (size > MAX_DOC_SIZE) {
-            throw new BadRequestException("Document file size exceeds maximum limit of 100 MB.");
+            throw new BadRequestException("Document file size exceeds maximum limit of 50 MB.");
         }
 
         // Magic bytes & type validation
@@ -91,11 +117,46 @@ public class FileStorageService {
 
         validateMagicBytes(headerBytes, originalFilename, normCategory, isImage);
 
+        byte[] fileBytes;
+        try {
+            fileBytes = file.getBytes();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read file bytes: " + e.getMessage(), e);
+        }
+
+        String ext = getFileExtension(originalFilename);
+
+        // Image compression and resize (Requirement C3)
+        if (isImage) {
+            byte[] processed = compressAndResizeImage(fileBytes, ext, normCategory);
+            if (processed != null && processed.length > 0) {
+                fileBytes = processed;
+                size = (long) fileBytes.length;
+            }
+        }
+
+        // Calculate SHA-256 for deduplication (Requirement C4)
+        String sha256 = computeSha256(fileBytes);
+
+        // Deduplication check: if identical content from same owner exists, increment ref_count and reuse
+        Optional<StoredFile> existingFileOpt = Optional.empty();
+        if (ownerId != null && !ownerId.isBlank()) {
+            existingFileOpt = storedFileRepository.findFirstBySha256HashAndOwnerId(sha256, ownerId);
+        }
+        if (existingFileOpt.isEmpty()) {
+            existingFileOpt = storedFileRepository.findFirstBySha256Hash(sha256);
+        }
+
+        if (existingFileOpt.isPresent()) {
+            StoredFile existing = existingFileOpt.get();
+            existing.setRefCount((existing.getRefCount() != null ? existing.getRefCount() : 1) + 1);
+            return storedFileRepository.save(existing);
+        }
+
         // Determine public status and partition storage path
         boolean isPublic = PUBLIC_CATEGORIES.contains(normCategory);
         String prefix = isPublic ? "public" : "private";
 
-        String ext = getFileExtension(originalFilename);
         String fileId = UUID.randomUUID().toString();
         String storedFilename = fileId + (ext.isEmpty() ? "" : "." + ext);
         String storagePath = prefix + "/" + normCategory + "/" + storedFilename;
@@ -103,15 +164,16 @@ public class FileStorageService {
         String contentType = file.getContentType();
         if ("public-document".equals(normCategory) || "pdf".equalsIgnoreCase(ext)) {
             contentType = "application/pdf";
+        } else if ("mp3".equalsIgnoreCase(ext)) {
+            contentType = "audio/mpeg";
+        } else if ("mp4".equalsIgnoreCase(ext)) {
+            contentType = "video/mp4";
+        } else if ("docx".equalsIgnoreCase(ext)) {
+            contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        } else if ("doc".equalsIgnoreCase(ext)) {
+            contentType = "application/msword";
         } else if (contentType == null || contentType.isBlank()) {
             contentType = isImage ? "image/" + (ext.isEmpty() ? "jpeg" : ext) : "application/octet-stream";
-        }
-
-        byte[] fileBytes;
-        try {
-            fileBytes = file.getBytes();
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to read file bytes: " + e.getMessage(), e);
         }
 
         storageProvider.store(storagePath, fileBytes, contentType);
@@ -124,7 +186,9 @@ public class FileStorageService {
                 normCategory,
                 ownerId,
                 storagePath,
-                isPublic
+                isPublic,
+                sha256,
+                1
         );
 
         return storedFileRepository.save(storedFile);
@@ -136,10 +200,36 @@ public class FileStorageService {
         }
 
         String normCategory = (category != null ? category.trim().toLowerCase(Locale.ROOT) : "document");
+        boolean isImage = IMAGE_CATEGORIES.contains(normCategory);
+        String ext = getFileExtension(originalName);
+
+        // Compress image if applicable
+        if (isImage) {
+            byte[] processed = compressAndResizeImage(data, ext, normCategory);
+            if (processed != null && processed.length > 0) {
+                data = processed;
+            }
+        }
+
+        // SHA-256 deduplication
+        String sha256 = computeSha256(data);
+        Optional<StoredFile> existingFileOpt = Optional.empty();
+        if (ownerId != null && !ownerId.isBlank()) {
+            existingFileOpt = storedFileRepository.findFirstBySha256HashAndOwnerId(sha256, ownerId);
+        }
+        if (existingFileOpt.isEmpty()) {
+            existingFileOpt = storedFileRepository.findFirstBySha256Hash(sha256);
+        }
+
+        if (existingFileOpt.isPresent()) {
+            StoredFile existing = existingFileOpt.get();
+            existing.setRefCount((existing.getRefCount() != null ? existing.getRefCount() : 1) + 1);
+            return storedFileRepository.save(existing);
+        }
+
         boolean isPublic = PUBLIC_CATEGORIES.contains(normCategory);
         String prefix = isPublic ? "public" : "private";
 
-        String ext = getFileExtension(originalName);
         String fileId = UUID.randomUUID().toString();
         String storedFilename = fileId + (ext.isEmpty() ? "" : "." + ext);
         String storagePath = prefix + "/" + normCategory + "/" + storedFilename;
@@ -156,7 +246,9 @@ public class FileStorageService {
                 normCategory,
                 ownerId,
                 storagePath,
-                isPublic
+                isPublic,
+                sha256,
+                1
         );
 
         return storedFileRepository.save(storedFile);
@@ -171,10 +263,36 @@ public class FileStorageService {
         return storageProvider.loadAsResource(storedFile.getStoragePath());
     }
 
+    /**
+     * Deletes a file with reference-counting protection (Requirement C1 & C4).
+     * If ref_count > 1, decrements count and keeps storage file.
+     * When ref_count <= 1, removes DB record and triggers post-commit Bunny storage purge.
+     */
     public void deleteFile(String id) {
-        StoredFile storedFile = getFileMetadata(id);
-        storageProvider.delete(storedFile.getStoragePath());
+        if (id == null || id.isBlank()) return;
+        StoredFile storedFile = storedFileRepository.findById(id).orElse(null);
+        if (storedFile == null) return;
+
+        int currentRef = storedFile.getRefCount() != null ? storedFile.getRefCount() : 1;
+        if (currentRef > 1) {
+            storedFile.setRefCount(currentRef - 1);
+            storedFileRepository.save(storedFile);
+            return;
+        }
+
+        String storagePath = storedFile.getStoragePath();
         storedFileRepository.delete(storedFile);
+
+        // Check if any other records share the exact same storage path
+        if (storedFileRepository.countByStoragePath(storagePath) == 0) {
+            if (eventPublisher != null) {
+                eventPublisher.publishEvent(new StorageFilePurgeEvent(storagePath));
+            } else {
+                try {
+                    storageProvider.delete(storagePath);
+                } catch (Exception ignored) {}
+            }
+        }
     }
 
     /**
@@ -248,6 +366,87 @@ public class FileStorageService {
         }
     }
 
+    public static String computeSha256(byte[] data) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(data);
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+        }
+    }
+
+    /**
+     * Compress images and downscale if max dimension > 1600px with ~80% JPEG quality.
+     */
+    private byte[] compressAndResizeImage(byte[] imageBytes, String ext, String category) {
+        if (imageBytes == null || imageBytes.length == 0) return imageBytes;
+        try {
+            ByteArrayInputStream bais = new ByteArrayInputStream(imageBytes);
+            java.awt.image.BufferedImage original = javax.imageio.ImageIO.read(bais);
+            if (original == null) {
+                return imageBytes;
+            }
+
+            int width = original.getWidth();
+            int height = original.getHeight();
+            boolean needsResize = width > 1600 || height > 1600;
+            boolean isCompressedCategory = "avatar".equals(category) || "thumbnail".equals(category) || "banner".equals(category) || "profile".equals(category);
+
+            if (!needsResize && !isCompressedCategory && imageBytes.length <= 1024 * 1024) {
+                return imageBytes;
+            }
+
+            int targetWidth = width;
+            int targetHeight = height;
+            if (needsResize) {
+                if (width > height) {
+                    targetWidth = 1600;
+                    targetHeight = Math.max(1, (int) Math.round((double) height * 1600.0 / width));
+                } else {
+                    targetHeight = 1600;
+                    targetWidth = Math.max(1, (int) Math.round((double) width * 1600.0 / height));
+                }
+            }
+
+            java.awt.image.BufferedImage resized = new java.awt.image.BufferedImage(targetWidth, targetHeight, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            java.awt.Graphics2D g2d = resized.createGraphics();
+            g2d.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2d.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+            g2d.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setColor(java.awt.Color.WHITE);
+            g2d.fillRect(0, 0, targetWidth, targetHeight);
+            g2d.drawImage(original, 0, 0, targetWidth, targetHeight, null);
+            g2d.dispose();
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            Iterator<javax.imageio.ImageWriter> writers = javax.imageio.ImageIO.getImageWritersByFormatName("jpg");
+            if (writers.hasNext()) {
+                javax.imageio.ImageWriter writer = writers.next();
+                try (javax.imageio.stream.ImageOutputStream ios = javax.imageio.ImageIO.createImageOutputStream(baos)) {
+                    writer.setOutput(ios);
+                    javax.imageio.ImageWriteParam param = writer.getDefaultWriteParam();
+                    if (param.canWriteCompressed()) {
+                        param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+                        param.setCompressionQuality(0.80f);
+                    }
+                    writer.write(null, new javax.imageio.IIOImage(resized, null, null), param);
+                } finally {
+                    writer.dispose();
+                }
+                byte[] compressed = baos.toByteArray();
+                if (compressed.length < imageBytes.length || needsResize) {
+                    return compressed;
+                }
+            }
+        } catch (Exception ignored) {}
+        return imageBytes;
+    }
+
     private void validateMagicBytes(byte[] header, String originalFilename, String category, boolean requireImage) {
         String ext = getFileExtension(originalFilename).toLowerCase(Locale.ROOT);
 
@@ -274,8 +473,15 @@ public class FileStorageService {
                 }
             }
         } else {
-            boolean isValidDoc = isPdf || isZipOrOfficeXml || isOle2Office || isJpg || isPng || isWebp
-                    || Set.of("pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "csv", "json").contains(ext);
+            boolean isAudioOrVideo = (header.length >= 3 && header[0] == 'I' && header[1] == 'D' && header[2] == '3')
+                    || (header.length >= 2 && (header[0] & 0xFF) == 0xFF && (header[1] & 0xE0) == 0xE0)
+                    || (header.length >= 8 && header[4] == 'f' && header[5] == 't' && header[6] == 'y' && header[7] == 'p')
+                    || (header.length >= 4 && (header[0] & 0xFF) == 0x1A && (header[1] & 0xFF) == 0x45 && (header[2] & 0xFF) == 0xDF && (header[3] & 0xFF) == 0xA3)
+                    || (header.length >= 12 && header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' && header[8] == 'W' && header[9] == 'A' && header[10] == 'V' && header[11] == 'E');
+
+            boolean isValidDoc = isPdf || isZipOrOfficeXml || isOle2Office || isJpg || isPng || isWebp || isAudioOrVideo
+                    || Set.of("pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "csv", "json",
+                              "mp3", "mp4", "wav", "webm", "m4a", "ogg", "mov", "avi", "mkv").contains(ext);
             if (!isValidDoc) {
                 throw new BadRequestException("Invalid or unsupported file format: " + ext);
             }

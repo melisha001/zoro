@@ -123,3 +123,12 @@ export const deleteSchedule = async (id) => {
   }
   return apiResponse(false, false, res.message || 'Failed to delete schedule');
 };
+
+export const joinSchedule = async (id) => {
+  if (!id) {
+    return apiResponse(null, false, 'Schedule ID is required');
+  }
+  const res = await apiPost(`/schedules/${encodeURIComponent(id)}/join`);
+  return res;
+};
+

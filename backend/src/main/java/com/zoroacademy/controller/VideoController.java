@@ -24,7 +24,7 @@ public class VideoController {
      * Admin/Trainer endpoint to initiate video upload session on Bunny Stream.
      */
     @PostMapping("/upload-session")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TRAINER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRAINER', 'STUDENT')")
     public ApiResponse<VideoUploadResponse> createUploadSession(@RequestBody VideoUploadRequest request) {
         VideoUploadResponse response = bunnyStreamService.createUploadSession(request);
         return ApiResponse.ok(response, "Upload session created successfully");

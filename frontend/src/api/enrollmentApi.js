@@ -49,8 +49,17 @@ export const getStudentEnrolledCourses = async (studentIdOrEmail) => {
   if (res.success && Array.isArray(res.data)) {
     return res.data.map(e => ({
       id: e.courseId,
+      courseId: e.courseId,
       title: e.courseTitle,
+      courseTitle: e.courseTitle,
       batch: e.batchName,
+      batchName: e.batchName,
+      batchId: e.batchId,
+      mode: e.courseMode || 'Online',
+      courseMode: e.courseMode || 'Online',
+      trainerId: e.trainerId || null,
+      trainerName: e.trainerName || null,
+      trainers: Array.isArray(e.trainers) ? e.trainers : [],
       enrolledDate: e.enrolledDate,
       status: e.status
     }));

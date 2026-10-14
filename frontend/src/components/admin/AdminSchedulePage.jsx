@@ -10,6 +10,7 @@ import { logActivity } from '../../api/activityLogApi';
 import ConfirmModal from '../common/ConfirmModal';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 import { useDialog } from '../../context/DialogContext';
+import { isValidGoogleMeetUrl, parseTimeToMinutes } from '../../utils/scheduleSortUtil';
 
 const ALLOWED_EXTENSIONS = [
   'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt',
@@ -17,6 +18,74 @@ const ALLOWED_EXTENSIONS = [
   'mp4', 'mov', 'avi', 'webm',
   'mp3', 'wav', 'm4a'
 ];
+
+function time24ToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function minutesToTime24(minutes) {
+  const h = Math.floor(minutes / 60) % 24;
+  const m = minutes % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function time24To12(timeStr) {
+  if (!timeStr) return '';
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+function formatTimeSlot(start24, end24) {
+  return `${time24To12(start24)} - ${time24To12(end24)}`;
+}
+
+function parseSlotTo24(slot) {
+  if (!slot) return { start: '17:00', end: '18:00' };
+  const parts = slot.split('-');
+  const sPart = parts[0]?.trim();
+  const ePart = parts[1]?.trim();
+  const sMin = parseTimeToMinutes(sPart);
+  const eMin = ePart ? parseTimeToMinutes(ePart) : sMin + 60;
+  return {
+    start: minutesToTime24(sMin),
+    end: minutesToTime24(eMin)
+  };
+}
+
+function getBatchTrainers(batch, allTrainers = []) {
+  if (!batch) return [];
+  if (Array.isArray(batch.trainers) && batch.trainers.length > 0) {
+    return batch.trainers.map(t => {
+      if (typeof t === 'string') {
+        const found = allTrainers.find(tr => tr.id === t || tr.name?.toLowerCase() === t.toLowerCase());
+        return { id: found?.id || t, name: found?.name || t };
+      }
+      return { id: t.id || t.trainerId, name: t.name || t.trainerName };
+    });
+  }
+  if (Array.isArray(batch.trainerIds) && batch.trainerIds.length > 0) {
+    return batch.trainerIds.map(tId => {
+      const found = allTrainers.find(t => t.id === tId);
+      return { id: tId, name: found?.name || tId };
+    });
+  }
+  if (batch.trainerName) {
+    const names = batch.trainerName.split(',').map(n => n.trim()).filter(Boolean);
+    const ids = batch.trainerId ? batch.trainerId.split(',').map(i => i.trim()).filter(Boolean) : [];
+    return names.map((name, idx) => ({
+      id: ids[idx] || (allTrainers.find(t => t.name?.toLowerCase() === name.toLowerCase())?.id || name),
+      name
+    }));
+  }
+  return [];
+}
 
 export default function AdminSchedulePage() {
   const { showSuccess, showError, showWarning } = useDialog();
@@ -46,8 +115,9 @@ export default function AdminSchedulePage() {
     course: '',
     batch: '',
     trainer: '',
+    startTime: '17:00',
+    endTime: '18:00',
     time: '05:00 PM - 06:00 PM',
-    mode: 'Online (Google Meet)',
     date: todayStr,
     notesFile: null,
     worksheetFile: null,
@@ -56,13 +126,10 @@ export default function AdminSchedulePage() {
 
   const [rescheduleFormData, setRescheduleFormData] = useState({
     newDate: todayStr,
+    newStartTime: '10:00',
+    newEndTime: '11:00',
     newTime: '10:00 AM - 11:00 AM'
   });
-
-  useEffect(() => {
-    loadSchedules();
-    loadMetadata();
-  }, []);
 
   const loadSchedules = async () => {
     setLoading(true);
@@ -100,12 +167,14 @@ export default function AdminSchedulePage() {
         const firstCourse = liveCourses[0].title;
         const matchingBatches = loadedBatches.filter(b => b.courseName === firstCourse && b.status === 'Active');
         const defaultBatch = matchingBatches[0];
+        const bTrainers = getBatchTrainers(defaultBatch, loadedTrainers);
+        const defaultTrainer = bTrainers.length === 1 ? bTrainers[0].name : '';
 
         setFormData(prev => ({
           ...prev,
           course: firstCourse,
           batch: defaultBatch?.name || '',
-          trainer: defaultBatch?.trainerName || loadedTrainers[0]?.name || ''
+          trainer: defaultTrainer
         }));
       }
     } catch (err) {
@@ -113,27 +182,40 @@ export default function AdminSchedulePage() {
     }
   };
 
+  useEffect(() => {
+    loadSchedules();
+    loadMetadata();
+  }, []);
+
   const handleCourseChangeInForm = (newCourseTitle) => {
     const courseBatches = (batchesList || []).filter(b => b.courseName === newCourseTitle && b.status === 'Active');
     const firstBatch = courseBatches[0];
-    const autoTrainer = firstBatch ? firstBatch.trainerName : (trainers[0]?.name || '');
+    const bTrainers = getBatchTrainers(firstBatch, trainers);
+    const chosenTrainer = bTrainers.length === 1 ? bTrainers[0].name : '';
 
     setFormData(prev => ({
       ...prev,
       course: newCourseTitle,
       batch: firstBatch ? firstBatch.name : '',
-      trainer: autoTrainer
+      trainer: chosenTrainer
     }));
   };
 
   const handleBatchChangeInForm = (newBatchName) => {
     const selectedBatchObj = (batchesList || []).find(b => b.name === newBatchName && b.courseName === formData.course);
-    const autoTrainer = selectedBatchObj ? selectedBatchObj.trainerName : formData.trainer;
+    const bTrainers = getBatchTrainers(selectedBatchObj, trainers);
+    let chosenTrainer = '';
+    if (bTrainers.length === 1) {
+      chosenTrainer = bTrainers[0].name;
+    } else if (bTrainers.length > 1) {
+      const exists = bTrainers.some(t => t.name === formData.trainer);
+      chosenTrainer = exists ? formData.trainer : '';
+    }
 
     setFormData(prev => ({
       ...prev,
       batch: newBatchName,
-      trainer: autoTrainer
+      trainer: chosenTrainer
     }));
   };
 
@@ -224,13 +306,17 @@ export default function AdminSchedulePage() {
 
   const handleOpenEditModal = (item) => {
     setEditingSchedule(item);
+    const parsed = parseSlotTo24(item.time || item.startTime);
+    const st = item.startTime || parsed.start;
+    const et = item.endTime || parsed.end;
     setFormData({
       title: item.title || '',
       course: item.course || '',
       batch: item.batch || '',
       trainer: item.trainer || '',
-      time: item.time || '05:00 PM - 06:00 PM',
-      mode: item.mode || 'Online (Google Meet)',
+      startTime: st,
+      endTime: et,
+      time: item.time || formatTimeSlot(st, et),
       date: item.date || todayStr,
       notesFile: item.notesFile || null,
       worksheetFile: item.worksheetFile || null,
@@ -240,15 +326,113 @@ export default function AdminSchedulePage() {
     setShowAddModal(true);
   };
 
+  const startM = time24ToMinutes(formData.startTime);
+  const endM = time24ToMinutes(formData.endTime);
+  const durationM = endM > startM ? endM - startM : 0;
+  const durationHours = Math.floor(durationM / 60);
+  const durationRemM = durationM % 60;
+  const durationPreview = durationM > 0
+    ? `${durationHours > 0 ? `${durationHours}h ` : ''}${durationRemM > 0 ? `${durationRemM}m` : ''} (${durationM} min)`
+    : 'Invalid (End must be after Start)';
+
+  const handleQuickDuration = (minutes) => {
+    const sM = time24ToMinutes(formData.startTime) || 10 * 60;
+    const eM = sM + minutes;
+    const newEnd = minutesToTime24(eM);
+    setFormData(prev => ({
+      ...prev,
+      endTime: newEnd,
+      time: formatTimeSlot(prev.startTime, newEnd)
+    }));
+  };
+
+  const rStartM = time24ToMinutes(rescheduleFormData.newStartTime);
+  const rEndM = time24ToMinutes(rescheduleFormData.newEndTime);
+  const rDurationM = rEndM > rStartM ? rEndM - rStartM : 0;
+  const rDurationHours = Math.floor(rDurationM / 60);
+  const rDurationRemM = rDurationM % 60;
+  const rDurationPreview = rDurationM > 0
+    ? `${rDurationHours > 0 ? `${rDurationHours}h ` : ''}${rDurationRemM > 0 ? `${rDurationRemM}m` : ''} (${rDurationM} min)`
+    : 'Invalid (End must be after Start)';
+
+  const handleRescheduleQuickDuration = (minutes) => {
+    const sM = time24ToMinutes(rescheduleFormData.newStartTime) || 10 * 60;
+    const eM = sM + minutes;
+    const newEnd = minutesToTime24(eM);
+    setRescheduleFormData(prev => ({
+      ...prev,
+      newEndTime: newEnd,
+      newTime: formatTimeSlot(prev.newStartTime, newEnd)
+    }));
+  };
+
   const handleAddSchedule = async (e) => {
     e.preventDefault();
     if (!formData.title.trim() || !formData.date || !formData.batch) return;
 
+    if (!formData.trainer) {
+      showError('Please select a trainer for this session.', 'Trainer Required');
+      return;
+    }
+
+    const selectedBatchObj = (batchesList || []).find(b => b.name === formData.batch && (b.courseName === formData.course || !formData.course));
+    const bTrainers = getBatchTrainers(selectedBatchObj, trainers);
+    if (bTrainers.length === 0) {
+      showError('This batch has no trainers assigned. Batches cannot be scheduled without an assigned trainer. Please assign a trainer in Batch Management first.', 'Cannot Schedule Session');
+      return;
+    }
+
+    const matchedTrainerObj = bTrainers.find(t => t.name === formData.trainer || t.id === formData.trainer);
+    if (!matchedTrainerObj && bTrainers.length > 0) {
+      showError('Selected trainer is not assigned to this batch. Please select an assigned batch trainer.', 'Invalid Trainer');
+      return;
+    }
+
+    // 1. Date not in past
+    if (formData.date < todayStr) {
+      showError('Schedule date cannot be in the past.', 'Invalid Date');
+      return;
+    }
+
+    // 2. End time after start time
+    const sM = time24ToMinutes(formData.startTime);
+    const eM = time24ToMinutes(formData.endTime);
+    if (eM <= sM) {
+      showError('End time must be after start time.', 'Invalid Time');
+      return;
+    }
+
+    // 3. Minimum 15 minutes
+    const dur = eM - sM;
+    if (dur < 15) {
+      showError('Session duration must be at least 15 minutes.', 'Duration Too Short');
+      return;
+    }
+
+    // 4. Maximum 4 hours (240 min)
+    if (dur > 240) {
+      showError('Session duration cannot exceed 4 hours (240 minutes).', 'Duration Too Long');
+      return;
+    }
+
+    // 5. Warning if above 3 hours
+    if (dur > 180) {
+      const confirmLong = window.confirm(`This session duration is ${Math.floor(dur / 60)}h ${dur % 60}m (over 3 hours). Are you sure you want to proceed?`);
+      if (!confirmLong) return;
+    }
+
+    const formattedTime = formatTimeSlot(formData.startTime, formData.endTime);
+    const payload = {
+      ...formData,
+      trainer: matchedTrainerObj?.name || formData.trainer,
+      trainerId: matchedTrainerObj?.id || '',
+      batchId: selectedBatchObj?.id || '',
+      time: formattedTime
+    };
+
     try {
       if (editingSchedule) {
-        const res = await updateSchedule(editingSchedule.id, {
-          ...formData
-        });
+        const res = await updateSchedule(editingSchedule.id, payload);
         if (res && res.success) {
           logActivity('Schedule Updated', `Updated session "${formData.title}" for ${formData.batch}`, 'Schedule');
           await showSuccess(res.message || `Session "${formData.title}" updated successfully.`, 'Schedule Updated');
@@ -258,14 +442,14 @@ export default function AdminSchedulePage() {
         }
       } else {
         const res = await createSchedule({
-          ...formData,
+          ...payload,
           originalDate: formData.date,
-          originalTime: formData.time
+          originalTime: formattedTime
         });
 
         if (res?.success) {
-          logActivity('Schedule Created', `Scheduled session "${formData.title}" for ${formData.batch} on ${formData.date} (${formData.time})`, 'Schedule');
-          await notifyScheduleCreated(res.data || formData);
+          logActivity('Schedule Created', `Scheduled session "${formData.title}" for ${formData.batch} on ${formData.date} (${formattedTime})`, 'Schedule');
+          await notifyScheduleCreated(res.data || payload);
           await showSuccess(`Session "${formData.title}" created for ${formData.batch}. Automatic notifications dispatched.`, 'Schedule Created');
         } else {
           await showError(res?.message || 'Failed to create schedule', 'Creation Failed');
@@ -280,14 +464,18 @@ export default function AdminSchedulePage() {
       const liveCourses = (courses || []).filter(c => c.mode === 'Online' || c.mode === 'Hybrid' || !c.mode);
       const firstCourse = liveCourses[0]?.title || 'English Communication';
       const matchingBatches = (batchesList || []).filter(b => b.courseName === firstCourse && b.status === 'Active');
+      const defBatch = matchingBatches[0];
+      const defTrainers = getBatchTrainers(defBatch, trainers);
+      const defTrainer = defTrainers.length === 1 ? defTrainers[0].name : '';
 
       setFormData({
         title: '',
         course: firstCourse,
-        batch: matchingBatches[0]?.name || '',
-        trainer: matchingBatches[0]?.trainerName || trainers[0]?.name || '',
+        batch: defBatch?.name || '',
+        trainer: defTrainer,
+        startTime: '17:00',
+        endTime: '18:00',
         time: '05:00 PM - 06:00 PM',
-        mode: 'Online (Google Meet)',
         date: todayStr,
         notesFile: null,
         worksheetFile: null,
@@ -296,7 +484,9 @@ export default function AdminSchedulePage() {
       setFileErrors({});
     } catch (err) {
       console.error('Failed to save schedule:', err);
-      await showError(err?.message || 'Failed to save schedule', 'Save Error');
+      const msg = err.response?.data?.message || err?.message || 'Failed to save schedule';
+      const isConflict = err.response?.status === 409 || msg.toLowerCase().includes('overlap');
+      await showError(msg, isConflict ? 'Schedule Overlap Conflict' : 'Save Error');
     }
   };
 
@@ -304,17 +494,46 @@ export default function AdminSchedulePage() {
     e.preventDefault();
     if (!rescheduleItem) return;
 
+    if (rescheduleFormData.newDate < todayStr) {
+      showError('New schedule date cannot be in the past.', 'Invalid Date');
+      return;
+    }
+
+    const rsM = time24ToMinutes(rescheduleFormData.newStartTime);
+    const reM = time24ToMinutes(rescheduleFormData.newEndTime);
+    if (reM <= rsM) {
+      showError('End time must be after start time.', 'Invalid Time');
+      return;
+    }
+
+    const rdur = reM - rsM;
+    if (rdur < 15) {
+      showError('Session duration must be at least 15 minutes.', 'Duration Too Short');
+      return;
+    }
+    if (rdur > 240) {
+      showError('Session duration cannot exceed 4 hours (240 minutes).', 'Duration Too Long');
+      return;
+    }
+    if (rdur > 180) {
+      const confirmLong = window.confirm(`This session duration is ${Math.floor(rdur / 60)}h ${rdur % 60}m (over 3 hours). Are you sure you want to proceed?`);
+      if (!confirmLong) return;
+    }
+
     const originalDate = rescheduleItem.originalDate || rescheduleItem.date;
     const originalTime = rescheduleItem.originalTime || rescheduleItem.time;
+    const formattedRescheduleTime = formatTimeSlot(rescheduleFormData.newStartTime, rescheduleFormData.newEndTime);
 
     const updatedPayload = {
       status: 'Rescheduled',
       originalDate,
       originalTime,
       date: rescheduleFormData.newDate,
-      time: rescheduleFormData.newTime,
+      startTime: rescheduleFormData.newStartTime,
+      endTime: rescheduleFormData.newEndTime,
+      time: formattedRescheduleTime,
       rescheduledDate: rescheduleFormData.newDate,
-      rescheduledTime: rescheduleFormData.newTime
+      rescheduledTime: formattedRescheduleTime
     };
 
     try {
@@ -326,12 +545,12 @@ export default function AdminSchedulePage() {
           originalDate, 
           originalTime, 
           rescheduleFormData.newDate, 
-          rescheduleFormData.newTime
+          formattedRescheduleTime
         );
 
-        logActivity('Schedule Rescheduled', `Rescheduled "${rescheduleItem.title}" (${rescheduleItem.batch}) from ${originalDate} ${originalTime} to ${rescheduleFormData.newDate} ${rescheduleFormData.newTime}`, 'Schedule');
+        logActivity('Schedule Rescheduled', `Rescheduled "${rescheduleItem.title}" (${rescheduleItem.batch}) from ${originalDate} ${originalTime} to ${rescheduleFormData.newDate} ${formattedRescheduleTime}`, 'Schedule');
 
-        await showSuccess(`${rescheduleItem.batch} (${rescheduleItem.course}) updated to ${rescheduleFormData.newDate} at ${rescheduleFormData.newTime}. Affected trainer and students notified.`, 'Session Rescheduled');
+        await showSuccess(`${rescheduleItem.batch} (${rescheduleItem.course}) updated to ${rescheduleFormData.newDate} at ${formattedRescheduleTime}. Affected trainer and students notified.`, 'Session Rescheduled');
 
         setRescheduleItem(null);
         loadSchedules();
@@ -339,7 +558,9 @@ export default function AdminSchedulePage() {
         await showError(res?.message || 'Failed to reschedule session', 'Reschedule Failed');
       }
     } catch (err) {
-      await showError(err?.message || 'Failed to reschedule session', 'Reschedule Failed');
+      const msg = err.response?.data?.message || err?.message || 'Failed to reschedule session';
+      const isConflict = err.response?.status === 409 || msg.toLowerCase().includes('overlap');
+      await showError(msg, isConflict ? 'Schedule Overlap Conflict' : 'Reschedule Failed');
     }
   };
 
@@ -386,6 +607,8 @@ export default function AdminSchedulePage() {
   const completedCount = safeSchedules.filter(s => s && s.status === 'Completed').length;
 
   const availableBatchesForSelectedCourse = safeBatches.filter(b => b.courseName === formData.course && b.status === 'Active');
+  const selectedBatchObj = safeBatches.find(b => b.name === formData.batch && (b.courseName === formData.course || !formData.course));
+  const currentBatchTrainers = getBatchTrainers(selectedBatchObj, safeTrainers);
 
   return (
     <div className="space-y-6 bg-slate-50 min-h-screen p-6 sm:p-8">
@@ -418,13 +641,16 @@ export default function AdminSchedulePage() {
             const firstCourse = liveCourses[0]?.title || 'English Communication';
             const courseBatches = safeBatches.filter(b => b.courseName === firstCourse && b.status === 'Active');
             const defaultBatch = courseBatches[0];
+            const bTrainers = getBatchTrainers(defaultBatch, safeTrainers);
+            const defaultTrainer = bTrainers.length === 1 ? bTrainers[0].name : '';
             setFormData({
               title: '',
               course: firstCourse,
               batch: defaultBatch?.name || '',
-              trainer: defaultBatch?.trainerName || safeTrainers[0]?.name || '',
+              trainer: defaultTrainer,
+              startTime: '17:00',
+              endTime: '18:00',
               time: '05:00 PM - 06:00 PM',
-              mode: 'Online (Google Meet)',
               date: todayStr,
               notesFile: null,
               worksheetFile: null,
@@ -564,7 +790,15 @@ export default function AdminSchedulePage() {
                   return (
                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-4 px-4">
-                        <div className="font-black text-slate-900 text-sm">{item.title || 'Untitled Session'}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-black text-slate-900 text-sm">{item.title || 'Untitled Session'}</div>
+                          {!isValidGoogleMeetUrl(item.meetLink || item.googleMeetUrl || item.meetUrl) && (
+                            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-300 px-2 py-0.5 rounded text-[10px] font-bold" title="Meeting link not set or invalid">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              <span>Link Missing</span>
+                            </span>
+                          )}
+                        </div>
                         <div className="text-slate-500 text-xs font-semibold">{item.course || 'English Communication'}</div>
                       </td>
                       <td className="py-4 px-4 font-bold text-slate-800">
@@ -703,10 +937,15 @@ export default function AdminSchedulePage() {
                         {/* Reschedule Action Button */}
                         <button
                           onClick={() => {
+                            const parsed = parseSlotTo24(item.time || item.startTime);
+                            const st = item.startTime || parsed.start;
+                            const et = item.endTime || parsed.end;
                             setRescheduleItem(item);
                             setRescheduleFormData({
                               newDate: item.date || todayStr,
-                              newTime: item.time || '10:00 AM - 11:00 AM'
+                              newStartTime: st,
+                              newEndTime: et,
+                              newTime: item.time || formatTimeSlot(st, et)
                             });
                           }}
                           className="px-2.5 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 rounded-lg font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer"
@@ -811,42 +1050,136 @@ export default function AdminSchedulePage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Assigned Trainer (Auto-Fetched) *</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={formData.trainer}
-                    className="w-full px-3 py-2.5 bg-slate-100 border border-slate-200 rounded-xl font-extrabold text-blue-900 cursor-not-allowed"
-                    title="Trainer automatically fetched from Batch Management"
-                  />
-                  <p className="text-[9px] text-slate-400 font-bold mt-1">⚡ Auto-populated from Batch Management</p>
+                  <label className="block font-bold text-slate-700 mb-1">Batch Trainer *</label>
+                  {currentBatchTrainers.length === 0 ? (
+                    <div>
+                      <input
+                        type="text"
+                        readOnly
+                        value="No trainer assigned to this batch"
+                        className="w-full px-3 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl font-semibold text-xs cursor-not-allowed"
+                      />
+                      <p className="text-[10px] text-rose-600 font-bold mt-1">
+                        ⚠️ This batch has no trainers assigned. Batches cannot be scheduled without an assigned trainer.
+                      </p>
+                    </div>
+                  ) : currentBatchTrainers.length === 1 ? (
+                    <div>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formData.trainer || currentBatchTrainers[0].name}
+                        className="w-full px-3 py-2.5 bg-slate-100 border border-slate-200 rounded-xl font-extrabold text-blue-900 cursor-not-allowed"
+                        title="Sole trainer assigned to this batch"
+                      />
+                      <p className="text-[9px] text-slate-500 font-medium mt-1">
+                        ✓ Assigned batch trainer: {currentBatchTrainers[0].name}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <select
+                        required
+                        value={formData.trainer}
+                        onChange={(e) => setFormData(prev => ({ ...prev, trainer: e.target.value }))}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-blue-600"
+                      >
+                        <option value="">-- Select Batch Trainer --</option>
+                        {currentBatchTrainers.map(t => (
+                          <option key={t.id || t.name} value={t.name}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[9px] text-indigo-600 font-bold mt-1">
+                        👥 Select which of the {currentBatchTrainers.length} batch trainers conducts this session
+                      </p>
+                    </div>
+                  )}
                 </div>
 
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Time Slot *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 10:00 AM - 12:00 PM"
-                  value={formData.time}
-                  onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
-                />
+              {/* START TIME & END TIME INPUTS WITH DURATION PREVIEW & QUICK BUTTONS */}
+              <div className="space-y-2.5 p-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Start Time *</label>
+                    <input
+                      type="time"
+                      required
+                      value={formData.startTime}
+                      onChange={(e) => {
+                        const newStart = e.target.value;
+                        const sM = time24ToMinutes(newStart);
+                        const eM = time24ToMinutes(formData.endTime);
+                        let updatedEnd = formData.endTime;
+                        if (eM <= sM) {
+                          updatedEnd = minutesToTime24(sM + 60);
+                        }
+                        setFormData(prev => ({
+                          ...prev,
+                          startTime: newStart,
+                          endTime: updatedEnd,
+                          time: formatTimeSlot(newStart, updatedEnd)
+                        }));
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-blue-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">End Time *</label>
+                    <input
+                      type="time"
+                      required
+                      value={formData.endTime}
+                      onChange={(e) => {
+                        const newEnd = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          endTime: newEnd,
+                          time: formatTimeSlot(prev.startTime, newEnd)
+                        }));
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-blue-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-slate-500">Duration:</span>
+                    <span className={`px-2 py-0.5 rounded-lg font-black ${
+                      durationM >= 15 && durationM <= 240
+                        ? durationM > 180 ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                        : 'bg-rose-100 text-rose-800 border border-rose-300'
+                    }`}>
+                      {durationPreview}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-slate-400 mr-1">Quick:</span>
+                    {[30, 45, 60, 90].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleQuickDuration(m)}
+                        className="px-2 py-1 bg-white hover:bg-blue-50 hover:text-blue-600 text-slate-600 border border-slate-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                      >
+                        +{m}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="text-[10px] font-mono text-slate-400">
+                  Formatted slot: <span className="font-bold text-slate-700">{formData.time}</span>
+                </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Delivery Mode</label>
-                <select
-                  value={formData.mode}
-                  onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
-                >
-                  <option value="Online (Google Meet)">Online (Google Meet)</option>
-                  <option value="Offline (Branch A)">Offline (Branch A)</option>
-                </select>
-              </div>
+
 
               {/* CLASS RESOURCE ATTACHMENTS (Notes, Worksheet, Assignment) */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 pt-3">
@@ -955,10 +1288,16 @@ export default function AdminSchedulePage() {
                 </div>
               </div>
 
+              {currentBatchTrainers.length === 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] font-semibold">
+                  ⚠️ This batch has no assigned trainers. Batches cannot be scheduled without an assigned trainer. Please assign a trainer in Batch Management.
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={!formData.batch}
-                className="w-full bg-[#0F52BA] hover:bg-blue-700 disabled:bg-slate-300 text-white font-black py-3.5 rounded-xl shadow-md transition-colors text-xs mt-3 cursor-pointer"
+                disabled={!formData.batch || currentBatchTrainers.length === 0 || !formData.trainer}
+                className="w-full bg-[#0F52BA] hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-3.5 rounded-xl shadow-md transition-colors text-xs mt-3 cursor-pointer"
               >
                 {editingSchedule ? 'Update Schedule & Notify' : 'Schedule & Auto-Notify Trainer & Batch'}
               </button>
@@ -1006,16 +1345,83 @@ export default function AdminSchedulePage() {
                 />
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">New Time Slot *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 11:00 AM - 12:00 PM"
-                  value={rescheduleFormData.newTime}
-                  onChange={(e) => setRescheduleFormData({ ...rescheduleFormData, newTime: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white"
-                />
+              {/* START TIME & END TIME INPUTS WITH DURATION PREVIEW & QUICK BUTTONS */}
+              <div className="space-y-2.5 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">New Start Time *</label>
+                    <input
+                      type="time"
+                      required
+                      value={rescheduleFormData.newStartTime}
+                      onChange={(e) => {
+                        const newStart = e.target.value;
+                        const sM = time24ToMinutes(newStart);
+                        const eM = time24ToMinutes(rescheduleFormData.newEndTime);
+                        let updatedEnd = rescheduleFormData.newEndTime;
+                        if (eM <= sM) {
+                          updatedEnd = minutesToTime24(sM + 60);
+                        }
+                        setRescheduleFormData(prev => ({
+                          ...prev,
+                          newStartTime: newStart,
+                          newEndTime: updatedEnd,
+                          newTime: formatTimeSlot(newStart, updatedEnd)
+                        }));
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-blue-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">New End Time *</label>
+                    <input
+                      type="time"
+                      required
+                      value={rescheduleFormData.newEndTime}
+                      onChange={(e) => {
+                        const newEnd = e.target.value;
+                        setRescheduleFormData(prev => ({
+                          ...prev,
+                          newEndTime: newEnd,
+                          newTime: formatTimeSlot(prev.newStartTime, newEnd)
+                        }));
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-blue-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-slate-500">Duration:</span>
+                    <span className={`px-2 py-0.5 rounded-lg font-black ${
+                      rDurationM >= 15 && rDurationM <= 240
+                        ? rDurationM > 180 ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                        : 'bg-rose-100 text-rose-800 border border-rose-300'
+                    }`}>
+                      {rDurationPreview}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-slate-400 mr-1">Quick:</span>
+                    {[30, 45, 60, 90].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleRescheduleQuickDuration(m)}
+                        className="px-2 py-1 bg-white hover:bg-amber-50 hover:text-amber-700 text-slate-600 border border-slate-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                      >
+                        +{m}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="text-[10px] font-mono text-slate-400">
+                  New slot: <span className="font-bold text-slate-700">{rescheduleFormData.newTime}</span>
+                </div>
               </div>
 
               <button

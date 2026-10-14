@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, Search, CheckCircle2, Clock, Trash2, Edit2, X, 
-  UserCheck, Layers, Eye, User, Award, Check, Filter, Send, Download
+  UserCheck, Layers, Eye, User, Award, Check, Filter, Send, Download, BookOpen
 } from 'lucide-react';
 import { getSubmissions, updateCorrection, assignRecordedSubmissionsToTrainer, getCreatedAssignments } from '../../api/assignmentApi';
 import { getBatches } from '../../api/batchApi';
 import { getTrainers } from '../../api/userApi';
+import { getCourses, updateCourse } from '../../api/courseApi';
 import ConfirmModal from '../common/ConfirmModal';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 
@@ -28,21 +29,25 @@ export default function AdminAssignmentsPage() {
   const [savingCorrection, setSavingCorrection] = useState(false);
 
   const [assignModalBatch, setAssignModalBatch] = useState(null);
+  const [assignModalCourse, setAssignModalCourse] = useState(null);
   const [selectedTrainerToAssign, setSelectedTrainerToAssign] = useState('');
   const [savingAssignment, setSavingAssignment] = useState(false);
+  const [courses, setCourses] = useState([]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [subRes, crAsgRes, bRes, trRes] = await Promise.all([
+      const [subRes, crAsgRes, bRes, trRes, cRes] = await Promise.all([
         getSubmissions(),
         getCreatedAssignments(),
         getBatches(),
-        getTrainers()
+        getTrainers(),
+        getCourses()
       ]);
       setSubmissions(subRes.data || []);
       setCreatedAssignments(crAsgRes.data || []);
       setBatches(bRes.data || []);
+      setCourses(cRes.data || []);
       const trList = trRes.data || [];
       setTrainers(trList);
       if (trList.length > 0) setSelectedTrainerToAssign(trList[0].name);
@@ -84,6 +89,30 @@ export default function AdminAssignmentsPage() {
     loadData();
   };
 
+  const handleSaveAssignCourseTrainer = async (e) => {
+    e.preventDefault();
+    if (!assignModalCourse || !selectedTrainerToAssign) return;
+    setSavingAssignment(true);
+    try {
+      const selectedTrainerObj = trainers.find(t => t.name === selectedTrainerToAssign || t.id === selectedTrainerToAssign);
+      if (assignModalCourse.id) {
+        await updateCourse(assignModalCourse.id, {
+          ...assignModalCourse,
+          trainerId: selectedTrainerObj?.id || null,
+          assignedTrainer: selectedTrainerObj?.name || selectedTrainerToAssign,
+          assignedTrainerId: selectedTrainerObj?.id || null
+        });
+      }
+      await assignRecordedSubmissionsToTrainer(null, assignModalCourse.id || null, selectedTrainerObj?.name || selectedTrainerToAssign);
+    } catch (err) {
+      console.error('Failed to assign trainer to recorded course:', err);
+    } finally {
+      setSavingAssignment(false);
+      setAssignModalCourse(null);
+      loadData();
+    }
+  };
+
   // Filter submissions by Active Mode Tab
   const tabFilteredSubs = submissions.filter(s => {
     if (activeTab === 'Online') return s.mode === 'Online';
@@ -92,9 +121,13 @@ export default function AdminAssignmentsPage() {
     return true;
   });
 
-  // Apply search & batch filter
+  // Apply search & batch/course filter
   const finalFilteredSubs = tabFilteredSubs.filter(s => {
-    if (selectedBatchFilter !== 'All' && s.batchName !== selectedBatchFilter && s.batchId !== selectedBatchFilter) return false;
+    if (activeTab === 'Recorded') {
+      if (selectedBatchFilter !== 'All' && s.courseTitle !== selectedBatchFilter && s.courseId !== selectedBatchFilter) return false;
+    } else {
+      if (selectedBatchFilter !== 'All' && s.batchName !== selectedBatchFilter && s.batchId !== selectedBatchFilter) return false;
+    }
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -105,15 +138,23 @@ export default function AdminAssignmentsPage() {
     );
   });
 
-  // Group final filtered submissions by Batch Name
-  const groupedByBatch = finalFilteredSubs.reduce((acc, sub) => {
-    const batch = sub.batchName || 'General Batch';
-    if (!acc[batch]) acc[batch] = [];
-    acc[batch].push(sub);
-    return acc;
-  }, {});
+  // Group submissions: by Course for Recorded, by Batch for Online/Hybrid
+  const groupedData = activeTab === 'Recorded'
+    ? finalFilteredSubs.reduce((acc, sub) => {
+        const courseKey = sub.courseTitle || 'Recorded Course';
+        if (!acc[courseKey]) acc[courseKey] = [];
+        acc[courseKey].push(sub);
+        return acc;
+      }, {})
+    : finalFilteredSubs.reduce((acc, sub) => {
+        const batch = sub.batchName || 'General Batch';
+        if (!acc[batch]) acc[batch] = [];
+        acc[batch].push(sub);
+        return acc;
+      }, {});
 
   const uniqueBatches = Array.from(new Set(submissions.map(s => s.batchName).filter(Boolean)));
+  const uniqueCourses = Array.from(new Set(submissions.filter(s => s.mode === 'Recorded').map(s => s.courseTitle).filter(Boolean)));
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 bg-slate-50 min-h-screen">
@@ -146,7 +187,10 @@ export default function AdminAssignmentsPage() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                setSelectedBatchFilter('All');
+              }}
               className={`flex-1 min-w-[140px] py-3 px-4 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 cursor-pointer ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-md'
@@ -164,7 +208,7 @@ export default function AdminAssignmentsPage() {
         })}
       </div>
 
-      {/* Search & Batch Filter */}
+      {/* Search & Filter */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -182,10 +226,21 @@ export default function AdminAssignmentsPage() {
           onChange={(e) => setSelectedBatchFilter(e.target.value)}
           className="w-full sm:w-auto px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 cursor-pointer"
         >
-          <option value="All">All Batches</option>
-          {uniqueBatches.map(b => (
-            <option key={b} value={b}>{b}</option>
-          ))}
+          {activeTab === 'Recorded' ? (
+            <>
+              <option value="All">All Courses</option>
+              {uniqueCourses.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </>
+          ) : (
+            <>
+              <option value="All">All Batches</option>
+              {uniqueBatches.map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </>
+          )}
         </select>
       </div>
 
@@ -270,7 +325,7 @@ export default function AdminAssignmentsPage() {
             </table>
           </div>
         </div>
-      ) : Object.keys(groupedByBatch).length === 0 ? (
+      ) : Object.keys(groupedData).length === 0 ? (
         <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 shadow-xs space-y-3">
           <FileText className="w-12 h-12 text-slate-300 mx-auto" />
           <h3 className="text-base font-black text-slate-800">No {activeTab} Submissions Found</h3>
@@ -280,35 +335,84 @@ export default function AdminAssignmentsPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {Object.entries(groupedByBatch).map(([batchName, subList]) => (
-            <div key={batchName} className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden space-y-4 p-6">
-              
-              {/* Batch Card Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-sm border border-blue-200/60">
-                    <Layers className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-black text-slate-900">{batchName}</h2>
-                    <p className="text-xs text-slate-500 font-semibold">{subList.length} Student Submissions ({activeTab} Mode)</p>
-                  </div>
-                </div>
+          {Object.entries(groupedData).map(([groupName, subList]) => {
+            const isRecorded = activeTab === 'Recorded';
+            const courseObj = isRecorded 
+              ? courses.find(c => (c.title && c.title.toLowerCase().trim() === groupName.toLowerCase().trim()) || (c.id && (subList[0]?.courseId === c.id || subList[0]?.course === c.title)))
+              : null;
+            const hasTrainer = Boolean(
+              courseObj?.assignedTrainer && 
+              courseObj.assignedTrainer !== 'None (Self-Paced)' && 
+              courseObj.assignedTrainer !== 'Unassigned'
+            );
 
-                {/* RECORDED TAB: ASSIGN TO TRAINER BUTTON */}
-                {activeTab === 'Recorded' && (
-                  <button
-                    onClick={() => {
-                      setAssignModalBatch(batchName);
-                      if (trainers.length > 0) setSelectedTrainerToAssign(trainers[0].name);
-                    }}
-                    className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs shadow-xs flex items-center space-x-2 cursor-pointer"
-                  >
-                    <UserCheck className="w-4 h-4" />
-                    <span>Assign Batch to Trainer</span>
-                  </button>
-                )}
-              </div>
+            return (
+              <div key={groupName} className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden space-y-4 p-6">
+                
+                {/* Card Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-sm border border-blue-200/60">
+                      {isRecorded ? <BookOpen className="w-5 h-5 text-purple-600" /> : <Layers className="w-5 h-5" />}
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-black text-slate-900">{groupName}</h2>
+                      <p className="text-xs text-slate-500 font-semibold">
+                        {subList.length} Student Submissions ({isRecorded ? 'Recorded Course' : `${activeTab} Mode`})
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* RECORDED TAB: ASSIGNED TRAINER DISPLAY AND ASSIGN BUTTON */}
+                  {isRecorded ? (
+                    <div className="flex items-center gap-2">
+                      {hasTrainer ? (
+                        <>
+                          <span className="bg-purple-50 text-purple-700 px-3 py-1.5 rounded-xl border border-purple-200 font-extrabold text-xs inline-flex items-center gap-1.5">
+                            <User className="w-3.5 h-3.5" />
+                            <span>Trainer: {courseObj.assignedTrainer}</span>
+                          </span>
+                          <button
+                            onClick={() => {
+                              setAssignModalCourse(courseObj);
+                              if (trainers.length > 0) setSelectedTrainerToAssign(trainers[0].name);
+                            }}
+                            className="text-xs font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                          >
+                            Change Trainer
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="bg-slate-100 text-slate-500 px-3 py-1.5 rounded-xl border border-slate-200 font-extrabold text-xs">
+                            Unassigned (Admin Managed)
+                          </span>
+                          <button
+                            onClick={() => {
+                              setAssignModalCourse(courseObj || { title: groupName, id: subList[0]?.courseId });
+                              if (trainers.length > 0) setSelectedTrainerToAssign(trainers[0].name);
+                            }}
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer shadow-xs"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>Assign Trainer</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setAssignModalBatch(groupName);
+                        if (trainers.length > 0) setSelectedTrainerToAssign(trainers[0].name);
+                      }}
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs shadow-xs flex items-center space-x-2 cursor-pointer"
+                    >
+                      <UserCheck className="w-4 h-4" />
+                      <span>Assign Batch to Trainer</span>
+                    </button>
+                  )}
+                </div>
 
               {/* Student Submissions List for this Batch */}
               <div className="overflow-x-auto">
@@ -395,8 +499,9 @@ export default function AdminAssignmentsPage() {
                 </table>
               </div>
 
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -559,6 +664,58 @@ export default function AdminAssignmentsPage() {
                   className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-extrabold rounded-xl text-xs shadow-md"
                 >
                   {savingAssignment ? 'Assigning...' : 'Confirm Assignment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Recorded Course to Trainer Modal */}
+      {assignModalCourse && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-5 border border-slate-100 relative">
+            <button
+              onClick={() => setAssignModalCourse(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div>
+              <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">Assign Course Trainer</span>
+              <h3 className="text-xl font-black text-slate-900">Assign {assignModalCourse.title}</h3>
+              <p className="text-xs text-slate-500 font-semibold">Select a trainer to delegate evaluation and doubts for this recorded course.</p>
+            </div>
+
+            <form onSubmit={handleSaveAssignCourseTrainer} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Select Trainer *</label>
+                <select
+                  value={selectedTrainerToAssign}
+                  onChange={(e) => setSelectedTrainerToAssign(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 cursor-pointer"
+                >
+                  {trainers.map(t => (
+                    <option key={t.id || t.name} value={t.name}>{t.name} ({t.specialty || t.role || 'Trainer'})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAssignModalCourse(null)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingAssignment}
+                  className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-extrabold rounded-xl text-xs shadow-md cursor-pointer"
+                >
+                  {savingAssignment ? 'Saving...' : 'Confirm Assignment'}
                 </button>
               </div>
             </form>

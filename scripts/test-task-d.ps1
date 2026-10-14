@@ -5,9 +5,11 @@ $baseUrl = "http://localhost:8080"
 Write-Host "=== TASK D E2E VERIFICATION TEST ===" -ForegroundColor Cyan
 
 # 1. Admin Login
+$adminEmail = if ($env:TEST_ADMIN_EMAIL) { $env:TEST_ADMIN_EMAIL } elseif ($env:ADMIN_EMAIL) { $env:ADMIN_EMAIL } else { "admin@zoro.com" }
+$adminPassword = if ($env:TEST_ADMIN_PASSWORD) { $env:TEST_ADMIN_PASSWORD } elseif ($env:ADMIN_PASSWORD) { $env:ADMIN_PASSWORD } else { "placeholder_admin_pass" }
 $loginPayload = @{
-    email = "admin@zoro.com"
-    password = "adminPassword123!"
+    email = $adminEmail
+    password = $adminPassword
 } | ConvertTo-Json
 
 $loginRes = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -Body $loginPayload -ContentType "application/json"

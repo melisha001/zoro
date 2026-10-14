@@ -184,7 +184,7 @@ public class MeController {
     }
 
     @GetMapping("/submissions")
-    public ApiResponse<List<AssignmentSubmission>> getMySubmissions() {
+    public ApiResponse<List<AssignmentSubmission>> getMySubmissions(@RequestParam(required = false) String context) {
         User user = getCurrentUser();
         String role = user.getRole().toUpperCase();
 
@@ -193,11 +193,21 @@ public class MeController {
         }
 
         if ("TRAINER".equals(role)) {
-            return ApiResponse.ok(assignmentSubmissionRepository.findByTrainerIdOrAssignedTrainerIgnoreCase(user.getId(), user.getName()));
+            if ("learning".equalsIgnoreCase(context) || "learner".equalsIgnoreCase(context)) {
+                return ApiResponse.ok(assignmentSubmissionRepository.findByStudentIdAndSubmitterRoleIgnoreCase(user.getId(), "TRAINER"));
+            }
+            // By default, return student submissions assigned to this trainer for grading
+            return ApiResponse.ok(assignmentSubmissionRepository.findByTrainerIdAndSubmitterRoleIgnoreCase(user.getId(), "STUDENT"));
         }
 
-        // STUDENT
-        return ApiResponse.ok(assignmentSubmissionRepository.findByStudentIdOrStudentEmailIgnoreCase(user.getId(), user.getEmail()));
+        // STUDENT: return only student submissions
+        return ApiResponse.ok(assignmentSubmissionRepository.findByStudentIdAndSubmitterRoleIgnoreCase(user.getId(), "STUDENT"));
+    }
+
+    @GetMapping("/trainer-submissions")
+    public ApiResponse<List<AssignmentSubmission>> getMyTrainerSubmissions() {
+        User user = getCurrentUser();
+        return ApiResponse.ok(assignmentSubmissionRepository.findByStudentIdAndSubmitterRoleIgnoreCase(user.getId(), "TRAINER"));
     }
 
     @GetMapping("/schedules")

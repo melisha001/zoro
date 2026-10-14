@@ -4,7 +4,9 @@ $baseUrl = "http://localhost:8080/api"
 
 # 1. Admin Login
 Write-Host "`n1. Admin Login..." -ForegroundColor Cyan
-$adminLoginBody = @{ email = "admin@zoro.com"; password = "adminPassword123!" } | ConvertTo-Json
+$adminEmail = if ($env:TEST_ADMIN_EMAIL) { $env:TEST_ADMIN_EMAIL } elseif ($env:ADMIN_EMAIL) { $env:ADMIN_EMAIL } else { "admin@zoro.com" }
+$adminPassword = if ($env:TEST_ADMIN_PASSWORD) { $env:TEST_ADMIN_PASSWORD } elseif ($env:ADMIN_PASSWORD) { $env:ADMIN_PASSWORD } else { "placeholder_admin_pass" }
+$adminLoginBody = @{ email = $adminEmail; password = $adminPassword } | ConvertTo-Json
 $adminLoginRes = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method Post -Body $adminLoginBody -ContentType "application/json"
 $adminToken = $adminLoginRes.data.accessToken
 if (-not $adminToken) { Write-Error "Failed to obtain admin token" }

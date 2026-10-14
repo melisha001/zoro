@@ -241,11 +241,7 @@ export const authenticateUser = async (email, password) => {
       user: {
         ...u,
         role: roleUpper,
-        avatar: u.avatar || (roleUpper === 'ADMIN'
-          ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120'
-          : roleUpper === 'TRAINER'
-          ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200'
-          : 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=200')
+        avatar: u.avatar || null
       }
     };
   }

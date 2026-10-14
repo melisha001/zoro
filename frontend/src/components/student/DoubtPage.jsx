@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, HelpCircle, CheckCircle, Clock, MessageSquare, ChevronRight, X, AlertTriangle } from 'lucide-react';
 import { getDoubts, createDoubt } from '../../api/doubtApi';
+import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { useAuth } from '../../context/AuthContext';
 
 export default function DoubtPage({ setActiveScreen }) {
   const { user } = useAuth();
   const [doubtsList, setDoubtsList] = useState([]);
-  const [course, setCourse] = useState('English Communication');
-  const [topic, setTopic] = useState('Pronunciation & Pitch');
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [selectedTrainerId, setSelectedTrainerId] = useState('');
+  const [topic, setTopic] = useState('');
   const [question, setQuestion] = useState('');
   const [activeDoubtModal, setActiveDoubtModal] = useState(null);
   const [msg, setMsg] = useState('');
@@ -15,21 +18,61 @@ export default function DoubtPage({ setActiveScreen }) {
 
   const studentName = user?.name || '';
   const studentEmail = user?.email || '';
+  const studentIdentifier = user?.id || user?.email || '';
 
   useEffect(() => {
     loadDoubts();
-  }, [studentEmail]);
+    loadCourses();
+  }, [studentIdentifier]);
+
+  const loadCourses = async () => {
+    if (!studentIdentifier) return;
+    try {
+      const courses = await getStudentEnrolledCourses(studentIdentifier);
+      const list = Array.isArray(courses) ? courses : [];
+      setEnrolledCourses(list);
+      if (list.length > 0) {
+        const firstCrs = list[0];
+        const cid = firstCrs.courseId || firstCrs.id;
+        setSelectedCourseId(cid);
+        if (firstCrs.trainers && firstCrs.trainers.length > 0) {
+          setSelectedTrainerId(firstCrs.trainers[0].id);
+        } else {
+          setSelectedTrainerId('');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load student enrolled courses for doubts:', err);
+    }
+  };
 
   const loadDoubts = async () => {
     try {
-
       const res = await getDoubts();
       if (res.success && res.data) {
-        const myDoubts = res.data.filter(d => d.studentEmail === studentEmail || d.studentName === studentName);
+        const myDoubts = res.data.filter(d => 
+          (d.studentEmail && d.studentEmail.toLowerCase() === studentEmail.toLowerCase()) || 
+          (d.studentId && d.studentId === user?.id) ||
+          (d.studentName && d.studentName.toLowerCase() === studentName.toLowerCase())
+        );
         setDoubtsList(myDoubts.length > 0 ? myDoubts : res.data);
       }
     } catch (err) {
       console.error('Failed to load doubts:', err);
+    }
+  };
+
+  const selectedCourse = enrolledCourses.find(c => (c.courseId || c.id) === selectedCourseId) || (enrolledCourses[0] || null);
+  const isRecorded = selectedCourse?.courseMode?.toLowerCase() === 'recorded' || selectedCourse?.mode?.toLowerCase() === 'recorded';
+  const batchTrainers = selectedCourse?.trainers || [];
+
+  const handleCourseChange = (newCourseId) => {
+    setSelectedCourseId(newCourseId);
+    const crs = enrolledCourses.find(c => (c.courseId || c.id) === newCourseId);
+    if (crs && Array.isArray(crs.trainers) && crs.trainers.length > 0) {
+      setSelectedTrainerId(crs.trainers[0].id);
+    } else {
+      setSelectedTrainerId('');
     }
   };
 
@@ -40,21 +83,50 @@ export default function DoubtPage({ setActiveScreen }) {
       return;
     }
     if (!question.trim()) return;
+    if (!selectedCourse) {
+      setMsg('Please select an enrolled course.');
+      return;
+    }
+
+    let trainerId = null;
+    let trainerName = 'Admin';
+
+    if (isRecorded) {
+      trainerId = selectedCourse.trainerId || null;
+      trainerName = selectedCourse.trainerName || 'Admin';
+    } else {
+      if (!selectedTrainerId && batchTrainers.length > 0) {
+        setMsg('Please select a trainer assigned to your batch.');
+        return;
+      }
+      trainerId = selectedTrainerId || null;
+      const matchedTrainer = batchTrainers.find(t => t.id === selectedTrainerId);
+      trainerName = matchedTrainer ? matchedTrainer.name : (selectedCourse.trainerName || 'Trainer');
+    }
 
     try {
       const res = await createDoubt({
+        studentId: user?.id,
         studentName,
         studentEmail,
-        course,
-        topic,
-        question
+        courseId: selectedCourse.courseId || selectedCourse.id,
+        courseTitle: selectedCourse.courseTitle || selectedCourse.title,
+        courseMode: selectedCourse.courseMode || selectedCourse.mode || 'Online',
+        batchId: selectedCourse.batchId || null,
+        trainerId,
+        trainerName,
+        topic: topic.trim(),
+        question: question.trim()
       });
 
       if (res.success) {
         setMsg('Doubt submitted successfully!');
         setTimeout(() => setMsg(''), 3000);
         setQuestion('');
+        setTopic('');
         await loadDoubts();
+      } else {
+        setMsg(res.message || 'Failed to submit doubt.');
       }
     } catch (err) {
       setMsg('Failed to submit doubt.');
@@ -97,33 +169,79 @@ export default function DoubtPage({ setActiveScreen }) {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Course</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Course *</label>
                 <select
-                  value={course}
-                  onChange={(e) => setCourse(e.target.value)}
+                  required
+                  value={selectedCourseId}
+                  onChange={(e) => handleCourseChange(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
                 >
-                  <option value="English Communication">English Communication</option>
-                  <option value="Abacus Level 3">Abacus Level 3</option>
-                  <option value="Chess Mastery">Chess Mastery</option>
+                  {enrolledCourses.length === 0 ? (
+                    <option value="">No enrolled courses</option>
+                  ) : (
+                    enrolledCourses.map(c => (
+                      <option key={c.courseId || c.id} value={c.courseId || c.id}>
+                        {c.courseTitle || c.title} ({c.courseMode || c.mode || 'Online'})
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Topic</label>
-                <input
-                  type="text"
-                  required
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder="e.g. Grammar or Pronunciation"
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
-                />
-              </div>
+              {isRecorded ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Assigned Trainer (Recorded)</label>
+                  <input
+                    type="text"
+                    readOnly
+                    disabled
+                    value={selectedCourse?.trainerName || 'Admin'}
+                    className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 cursor-not-allowed"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    {selectedCourse?.trainerName ? 'Routed to course trainer & Admin' : 'No trainer assigned; routed to Admin only'}
+                  </span>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Batch Trainer *</label>
+                  <select
+                    required
+                    value={selectedTrainerId}
+                    onChange={(e) => setSelectedTrainerId(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
+                  >
+                    {batchTrainers.length === 0 ? (
+                      <option value="">No trainers assigned to your batch</option>
+                    ) : (
+                      batchTrainers.map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.name || 'Trainer'}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Routed to selected batch trainer & Admin
+                  </span>
+                </div>
+              )}
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Your Question</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Topic *</label>
+              <input
+                type="text"
+                required
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="e.g. Question on Module 2 exercise or session topic"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Your Question *</label>
               <textarea
                 rows={4}
                 required
@@ -151,37 +269,47 @@ export default function DoubtPage({ setActiveScreen }) {
           </div>
 
           <div className="space-y-3">
-            {doubtsList.map((doubt) => (
-              <div 
-                key={doubt.id} 
-                className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 hover:bg-slate-100/70 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-mono font-bold text-slate-400">{doubt.id}</span>
-                    <span className="text-xs font-extrabold text-slate-900">{doubt.topic}</span>
+            {doubtsList.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-6">No doubts asked yet.</p>
+            ) : (
+              doubtsList.map((doubt) => (
+                <div 
+                  key={doubt.id} 
+                  className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 hover:bg-slate-100/70 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] font-mono font-bold text-slate-400">{doubt.id}</span>
+                      <span className="text-xs font-extrabold text-slate-900">{doubt.topic}</span>
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                      doubt.status?.toUpperCase() === 'RESOLVED' || doubt.status?.toUpperCase() === 'ANSWERED'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      Status: {doubt.status}
+                    </span>
                   </div>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                    doubt.status?.toUpperCase() === 'RESOLVED' || doubt.status?.toUpperCase() === 'ANSWERED'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    Status: {doubt.status}
-                  </span>
-                </div>
 
-                <p className="text-xs text-slate-600 line-clamp-2 font-medium">{doubt.question}</p>
+                  <div className="flex items-center space-x-2 text-[10px] text-slate-500 font-semibold">
+                    <span>{doubt.courseTitle || doubt.course} ({doubt.courseMode || doubt.mode || 'Online'})</span>
+                    <span>•</span>
+                    <span>Trainer: {doubt.trainerName || 'Admin'}</span>
+                  </div>
 
-                <div className="pt-1 flex justify-end">
-                  <button
-                    onClick={() => setActiveDoubtModal(doubt)}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-800 border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
-                  >
-                    View Answer
-                  </button>
+                  <p className="text-xs text-slate-600 line-clamp-2 font-medium">{doubt.question}</p>
+
+                  <div className="pt-1 flex justify-end">
+                    <button
+                      onClick={() => setActiveDoubtModal(doubt)}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-800 border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                    >
+                      View Answer
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 

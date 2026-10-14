@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Calendar, Clock, User, Video, 
-  Mic, MicOff, Camera, CameraOff, ExternalLink, CheckCircle2, AlertTriangle, CalendarX
+  Mic, MicOff, Camera, CameraOff, ExternalLink, CheckCircle2, AlertTriangle, CalendarX, Lock
 } from 'lucide-react';
-import { recordAttendance } from '../../api/attendanceApi';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
-import { getSchedules } from '../../api/scheduleApi';
+import { getSchedules, joinSchedule } from '../../api/scheduleApi';
 import { useAuth } from '../../context/AuthContext';
+import { getScheduleJoinState, syncServerTime } from '../../utils/scheduleSortUtil';
 
 export default function JoinSessionPage({ setActiveScreen }) {
   const { user } = useAuth();
@@ -23,6 +23,7 @@ export default function JoinSessionPage({ setActiveScreen }) {
     async function initPage() {
       setLoading(true);
       try {
+        await syncServerTime();
         if (studentIdentifier) {
           const enrolled = await getStudentEnrolledCourses(studentIdentifier);
           if (enrolled && enrolled.length > 0 && enrolled.every(c => c.mode === 'Recorded')) {
@@ -44,8 +45,7 @@ export default function JoinSessionPage({ setActiveScreen }) {
             time: upcoming.time,
             trainer: upcoming.trainer || 'Trainer',
             platform: 'Google Meet',
-            meetUrl: upcoming.meetLink || 'https://meet.google.com/new',
-            mode: upcoming.mode || 'Online'
+            meetUrl: upcoming.meetLink || upcoming.googleMeetUrl || upcoming.meetUrl || ''
           });
         }
       } catch (err) {
@@ -59,14 +59,22 @@ export default function JoinSessionPage({ setActiveScreen }) {
 
   const handleJoinClick = async () => {
     if (!session) return;
-    setIsJoined(true);
+    const joinState = getScheduleJoinState(session);
+    if (!joinState.enabled) return;
     try {
-      await recordAttendance(session, user?.name || user?.email || 'Student');
+      const res = await joinSchedule(session.id);
+      if (res && res.success) {
+        setIsJoined(true);
+        const url = res.data?.meetUrl || res.meetUrl || session.meetUrl;
+        if (url) {
+          window.open(url, '_blank');
+        }
+      } else {
+        alert(res?.message || 'Failed to join session');
+      }
     } catch (e) {
       console.error('Attendance recording error:', e);
-    }
-    if (session.meetUrl) {
-      window.open(session.meetUrl, '_blank');
+      alert(e?.message || 'Error joining session');
     }
   };
 
@@ -233,18 +241,40 @@ export default function JoinSessionPage({ setActiveScreen }) {
                 </div>
 
                 {/* Big Join Session Button */}
-                <div>
-                  <button
-                    onClick={handleJoinClick}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-black text-base px-10 py-4 rounded-xl shadow-xl transition-transform transform hover:scale-105 inline-flex items-center space-x-2 cursor-pointer"
-                  >
-                    <span>Join Session</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </button>
-                  <p className="text-[11px] text-slate-400 font-semibold mt-3">
-                    Clicking Join Session automatically marks your attendance as PRESENT.
-                  </p>
-                </div>
+                {(() => {
+                  const joinState = getScheduleJoinState(session);
+                  if (!joinState.enabled) {
+                    return (
+                      <div>
+                        <button
+                          disabled
+                          className="bg-slate-200 text-slate-400 font-black text-base px-10 py-4 rounded-xl shadow-none inline-flex items-center space-x-2 cursor-not-allowed border border-slate-300"
+                        >
+                          <Lock className="w-5 h-5 text-slate-400" />
+                          <span>{joinState.label}</span>
+                        </button>
+                        <p className="text-[11px] text-slate-400 font-semibold mt-3">
+                          {joinState.hasValidLink ? 'Session access opens during the scheduled class hours.' : 'Please ask your administrator to configure a Google Meet link for this session.'}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div>
+                      <button
+                        onClick={handleJoinClick}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-black text-base px-10 py-4 rounded-xl shadow-xl transition-transform transform hover:scale-105 inline-flex items-center space-x-2 cursor-pointer"
+                      >
+                        <span>{joinState.label}</span>
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                      <p className="text-[11px] text-slate-400 font-semibold mt-3">
+                        Clicking Join Session automatically marks your attendance as PRESENT.
+                      </p>
+                    </div>
+                  );
+                })()}
               </>
             )}
 

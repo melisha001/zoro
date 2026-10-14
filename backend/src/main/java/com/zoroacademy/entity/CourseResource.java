@@ -41,6 +41,13 @@ public class CourseResource {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @PrePersist
+    public void ensureId() {
+        if (this.id == null || this.id.isBlank()) {
+            this.id = "res_" + java.util.UUID.randomUUID();
+        }
+    }
+
     public CourseResource() {}
 
     public CourseResource(String id, Course course, String moduleId, String title, String fileUrl, String fileType, String fileSize, String targetAudience, LocalDateTime createdAt) {

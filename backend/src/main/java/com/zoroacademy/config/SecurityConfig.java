@@ -76,8 +76,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 1. Strictly Public Endpoints
                         .requestMatchers("/error").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/time").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/enquiries", "/api/enquiries/").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/courses/*/students").hasAnyRole("ADMIN", "SUPER_ADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.GET, "/api/courses/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/files/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/website-settings/**").permitAll()
@@ -119,14 +121,15 @@ public class SecurityConfig {
 
                         // 3. TRAINER or ADMIN Endpoints
                         .requestMatchers(HttpMethod.GET, "/api/batches/**").hasAnyRole("ADMIN", "TRAINER")
+                        .requestMatchers(HttpMethod.POST, "/api/schedules/*/join").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/schedules", "/api/schedules/").authenticated()
                         .requestMatchers("/api/schedules/**").hasAnyRole("ADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.GET, "/api/attendance/student/**").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/attendance").authenticated()
                         .requestMatchers("/api/attendance/**").hasAnyRole("ADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.POST, "/api/assignments").hasAnyRole("ADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.PUT, "/api/assignments/**").hasAnyRole("ADMIN", "TRAINER")
                         .requestMatchers(HttpMethod.DELETE, "/api/assignments/**").hasAnyRole("ADMIN", "TRAINER")
-                        .requestMatchers("/api/submissions/review/**").hasAnyRole("ADMIN", "TRAINER")
+                        .requestMatchers("/api/submissions/*/review", "/api/submissions/*/review/**", "/api/submissions/review/**").hasAnyRole("ADMIN", "TRAINER")
 
                         // 4. Any other authenticated request (e.g. /api/auth/me, /api/users/password, student progress, playback)
                         .anyRequest().authenticated()

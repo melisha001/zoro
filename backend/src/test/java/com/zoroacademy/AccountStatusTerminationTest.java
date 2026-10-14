@@ -30,7 +30,8 @@ class AccountStatusTerminationTest {
         tokenProvider = new JwtTokenProvider();
         java.lang.reflect.Field secretField = JwtTokenProvider.class.getDeclaredField("jwtSecret");
         secretField.setAccessible(true);
-        secretField.set(tokenProvider, "Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=");
+        String testSecret = System.getenv().getOrDefault("TEST_JWT_SECRET", "dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItdW5pdC10ZXN0cy0xMjM0NTY3ODkwMTI=");
+        secretField.set(tokenProvider, testSecret);
 
         java.lang.reflect.Field expField = JwtTokenProvider.class.getDeclaredField("jwtExpirationMs");
         expField.setAccessible(true);
@@ -70,7 +71,7 @@ class AccountStatusTerminationTest {
                 .claim("name", "Expired Student")
                 .issuedAt(now)
                 .expiration(expiryDate)
-                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(io.jsonwebtoken.io.Decoders.BASE64.decode("Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=")), io.jsonwebtoken.Jwts.SIG.HS256)
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(io.jsonwebtoken.io.Decoders.BASE64.decode(System.getenv().getOrDefault("TEST_JWT_SECRET", "dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItdW5pdC10ZXN0cy0xMjM0NTY3ODkwMTI="))), io.jsonwebtoken.Jwts.SIG.HS256)
                 .compact();
 
         MockHttpServletRequest request = new MockHttpServletRequest();

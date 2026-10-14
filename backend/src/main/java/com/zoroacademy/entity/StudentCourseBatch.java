@@ -24,7 +24,7 @@ public class StudentCourseBatch {
     @Column(name = "course_id", length = 128)
     private String courseId;
 
-    @Column(name = "batch_name", nullable = false)
+    @Column(name = "batch_name")
     private String batchName;
 
     @Column(name = "batch_id", length = 128)

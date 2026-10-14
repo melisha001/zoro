@@ -42,11 +42,11 @@ export default function AdminDoubtsPage() {
   };
 
   // Filter doubts by Mode Tab (Online, Recorded, Hybrid)
-  const modeFilteredDoubts = doubts.filter(d => (d.mode || 'Online') === activeModeTab);
+  const modeFilteredDoubts = doubts.filter(d => (d.courseMode || d.mode || 'Online') === activeModeTab);
 
   // Filter by Status Tab & Search Query
   const finalFilteredDoubts = modeFilteredDoubts.filter(d => {
-    if (statusTab === 'open' && d.status?.toUpperCase() !== 'OPEN') return false;
+    if (statusTab === 'open' && d.status?.toUpperCase() !== 'OPEN' && d.status?.toUpperCase() !== 'PENDING') return false;
     if (statusTab === 'resolved' && d.status?.toUpperCase() !== 'RESOLVED' && d.status?.toUpperCase() !== 'ANSWERED') return false;
 
     if (!searchTerm) return true;
@@ -90,7 +90,7 @@ export default function AdminDoubtsPage() {
       <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap gap-2">
         {['Online', 'Recorded', 'Hybrid'].map((tab) => {
           const isActive = activeModeTab === tab;
-          const count = doubts.filter(d => (d.mode || 'Online') === tab).length;
+          const count = doubts.filter(d => (d.courseMode || d.mode || 'Online') === tab).length;
           return (
             <button
               key={tab}
@@ -176,7 +176,7 @@ export default function AdminDoubtsPage() {
               {/* Doubt Items List for this Batch */}
               <div className="space-y-4">
                 {batchDoubts.map(doubt => {
-                  const isOpen = doubt.status?.toUpperCase() === 'OPEN';
+                  const isOpen = doubt.status?.toUpperCase() === 'OPEN' || doubt.status?.toUpperCase() === 'PENDING';
                   return (
                     <div key={doubt.id} className="bg-slate-50/80 rounded-2xl border border-slate-200/80 p-5 space-y-4">
                       
@@ -188,7 +188,7 @@ export default function AdminDoubtsPage() {
                           <div>
                             <h3 className="font-extrabold text-slate-900 text-sm">{doubt.studentName}</h3>
                             <p className="text-[11px] text-slate-500 font-semibold">
-                              Course: <span className="font-bold text-blue-700">{doubt.course}</span> • Topic: <span className="text-slate-800 font-bold">{doubt.topic || 'General Query'}</span>
+                              Course: <span className="font-bold text-blue-700">{doubt.course}</span> • Topic: <span className="text-slate-800 font-bold">{doubt.topic || 'General Query'}</span> • Trainer: <span className="text-purple-700 font-bold">{doubt.trainerName || 'Admin'}</span>
                             </p>
                           </div>
                         </div>

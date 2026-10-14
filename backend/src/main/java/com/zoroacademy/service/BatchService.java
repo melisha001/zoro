@@ -1,6 +1,7 @@
 package com.zoroacademy.service;
 
 import com.zoroacademy.entity.*;
+import com.zoroacademy.exception.BadRequestException;
 import com.zoroacademy.exception.ConflictException;
 import com.zoroacademy.repository.*;
 import org.springframework.stereotype.Service;
@@ -41,7 +42,9 @@ public class BatchService {
 
     @Transactional(readOnly = true)
     public List<Batch> getAllBatches() {
-        return batchRepository.findAll();
+        List<Batch> batches = batchRepository.findAll();
+        batches.forEach(this::enrichBatch);
+        return batches;
     }
 
     @Transactional(readOnly = true)
@@ -51,9 +54,12 @@ public class BatchService {
         }
         List<Batch> byId = batchRepository.findByCourseId(courseIdOrName);
         if (!byId.isEmpty()) {
+            byId.forEach(this::enrichBatch);
             return byId;
         }
-        return batchRepository.findByCourseNameIgnoreCase(courseIdOrName);
+        List<Batch> byName = batchRepository.findByCourseNameIgnoreCase(courseIdOrName);
+        byName.forEach(this::enrichBatch);
+        return byName;
     }
 
     @Transactional(readOnly = true)
@@ -61,13 +67,38 @@ public class BatchService {
         if (trainerIdOrName == null || trainerIdOrName.isBlank()) {
             return getAllBatches();
         }
-        return batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(trainerIdOrName, trainerIdOrName);
+        List<Batch> list = batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(trainerIdOrName, trainerIdOrName);
+        list.forEach(this::enrichBatch);
+        return list;
     }
 
     @Transactional(readOnly = true)
     public Batch getBatchById(String id) {
-        return batchRepository.findById(id)
+        Batch b = batchRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Batch not found: " + id));
+        enrichBatch(b);
+        return b;
+    }
+
+    private void enrichBatch(Batch batch) {
+        if (batch == null) return;
+        List<java.util.Map<String, String>> trainerList = new java.util.ArrayList<>();
+        if (batch.getTrainerIds() != null && !batch.getTrainerIds().isEmpty()) {
+            for (String tId : batch.getTrainerIds()) {
+                userRepository.findById(tId).ifPresent(u -> {
+                    java.util.Map<String, String> map = new java.util.HashMap<>();
+                    map.put("id", u.getId());
+                    map.put("name", u.getName());
+                    trainerList.add(map);
+                });
+            }
+        } else if (batch.getTrainerId() != null && !batch.getTrainerId().isBlank()) {
+            java.util.Map<String, String> map = new java.util.HashMap<>();
+            map.put("id", batch.getTrainerId());
+            map.put("name", batch.getTrainerName() != null ? batch.getTrainerName() : "Trainer");
+            trainerList.add(map);
+        }
+        batch.setTrainers(trainerList);
     }
 
     @Transactional(readOnly = true)
@@ -119,23 +150,55 @@ public class BatchService {
         }
 
         // Resolve Course
+        Course course = null;
         if (batch.getCourseId() != null && !batch.getCourseId().isBlank()) {
-            courseRepository.findById(batch.getCourseId()).ifPresent(c -> batch.setCourseName(c.getTitle()));
+            course = courseRepository.findById(batch.getCourseId()).orElse(null);
+            if (course != null) batch.setCourseName(course.getTitle());
         } else if (batch.getCourseName() != null && !batch.getCourseName().isBlank()) {
-            courseRepository.findByTitleIgnoreCase(batch.getCourseName()).ifPresent(c -> batch.setCourseId(c.getId()));
+            course = courseRepository.findByTitleIgnoreCase(batch.getCourseName()).orElse(null);
+            if (course != null) batch.setCourseId(course.getId());
         }
 
-        // Resolve Trainer
-        if (batch.getTrainerId() != null && !batch.getTrainerId().isBlank()) {
-            userRepository.findById(batch.getTrainerId()).ifPresent(u -> batch.setTrainerName(u.getName()));
+        if (course != null && "Recorded".equalsIgnoreCase(course.getMode())) {
+            throw new BadRequestException("Batches cannot be created for Recorded courses. Batches are only supported for Online and Hybrid courses.");
+        }
+
+        // Resolve Trainers (Multi-Trainer Support)
+        if (batch.getTrainerIds() != null && !batch.getTrainerIds().isEmpty()) {
+            java.util.Set<String> validIds = new java.util.LinkedHashSet<>();
+            java.util.List<String> names = new java.util.ArrayList<>();
+            for (String tid : batch.getTrainerIds()) {
+                userRepository.findById(tid).ifPresent(u -> {
+                    validIds.add(u.getId());
+                    names.add(u.getName());
+                });
+            }
+            batch.setTrainerIds(validIds);
+            if (!validIds.isEmpty()) {
+                batch.setTrainerId(validIds.iterator().next());
+                batch.setTrainerName(String.join(", ", names));
+            } else {
+                batch.setTrainerId(null);
+                batch.setTrainerName(null);
+            }
+        } else if (batch.getTrainerId() != null && !batch.getTrainerId().isBlank()) {
+            userRepository.findById(batch.getTrainerId()).ifPresent(u -> {
+                batch.setTrainerName(u.getName());
+                batch.getTrainerIds().add(u.getId());
+            });
         } else if (batch.getTrainerName() != null && !batch.getTrainerName().isBlank()) {
             userRepository.findByNameIgnoreCase(batch.getTrainerName()).stream()
                     .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
                     .findFirst()
-                    .ifPresent(u -> batch.setTrainerId(u.getId()));
+                    .ifPresent(u -> {
+                        batch.setTrainerId(u.getId());
+                        batch.getTrainerIds().add(u.getId());
+                    });
         }
 
-        return batchRepository.save(batch);
+        Batch saved = batchRepository.save(batch);
+        enrichBatch(saved);
+        return saved;
     }
 
     @Transactional
@@ -149,27 +212,64 @@ public class BatchService {
         if (updated.getStatus() != null) targetBatch.setStatus(updated.getStatus());
 
         // Update Course
+        Course course = null;
         if (updated.getCourseId() != null && !updated.getCourseId().isBlank()) {
             targetBatch.setCourseId(updated.getCourseId());
-            courseRepository.findById(updated.getCourseId()).ifPresent(c -> targetBatch.setCourseName(c.getTitle()));
+            course = courseRepository.findById(updated.getCourseId()).orElse(null);
+            if (course != null) targetBatch.setCourseName(course.getTitle());
         } else if (updated.getCourseName() != null && !updated.getCourseName().isBlank()) {
             targetBatch.setCourseName(updated.getCourseName());
-            courseRepository.findByTitleIgnoreCase(updated.getCourseName()).ifPresent(c -> targetBatch.setCourseId(c.getId()));
+            course = courseRepository.findByTitleIgnoreCase(updated.getCourseName()).orElse(null);
+            if (course != null) targetBatch.setCourseId(course.getId());
+        } else if (targetBatch.getCourseId() != null && !targetBatch.getCourseId().isBlank()) {
+            course = courseRepository.findById(targetBatch.getCourseId()).orElse(null);
         }
 
-        // Update Trainer
-        if (updated.getTrainerId() != null && !updated.getTrainerId().isBlank()) {
+        if (course != null && "Recorded".equalsIgnoreCase(course.getMode())) {
+            throw new BadRequestException("Batches cannot be assigned to Recorded courses. Batches are only supported for Online and Hybrid courses.");
+        }
+
+        // Update Trainers (Multi-Trainer Support)
+        if (updated.getTrainerIds() != null) {
+            java.util.Set<String> validIds = new java.util.LinkedHashSet<>();
+            java.util.List<String> names = new java.util.ArrayList<>();
+            for (String tid : updated.getTrainerIds()) {
+                userRepository.findById(tid).ifPresent(u -> {
+                    validIds.add(u.getId());
+                    names.add(u.getName());
+                });
+            }
+            targetBatch.setTrainerIds(validIds);
+            if (!validIds.isEmpty()) {
+                targetBatch.setTrainerId(validIds.iterator().next());
+                targetBatch.setTrainerName(String.join(", ", names));
+            } else {
+                targetBatch.setTrainerId(null);
+                targetBatch.setTrainerName(null);
+            }
+        } else if (updated.getTrainerId() != null && !updated.getTrainerId().isBlank()) {
             targetBatch.setTrainerId(updated.getTrainerId());
-            userRepository.findById(updated.getTrainerId()).ifPresent(u -> targetBatch.setTrainerName(u.getName()));
+            userRepository.findById(updated.getTrainerId()).ifPresent(u -> {
+                targetBatch.setTrainerName(u.getName());
+                java.util.Set<String> set = new java.util.LinkedHashSet<>();
+                set.add(u.getId());
+                targetBatch.setTrainerIds(set);
+            });
         } else if (updated.getTrainerName() != null) {
             targetBatch.setTrainerName(updated.getTrainerName());
             userRepository.findByNameIgnoreCase(updated.getTrainerName()).stream()
                     .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
                     .findFirst()
-                    .ifPresent(u -> targetBatch.setTrainerId(u.getId()));
+                    .ifPresent(u -> {
+                        targetBatch.setTrainerId(u.getId());
+                        java.util.Set<String> set = new java.util.LinkedHashSet<>();
+                        set.add(u.getId());
+                        targetBatch.setTrainerIds(set);
+                    });
         }
 
         Batch savedBatch = batchRepository.save(targetBatch);
+        enrichBatch(savedBatch);
 
         // Propagate renamed batch name to related records
         if (updated.getName() != null && !updated.getName().equalsIgnoreCase(oldName)) {

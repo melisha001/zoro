@@ -5,8 +5,9 @@ $baseUrl = "http://localhost:8080/api"
 Write-Host "=== Starting Zoro Academy E2E Smoke Tests ===" -ForegroundColor Cyan
 
 # 1. Admin Login
-Write-Host "`n[Step 1] Admin Login..."
-$loginBody = @{ email = "admin@zoro.com"; password = "adminPassword123!" } | ConvertTo-Json
+$adminEmail = if ($env:TEST_ADMIN_EMAIL) { $env:TEST_ADMIN_EMAIL } elseif ($env:ADMIN_EMAIL) { $env:ADMIN_EMAIL } else { "admin@zoro.com" }
+$adminPassword = if ($env:TEST_ADMIN_PASSWORD) { $env:TEST_ADMIN_PASSWORD } elseif ($env:ADMIN_PASSWORD) { $env:ADMIN_PASSWORD } else { "placeholder_admin_pass" }
+$loginBody = @{ email = $adminEmail; password = $adminPassword } | ConvertTo-Json
 $loginRes = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method Post -Body $loginBody -ContentType "application/json"
 $token = $loginRes.data.accessToken
 $refreshToken = $loginRes.data.refreshToken
@@ -94,10 +95,6 @@ $modulePayload = @{
         videoId = "smoke_test_vid_123"
         status = "Ready"
         duration = 1800
-    }
-    afterSessionAssessment = @{
-        googleFormUrl = "https://forms.google.com/test-assessment"
-        maxScore = 100
     }
 } | ConvertTo-Json -Depth 6
 

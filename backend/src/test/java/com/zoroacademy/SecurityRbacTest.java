@@ -27,6 +27,7 @@ class SecurityRbacTest {
     private EnrollmentRepository enrollmentRepository;
     private CourseModuleRepository courseModuleRepository;
     private BunnyTokenService bunnyTokenService;
+    private BunnyStreamProperties props;
 
     @BeforeEach
     void setUp() {
@@ -34,7 +35,7 @@ class SecurityRbacTest {
         try {
             java.lang.reflect.Field secretField = JwtTokenProvider.class.getDeclaredField("jwtSecret");
             secretField.setAccessible(true);
-            secretField.set(jwtTokenProvider, "Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=");
+            secretField.set(jwtTokenProvider, System.getenv().getOrDefault("TEST_JWT_SECRET", "dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItdW5pdC10ZXN0cy0xMjM0NTY3ODkwMTI="));
 
             java.lang.reflect.Field expField = JwtTokenProvider.class.getDeclaredField("jwtExpirationMs");
             expField.setAccessible(true);
@@ -45,10 +46,10 @@ class SecurityRbacTest {
             throw new RuntimeException(e);
         }
 
-        BunnyStreamProperties props = new BunnyStreamProperties();
-        props.setApiKey("test-api-key");
-        props.setTokenAuthKey("test-token-key");
-        props.setLibraryId("770045");
+        props = new BunnyStreamProperties();
+        props.setApiKey(System.getenv().getOrDefault("TEST_BUNNY_API_KEY", "test-api-key"));
+        props.setTokenAuthKey(System.getenv().getOrDefault("TEST_BUNNY_TOKEN_AUTH_KEY", "test-token-key"));
+        props.setLibraryId(System.getenv().getOrDefault("TEST_BUNNY_LIBRARY_ID", "123456"));
         props.setCdnHost("vz-test.b-cdn.net");
 
         videoRepository = mock(VideoRepository.class);
@@ -125,7 +126,7 @@ class SecurityRbacTest {
         when(bunnyTokenService.generateSignedPlaybackUrl(anyString(), any()))
                 .thenReturn("https://vz-test.b-cdn.net/b-vid-1/playlist.m3u8?token=mock");
         when(bunnyTokenService.generateSignedEmbedUrl(anyString(), any()))
-                .thenReturn("https://iframe.mediadelivery.net/embed/770045/b-vid-1?token=mock");
+                .thenReturn("https://iframe.mediadelivery.net/embed/" + props.getLibraryId() + "/b-vid-1?token=mock");
 
         VideoPlaybackResponse resp = bunnyStreamService.getPlaybackAuthorization("vid-1", "std-1", "STUDENT", "127.0.0.1");
 

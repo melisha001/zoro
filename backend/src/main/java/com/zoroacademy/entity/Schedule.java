@@ -1,10 +1,13 @@
 package com.zoroacademy.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 @Entity
 @Table(name = "schedules")
@@ -41,9 +44,6 @@ public class Schedule {
     @Column(nullable = false, length = 50)
     private String date;
 
-    @Column(length = 100)
-    private String mode;
-
     @Column(name = "meet_link", columnDefinition = "TEXT")
     private String meetLink;
 
@@ -53,6 +53,24 @@ public class Schedule {
     @Column(length = 50)
     private String status = "Upcoming";
 
+    @Column(name = "notes_file_url", columnDefinition = "TEXT")
+    private String notesFileUrl;
+
+    @Column(name = "notes_file_name")
+    private String notesFileName;
+
+    @Column(name = "worksheet_file_url", columnDefinition = "TEXT")
+    private String worksheetFileUrl;
+
+    @Column(name = "worksheet_file_name")
+    private String worksheetFileName;
+
+    @Column(name = "assignment_file_url", columnDefinition = "TEXT")
+    private String assignmentFileUrl;
+
+    @Column(name = "assignment_file_name")
+    private String assignmentFileName;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -61,9 +79,104 @@ public class Schedule {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "start_time", length = 10)
+    private String startTime;
+
+    @Column(name = "end_time", length = 10)
+    private String endTime;
+
+    @Column(name = "start_at")
+    private LocalDateTime startAt;
+
+    @Column(name = "end_at")
+    private LocalDateTime endAt;
+
+    @Column(length = 20)
+    private String audience = "STUDENT";
+
+    @Transient
+    private Boolean locked;
+
+    @Transient
+    private String unlockTimeLabel;
+
+    @Transient
+    private String serverNow;
+
+    @JsonProperty("locked")
+    public Boolean getLocked() {
+        return locked;
+    }
+
+    public void setLocked(Boolean locked) {
+        this.locked = locked;
+    }
+
+    @JsonProperty("unlockTimeLabel")
+    public String getUnlockTimeLabel() {
+        return unlockTimeLabel;
+    }
+
+    public void setUnlockTimeLabel(String unlockTimeLabel) {
+        this.unlockTimeLabel = unlockTimeLabel;
+    }
+
+    @JsonProperty("serverNow")
+    public String getServerNow() {
+        return serverNow;
+    }
+
+    public void setServerNow(String serverNow) {
+        this.serverNow = serverNow;
+    }
+
+    public String getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(String startTime) {
+        this.startTime = startTime;
+    }
+
+    public String getEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(String endTime) {
+        this.endTime = endTime;
+    }
+
+    public LocalDateTime getStartAt() {
+        return startAt;
+    }
+
+    public void setStartAt(LocalDateTime startAt) {
+        this.startAt = startAt;
+    }
+
+    public LocalDateTime getEndAt() {
+        return endAt;
+    }
+
+    public void setEndAt(LocalDateTime endAt) {
+        this.endAt = endAt;
+    }
+
+    public String getAudience() {
+        return audience != null ? audience : "STUDENT";
+    }
+
+    public void setAudience(String audience) {
+        this.audience = audience;
+    }
+
     public Schedule() {}
 
-    public Schedule(String id, String title, String course, String courseId, String batch, String batchId, String trainer, String trainerId, String time, String date, String mode, String meetLink, Integer studentsCount, String status, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public Schedule(String id, String title, String course, String courseId, String batch, String batchId,
+                    String trainer, String trainerId, String time, String date, String meetLink,
+                    Integer studentsCount, String status, String notesFileUrl, String notesFileName,
+                    String worksheetFileUrl, String worksheetFileName, String assignmentFileUrl,
+                    String assignmentFileName, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.title = title;
         this.course = course;
@@ -74,10 +187,15 @@ public class Schedule {
         this.trainerId = trainerId;
         this.time = time;
         this.date = date;
-        this.mode = mode;
         this.meetLink = meetLink;
         this.studentsCount = studentsCount;
         this.status = status;
+        this.notesFileUrl = notesFileUrl;
+        this.notesFileName = notesFileName;
+        this.worksheetFileUrl = worksheetFileUrl;
+        this.worksheetFileName = worksheetFileName;
+        this.assignmentFileUrl = assignmentFileUrl;
+        this.assignmentFileName = assignmentFileName;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -162,14 +280,6 @@ public class Schedule {
         this.date = date;
     }
 
-    public String getMode() {
-        return mode;
-    }
-
-    public void setMode(String mode) {
-        this.mode = mode;
-    }
-
     public String getMeetLink() {
         return meetLink;
     }
@@ -192,6 +302,120 @@ public class Schedule {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getNotesFileUrl() {
+        return notesFileUrl;
+    }
+
+    public void setNotesFileUrl(String notesFileUrl) {
+        this.notesFileUrl = notesFileUrl;
+    }
+
+    public String getNotesFileName() {
+        return notesFileName;
+    }
+
+    public void setNotesFileName(String notesFileName) {
+        this.notesFileName = notesFileName;
+    }
+
+    @JsonProperty("notesFile")
+    public Map<String, Object> getNotesFile() {
+        if (notesFileUrl == null && notesFileName == null) return null;
+        Map<String, Object> map = new HashMap<>();
+        map.put("fileUrl", notesFileUrl);
+        map.put("name", notesFileName != null ? notesFileName : "Notes");
+        return map;
+    }
+
+    @JsonProperty("notesFile")
+    public void setNotesFile(Object notesFile) {
+        if (notesFile instanceof Map<?, ?> map) {
+            Object url = map.get("fileUrl");
+            if (url == null) url = map.get("url");
+            if (url != null) this.notesFileUrl = url.toString().trim();
+            Object name = map.get("name");
+            if (name != null) this.notesFileName = name.toString().trim();
+        } else if (notesFile instanceof String str && !str.isBlank()) {
+            this.notesFileUrl = str.trim();
+        }
+    }
+
+    public String getWorksheetFileUrl() {
+        return worksheetFileUrl;
+    }
+
+    public void setWorksheetFileUrl(String worksheetFileUrl) {
+        this.worksheetFileUrl = worksheetFileUrl;
+    }
+
+    public String getWorksheetFileName() {
+        return worksheetFileName;
+    }
+
+    public void setWorksheetFileName(String worksheetFileName) {
+        this.worksheetFileName = worksheetFileName;
+    }
+
+    @JsonProperty("worksheetFile")
+    public Map<String, Object> getWorksheetFile() {
+        if (worksheetFileUrl == null && worksheetFileName == null) return null;
+        Map<String, Object> map = new HashMap<>();
+        map.put("fileUrl", worksheetFileUrl);
+        map.put("name", worksheetFileName != null ? worksheetFileName : "Worksheet");
+        return map;
+    }
+
+    @JsonProperty("worksheetFile")
+    public void setWorksheetFile(Object worksheetFile) {
+        if (worksheetFile instanceof Map<?, ?> map) {
+            Object url = map.get("fileUrl");
+            if (url == null) url = map.get("url");
+            if (url != null) this.worksheetFileUrl = url.toString().trim();
+            Object name = map.get("name");
+            if (name != null) this.worksheetFileName = name.toString().trim();
+        } else if (worksheetFile instanceof String str && !str.isBlank()) {
+            this.worksheetFileUrl = str.trim();
+        }
+    }
+
+    public String getAssignmentFileUrl() {
+        return assignmentFileUrl;
+    }
+
+    public void setAssignmentFileUrl(String assignmentFileUrl) {
+        this.assignmentFileUrl = assignmentFileUrl;
+    }
+
+    public String getAssignmentFileName() {
+        return assignmentFileName;
+    }
+
+    public void setAssignmentFileName(String assignmentFileName) {
+        this.assignmentFileName = assignmentFileName;
+    }
+
+    @JsonProperty("assignmentFile")
+    public Map<String, Object> getAssignmentFile() {
+        if (assignmentFileUrl == null && assignmentFileName == null) return null;
+        Map<String, Object> map = new HashMap<>();
+        map.put("fileUrl", assignmentFileUrl);
+        map.put("name", assignmentFileName != null ? assignmentFileName : "Assignment");
+        return map;
+    }
+
+    @JsonProperty("assignmentFile")
+    public void setAssignmentFile(Object assignmentFile) {
+        if (assignmentFile instanceof Map<?, ?> map) {
+            Object url = map.get("fileUrl");
+            if (url == null) url = map.get("url");
+            if (url != null) this.assignmentFileUrl = url.toString().trim();
+            Object name = map.get("name");
+            if (name != null) this.assignmentFileName = name.toString().trim();
+        } else if (assignmentFile instanceof String str && !str.isBlank()) {
+            this.assignmentFileUrl = str.trim();
+        }
     }
 
     public LocalDateTime getCreatedAt() {
@@ -225,10 +449,15 @@ public class Schedule {
         private String trainerId;
         private String time;
         private String date;
-        private String mode;
         private String meetLink;
         private Integer studentsCount = 25;
         private String status = "Upcoming";
+        private String notesFileUrl;
+        private String notesFileName;
+        private String worksheetFileUrl;
+        private String worksheetFileName;
+        private String assignmentFileUrl;
+        private String assignmentFileName;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
 
@@ -272,10 +501,6 @@ public class Schedule {
             this.date = date;
             return this;
         }
-        public Builder mode(String mode) {
-            this.mode = mode;
-            return this;
-        }
         public Builder meetLink(String meetLink) {
             this.meetLink = meetLink;
             return this;
@@ -288,6 +513,30 @@ public class Schedule {
             this.status = status;
             return this;
         }
+        public Builder notesFileUrl(String notesFileUrl) {
+            this.notesFileUrl = notesFileUrl;
+            return this;
+        }
+        public Builder notesFileName(String notesFileName) {
+            this.notesFileName = notesFileName;
+            return this;
+        }
+        public Builder worksheetFileUrl(String worksheetFileUrl) {
+            this.worksheetFileUrl = worksheetFileUrl;
+            return this;
+        }
+        public Builder worksheetFileName(String worksheetFileName) {
+            this.worksheetFileName = worksheetFileName;
+            return this;
+        }
+        public Builder assignmentFileUrl(String assignmentFileUrl) {
+            this.assignmentFileUrl = assignmentFileUrl;
+            return this;
+        }
+        public Builder assignmentFileName(String assignmentFileName) {
+            this.assignmentFileName = assignmentFileName;
+            return this;
+        }
         public Builder createdAt(LocalDateTime createdAt) {
             this.createdAt = createdAt;
             return this;
@@ -298,7 +547,9 @@ public class Schedule {
         }
 
         public Schedule build() {
-            return new Schedule(id, title, course, courseId, batch, batchId, trainer, trainerId, time, date, mode, meetLink, studentsCount, status, createdAt, updatedAt);
+            return new Schedule(id, title, course, courseId, batch, batchId, trainer, trainerId, time, date,
+                    meetLink, studentsCount, status, notesFileUrl, notesFileName, worksheetFileUrl,
+                    worksheetFileName, assignmentFileUrl, assignmentFileName, createdAt, updatedAt);
         }
     }
 

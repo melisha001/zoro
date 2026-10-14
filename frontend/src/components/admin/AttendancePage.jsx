@@ -138,8 +138,9 @@ export default function AdminAttendancePage({ setActiveScreen }) {
     const courseObj = allCourses.find(c => c.title === courseTitle);
     const courseMode = courseObj?.mode || 'Online';
 
-    if (modeTab === 'Online' && courseMode === 'Recorded') return false;
-    if (modeTab === 'Recorded' && courseMode === 'Online') return false;
+    const isOnlineOrHybrid = courseMode === 'Online' || courseMode === 'Hybrid';
+    if ((modeTab === 'Online' || modeTab === 'Hybrid') && !isOnlineOrHybrid) return false;
+    if (modeTab === 'Recorded' && isOnlineOrHybrid) return false;
 
     if (filters.course && !courseTitle.toLowerCase().includes(filters.course.toLowerCase())) {
       return false;
@@ -500,10 +501,13 @@ export default function AdminAttendancePage({ setActiveScreen }) {
                                     const sName = std.name || 'Student';
                                     const key = `${sName.toLowerCase().trim()}_${courseTitle}_${batchName}`;
                                     const currentRemark = remarksState[key] || '';
-
-                                    const presentSessions = 8 + (sIdx % 3);
-                                    const totalSessions = 10;
-                                    const pct = Math.round((presentSessions / totalSessions) * 100);
+                                    const studentRecords = (allRecords || []).filter(r => 
+                                      (r.studentId === std.id || (r.studentName && sName && r.studentName.toLowerCase().trim() === sName.toLowerCase().trim())) &&
+                                      (!r.batch || r.batch === batchName || r.batchId === batchObj.id)
+                                    );
+                                    const presentSessions = studentRecords.filter(r => r.status?.toUpperCase() === 'PRESENT').length;
+                                    const totalSessions = studentRecords.length;
+                                    const pct = totalSessions > 0 ? Math.round((presentSessions / totalSessions) * 100) : 0;
 
                                     return (
                                       <tr key={std.id || sIdx} className="hover:bg-slate-50 transition-colors">

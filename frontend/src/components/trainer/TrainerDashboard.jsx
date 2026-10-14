@@ -5,34 +5,61 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerSchedules } from '../../api/scheduleApi';
+import { getAttendanceRecords } from '../../api/attendanceApi';
 import { sortSchedulesChronologically } from '../../utils/scheduleSortUtil';
 
 export default function TrainerDashboard({ setActiveScreen }) {
   const { user } = useAuth();
   const trainerName = user?.name || '';
   const [schedules, setSchedules] = useState([]);
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
 
   useEffect(() => {
-    async function loadSchedules() {
+    async function loadDashboardData() {
       try {
         if (!trainerName) {
           setSchedules([]);
+          setAttendanceRecords([]);
           return;
         }
-        const res = await getTrainerSchedules(trainerName);
-        if (res.data && Array.isArray(res.data)) {
-          setSchedules(sortSchedulesChronologically(res.data));
+        const [schRes, attRes] = await Promise.all([
+          getTrainerSchedules(trainerName),
+          getAttendanceRecords()
+        ]);
+        if (schRes.data && Array.isArray(schRes.data)) {
+          setSchedules(sortSchedulesChronologically(schRes.data));
         } else {
           setSchedules([]);
         }
+        if (attRes.data && Array.isArray(attRes.data)) {
+          setAttendanceRecords(attRes.data);
+        } else {
+          setAttendanceRecords([]);
+        }
       } catch (err) {
-        console.error('Failed to load dashboard schedules:', err);
+        console.error('Failed to load dashboard data:', err);
       }
     }
-    loadSchedules();
+    loadDashboardData();
   }, [trainerName]);
 
   const sortedDashboardSchedules = sortSchedulesChronologically(schedules);
+
+  const conductedCount = schedules.filter(s => 
+    s.status === 'Completed' || (s.endAt && new Date(s.endAt) < new Date())
+  ).length;
+  const totalClassesCount = schedules.length;
+
+  const trainerScheduleIds = new Set(schedules.map(s => String(s.id)));
+  const relevantAtt = (attendanceRecords || []).filter(r => 
+    (r.scheduleId && trainerScheduleIds.has(String(r.scheduleId))) || 
+    (r.trainer && trainerName && r.trainer.toLowerCase() === trainerName.toLowerCase())
+  );
+  const presentCount = relevantAtt.filter(r => r.status?.toUpperCase() === 'PRESENT').length;
+  const totalAtt = relevantAtt.length;
+  const attendanceRate = totalAtt > 0 
+    ? Math.round((presentCount / totalAtt) * 100) 
+    : (totalClassesCount > 0 ? Math.round((conductedCount / totalClassesCount) * 100) : 0);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 bg-slate-50 min-h-screen">
@@ -135,7 +162,7 @@ export default function TrainerDashboard({ setActiveScreen }) {
                 />
                 <path
                   className="text-emerald-500"
-                  strokeDasharray="92, 100"
+                  strokeDasharray={`${attendanceRate}, 100`}
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   stroke="currentColor"
@@ -143,7 +170,7 @@ export default function TrainerDashboard({ setActiveScreen }) {
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
               </svg>
-              <span className="absolute text-2xl font-black text-slate-900">92%</span>
+              <span className="absolute text-2xl font-black text-slate-900">{attendanceRate}%</span>
             </div>
 
             <div className="w-full space-y-3 pt-2 text-xs font-bold text-slate-700">
@@ -152,7 +179,7 @@ export default function TrainerDashboard({ setActiveScreen }) {
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
                   <span>Classes Conducted</span>
                 </div>
-                <span className="font-extrabold text-slate-900">26 / 28</span>
+                <span className="font-extrabold text-slate-900">{conductedCount} / {totalClassesCount}</span>
               </div>
 
               <div className="flex items-center justify-between">

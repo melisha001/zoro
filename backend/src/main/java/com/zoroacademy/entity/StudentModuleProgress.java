@@ -30,6 +30,15 @@ public class StudentModuleProgress {
     @Column(nullable = false)
     private Boolean completed = false;
 
+    @Column(name = "duration_seconds")
+    private Integer durationSeconds = 0;
+
+    @Column(name = "video_completed", nullable = false)
+    private Boolean videoCompleted = false;
+
+    @Column(name = "last_position")
+    private Integer lastPosition = 0;
+
     @Column(name = "last_position_seconds")
     private Integer lastPositionSeconds = 0;
 
@@ -47,6 +56,9 @@ public class StudentModuleProgress {
         this.watchedSeconds = watchedSeconds;
         this.completed = completed;
         this.lastPositionSeconds = lastPositionSeconds;
+        this.lastPosition = lastPositionSeconds;
+        this.durationSeconds = 0;
+        this.videoCompleted = completed != null ? completed : false;
         this.updatedAt = updatedAt;
     }
 
@@ -98,12 +110,38 @@ public class StudentModuleProgress {
         this.completed = completed;
     }
 
+    public Integer getDurationSeconds() {
+        return durationSeconds;
+    }
+
+    public void setDurationSeconds(Integer durationSeconds) {
+        this.durationSeconds = durationSeconds;
+    }
+
+    public Boolean getVideoCompleted() {
+        return videoCompleted != null && videoCompleted;
+    }
+
+    public void setVideoCompleted(Boolean videoCompleted) {
+        this.videoCompleted = videoCompleted;
+    }
+
+    public Integer getLastPosition() {
+        return lastPosition != null ? lastPosition : (lastPositionSeconds != null ? lastPositionSeconds : 0);
+    }
+
+    public void setLastPosition(Integer lastPosition) {
+        this.lastPosition = lastPosition;
+        this.lastPositionSeconds = lastPosition;
+    }
+
     public Integer getLastPositionSeconds() {
-        return lastPositionSeconds;
+        return lastPositionSeconds != null ? lastPositionSeconds : (lastPosition != null ? lastPosition : 0);
     }
 
     public void setLastPositionSeconds(Integer lastPositionSeconds) {
         this.lastPositionSeconds = lastPositionSeconds;
+        this.lastPosition = lastPositionSeconds;
     }
 
     public LocalDateTime getUpdatedAt() {
@@ -125,6 +163,9 @@ public class StudentModuleProgress {
         private String courseId;
         private Integer watchedSeconds = 0;
         private Boolean completed = false;
+        private Integer durationSeconds = 0;
+        private Boolean videoCompleted = false;
+        private Integer lastPosition = 0;
         private Integer lastPositionSeconds = 0;
         private LocalDateTime updatedAt = LocalDateTime.now();
 
@@ -134,11 +175,18 @@ public class StudentModuleProgress {
         public Builder courseId(String courseId) { this.courseId = courseId; return this; }
         public Builder watchedSeconds(Integer watchedSeconds) { this.watchedSeconds = watchedSeconds; return this; }
         public Builder completed(Boolean completed) { this.completed = completed; return this; }
-        public Builder lastPositionSeconds(Integer lastPositionSeconds) { this.lastPositionSeconds = lastPositionSeconds; return this; }
+        public Builder durationSeconds(Integer durationSeconds) { this.durationSeconds = durationSeconds; return this; }
+        public Builder videoCompleted(Boolean videoCompleted) { this.videoCompleted = videoCompleted; return this; }
+        public Builder lastPosition(Integer lastPosition) { this.lastPosition = lastPosition; this.lastPositionSeconds = lastPosition; return this; }
+        public Builder lastPositionSeconds(Integer lastPositionSeconds) { this.lastPositionSeconds = lastPositionSeconds; this.lastPosition = lastPositionSeconds; return this; }
         public Builder updatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; return this; }
 
         public StudentModuleProgress build() {
-            return new StudentModuleProgress(id, studentId, moduleId, courseId, watchedSeconds, completed, lastPositionSeconds, updatedAt);
+            StudentModuleProgress p = new StudentModuleProgress(id, studentId, moduleId, courseId, watchedSeconds, completed, lastPositionSeconds, updatedAt);
+            p.setDurationSeconds(durationSeconds);
+            p.setVideoCompleted(videoCompleted != null ? videoCompleted : (completed != null ? completed : false));
+            p.setLastPosition(lastPosition != null ? lastPosition : lastPositionSeconds);
+            return p;
         }
     }
 }

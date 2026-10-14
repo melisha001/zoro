@@ -11,13 +11,13 @@ import java.util.UUID;
 public class StoredFile {
 
     @Id
-    @Column(length = 36)
+    @Column(length = 64)
     private String id;
 
-    @Column(name = "original_name", nullable = false)
+    @Column(name = "original_name", nullable = false, length = 500)
     private String originalName;
 
-    @Column(name = "content_type", nullable = false, length = 100)
+    @Column(name = "content_type", nullable = false, length = 150)
     private String contentType;
 
     @Column(name = "size_bytes", nullable = false)
@@ -26,14 +26,20 @@ public class StoredFile {
     @Column(nullable = false, length = 50)
     private String category;
 
-    @Column(name = "owner_id", length = 36)
+    @Column(name = "owner_id", length = 64)
     private String ownerId;
 
-    @Column(name = "storage_path", nullable = false, length = 500)
+    @Column(name = "storage_path", nullable = false, length = 1000)
     private String storagePath;
 
     @Column(name = "is_public", nullable = false)
     private Boolean isPublic = false;
+
+    @Column(name = "sha256_hash", length = 64)
+    private String sha256Hash;
+
+    @Column(name = "ref_count")
+    private Integer refCount = 1;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -42,6 +48,10 @@ public class StoredFile {
     public StoredFile() {}
 
     public StoredFile(String id, String originalName, String contentType, Long sizeBytes, String category, String ownerId, String storagePath, Boolean isPublic) {
+        this(id, originalName, contentType, sizeBytes, category, ownerId, storagePath, isPublic, null, 1);
+    }
+
+    public StoredFile(String id, String originalName, String contentType, Long sizeBytes, String category, String ownerId, String storagePath, Boolean isPublic, String sha256Hash, Integer refCount) {
         this.id = id != null ? id : UUID.randomUUID().toString();
         this.originalName = originalName;
         this.contentType = contentType;
@@ -50,6 +60,8 @@ public class StoredFile {
         this.ownerId = ownerId;
         this.storagePath = storagePath;
         this.isPublic = isPublic != null ? isPublic : false;
+        this.sha256Hash = sha256Hash;
+        this.refCount = refCount != null ? refCount : 1;
     }
 
     @PrePersist
@@ -121,6 +133,22 @@ public class StoredFile {
 
     public void setIsPublic(Boolean isPublic) {
         this.isPublic = isPublic;
+    }
+
+    public String getSha256Hash() {
+        return sha256Hash;
+    }
+
+    public void setSha256Hash(String sha256Hash) {
+        this.sha256Hash = sha256Hash;
+    }
+
+    public Integer getRefCount() {
+        return refCount != null ? refCount : 1;
+    }
+
+    public void setRefCount(Integer refCount) {
+        this.refCount = refCount;
     }
 
     public OffsetDateTime getCreatedAt() {

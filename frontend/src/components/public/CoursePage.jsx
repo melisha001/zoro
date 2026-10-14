@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Play, Layers } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
 import { resolveFileUrl } from '../../api/fileApi';
+import SafeImage from '../common/SafeImage';
 
 function formatModulesDuration(modules) {
   if (!modules || modules.length === 0) return '';
@@ -149,13 +150,11 @@ export default function CoursePage({ onOpenEnquire }) {
                   {/* Video Preview Card */}
                   <div className="md:col-span-5">
                     <div className="relative rounded-2xl overflow-hidden shadow-lg border-2 border-slate-200 group bg-slate-900">
-                      <img
-                        src={resolveFileUrl(selectedCourse.thumbnail || selectedCourse.videoUrl) || 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=800'}
+                      <SafeImage
+                        src={resolveFileUrl(selectedCourse.thumbnail || selectedCourse.videoUrl)}
                         alt={selectedCourse.title}
                         className="w-full h-56 object-cover opacity-90 group-hover:scale-105 transition-transform duration-500"
-                        onError={(e) => {
-                          e.target.src = 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=800';
-                        }}
+                        fallbackSrc="/assets/course-placeholder.svg"
                       />
                       <div className="absolute inset-0 bg-slate-950/40 flex items-center justify-center">
                         <button className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">

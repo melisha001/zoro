@@ -9,9 +9,11 @@ Write-Host "TASK E VERIFICATION: Per-Tab Sessions & Isolation" -ForegroundColor 
 Write-Host "====================================================" -ForegroundColor Cyan
 
 # 1. Setup Student Account for Tab 2
+$adminEmail = if ($env:TEST_ADMIN_EMAIL) { $env:TEST_ADMIN_EMAIL } elseif ($env:ADMIN_EMAIL) { $env:ADMIN_EMAIL } else { "admin@zoro.com" }
+$adminPassword = if ($env:TEST_ADMIN_PASSWORD) { $env:TEST_ADMIN_PASSWORD } elseif ($env:ADMIN_PASSWORD) { $env:ADMIN_PASSWORD } else { "placeholder_admin_pass" }
 $adminLoginBody = @{
-    email = "admin@zoro.com"
-    password = "adminPassword123!"
+    email = $adminEmail
+    password = $adminPassword
 } | ConvertTo-Json
 
 Write-Host "`n[Step 1] Logging in Tab 1 as Admin..."

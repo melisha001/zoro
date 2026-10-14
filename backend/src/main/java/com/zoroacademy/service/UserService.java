@@ -39,6 +39,12 @@ public class UserService {
     private final CompetitionRegistrationRepository competitionRegistrationRepository;
     private final RefreshTokenRepository refreshTokenRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private FileStorageService fileStorageService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.zoroacademy.repository.FeePaymentRepository feePaymentRepository;
+
     @org.springframework.beans.factory.annotation.Autowired
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
@@ -137,7 +143,11 @@ public class UserService {
                 dto.setCourseBatches(list);
 
                 String readable = list.stream()
-                        .map(m -> m.get("course") + " (" + m.get("batch") + ")")
+                        .map(m -> {
+                            String c = (String) m.get("course");
+                            String b = (String) m.get("batch");
+                            return (b != null && !b.isBlank()) ? c + " (" + b + ")" : c;
+                        })
                         .collect(Collectors.joining(", "));
                 dto.setCourse(readable);
             }
@@ -163,6 +173,9 @@ public class UserService {
         }
 
         if (updateDto.getAvatar() != null) {
+            if (user.getAvatar() != null && !user.getAvatar().equals(updateDto.getAvatar())) {
+                cleanupStoredFilesFromText(user.getAvatar());
+            }
             user.setAvatar(updateDto.getAvatar());
         }
 
@@ -309,9 +322,25 @@ public class UserService {
                 }
 
                 if (resolvedCId != null && !resolvedCId.isBlank()) {
+                    Optional<Course> cOpt = courseRepository.findById(resolvedCId);
+                    boolean isRecorded = false;
+                    if (cOpt.isPresent()) {
+                        Course c = cOpt.get();
+                        isRecorded = "Recorded".equalsIgnoreCase(c.getMode());
+                    }
+
+                    if (isRecorded) {
+                        resolvedBId = null;
+                        resolvedBName = null;
+                    } else {
+                        if ((resolvedBId == null || resolvedBId.isBlank()) && (resolvedBName == null || resolvedBName.isBlank())) {
+                            throw new com.zoroacademy.exception.BadRequestException("Batch is required for Online/Hybrid course: " + resolvedCName);
+                        }
+                    }
+
                     newCourseIds.add(resolvedCId);
                     enrollmentService.enroll(userId, dto.getEmail(), resolvedCId, resolvedBId != null ? resolvedBId : resolvedBName);
-                    readableEntries.add(resolvedCName + (!resolvedBName.isBlank() ? " (" + resolvedBName + ")" : ""));
+                    readableEntries.add(resolvedCName + (resolvedBName != null && !resolvedBName.isBlank() ? " (" + resolvedBName + ")" : ""));
                 }
             }
 
@@ -665,7 +694,15 @@ public class UserService {
             competitionRegistrationRepository.deleteAll(competitionRegistrationRepository.findByStudentId(user.getId()));
         }
         if (studentFeeRepository != null) {
-            studentFeeRepository.deleteAll(studentFeeRepository.findByStudentId(user.getId()));
+            List<StudentFee> fees = studentFeeRepository.findByStudentId(user.getId());
+            if (feePaymentRepository != null && fees != null) {
+                for (StudentFee f : fees) {
+                    try {
+                        feePaymentRepository.deleteAll(feePaymentRepository.findByFeeId(f.getId()));
+                    } catch (Exception ignored) {}
+                }
+            }
+            studentFeeRepository.deleteAll(fees);
         }
 
         studentCourseBatchRepository.deleteByStudentId(user.getId());
@@ -679,7 +716,19 @@ public class UserService {
                 enrollmentRepository.deleteAll(enrsByEmail);
             }
         }
+        if (user.getAvatar() != null) {
+            cleanupStoredFilesFromText(user.getAvatar());
+        }
         userRepository.delete(user);
     }
 
+    private void cleanupStoredFilesFromText(String text) {
+        if (text == null || text.isBlank() || fileStorageService == null) return;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})").matcher(text);
+        while (matcher.find()) {
+            try {
+                fileStorageService.deleteFile(matcher.group(1));
+            } catch (Exception ignored) {}
+        }
+    }
 }

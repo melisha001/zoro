@@ -1,31 +1,127 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, AlertTriangle, Calendar, Clock, User, BookOpen } from 'lucide-react';
 import { getStudentAttendance } from '../../api/attendanceApi';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
+import { getSchedules } from '../../api/scheduleApi';
 import { useAuth } from '../../context/AuthContext';
+import { getSessionEndDateTime, getNowInKolkata, syncServerTime } from '../../utils/scheduleSortUtil';
 
 export default function StudentAttendancePage({ setActiveScreen }) {
   const { user } = useAuth();
-  const [records, setRecords] = useState([]);
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [allSchedules, setAllSchedules] = useState([]);
+  const [selectedCourseFilter, setSelectedCourseFilter] = useState('All');
   const [isRecordedOnly, setIsRecordedOnly] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const studentIdentifier = user?.id || user?.email;
 
   useEffect(() => {
-    if (!studentIdentifier) return;
-    getStudentAttendance(studentIdentifier).then(res => {
-      setRecords(Array.isArray(res.data) ? res.data : []);
-    });
-    getStudentEnrolledCourses(studentIdentifier).then(enrolled => {
-      if (enrolled && enrolled.length > 0 && enrolled.every(c => c.mode === 'Recorded')) {
-        setIsRecordedOnly(true);
+    async function loadData() {
+      if (!studentIdentifier) return;
+      setLoading(true);
+      try {
+        await syncServerTime();
+        const [attRes, coursesRes, schRes] = await Promise.all([
+          getStudentAttendance(studentIdentifier),
+          getStudentEnrolledCourses(studentIdentifier),
+          getSchedules()
+        ]);
+
+        const attList = Array.isArray(attRes?.data) ? attRes.data : [];
+        const enrolled = Array.isArray(coursesRes) ? coursesRes : [];
+        const schedules = Array.isArray(schRes?.data) ? schRes.data : [];
+
+        setAttendanceRecords(attList);
+        setEnrolledCourses(enrolled);
+        setAllSchedules(schedules);
+
+        if (enrolled.length > 0 && enrolled.every(c => c.mode === 'Recorded')) {
+          setIsRecordedOnly(true);
+        } else {
+          setIsRecordedOnly(false);
+        }
+      } catch (err) {
+        console.error('Failed to load attendance page data:', err);
+      } finally {
+        setLoading(false);
       }
-    });
+    }
+    loadData();
   }, [studentIdentifier]);
 
-  const totalSessions = records.length;
-  const presentCount = records.filter(r => r.status === 'PRESENT' || r.status === 'Present').length;
-  const absentCount = Math.max(0, totalSessions - presentCount);
+  const nowInKolkata = getNowInKolkata();
+  const nowMs = nowInKolkata.getTime();
+
+  // Find finished sessions for enrolled courses/batches
+  const finishedSessions = [];
+  const processedScheduleIds = new Set();
+
+  allSchedules.forEach(sch => {
+    // Check if session belongs to student's enrolled courses/batches
+    const matchesEnrollment = enrolledCourses.some(c => {
+      const courseMatch = (c.id && sch.courseId && c.id === sch.courseId) ||
+        (c.title && sch.course && c.title.toLowerCase().trim() === sch.course.toLowerCase().trim());
+      const batchMatch = (c.batchId && sch.batchId && c.batchId === sch.batchId) ||
+        (c.batchName && sch.batch && c.batchName.toLowerCase().trim() === sch.batch.toLowerCase().trim());
+      return courseMatch || batchMatch;
+    });
+
+    if (!matchesEnrollment) return;
+
+    // Check if session is finished
+    const end = getSessionEndDateTime(sch.date, sch.time);
+    const endMs = end ? end.getTime() : 0;
+    if (nowMs < endMs) return; // session not finished yet
+
+    processedScheduleIds.add(sch.id);
+
+    // Look for matching attendance record
+    const att = attendanceRecords.find(r => r.scheduleId === sch.id);
+    const status = att?.status ? (att.status.toLowerCase() === 'present' ? 'Present' : 'Absent') : 'Absent';
+
+    finishedSessions.push({
+      id: sch.id,
+      courseId: sch.courseId,
+      course: sch.course || 'English Communication',
+      date: sch.date,
+      time: sch.time || '10:00 AM - 11:00 AM',
+      topic: sch.topic || sch.title || 'Live Interactive Class',
+      trainer: sch.trainer || 'Assigned Trainer',
+      status,
+      joinedAt: att?.joinedAt || att?.createdAt || null
+    });
+  });
+
+  // Also include any standalone attendance records that didn't match a schedule directly
+  attendanceRecords.forEach(att => {
+    if (att.scheduleId && processedScheduleIds.has(att.scheduleId)) return;
+    finishedSessions.push({
+      id: att.id,
+      courseId: att.courseId,
+      course: att.courseName || att.courseId || att.course || 'Enrolled Course',
+      date: att.date || '-',
+      time: att.time || 'Completed Session',
+      topic: att.remarks || att.topic || 'Classroom Session',
+      trainer: att.recordedBy || 'Trainer',
+      status: (att.status || '').toLowerCase() === 'present' ? 'Present' : 'Absent',
+      joinedAt: att.joinedAt || att.createdAt || null
+    });
+  });
+
+  // Sort chronologically descending (newest first)
+  finishedSessions.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+  // Filter by selected course
+  const displayedSessions = finishedSessions.filter(s => {
+    if (selectedCourseFilter === 'All') return true;
+    return s.courseId === selectedCourseFilter || s.course.toLowerCase().trim() === selectedCourseFilter.toLowerCase().trim();
+  });
+
+  const totalSessions = displayedSessions.length;
+  const presentCount = displayedSessions.filter(r => r.status === 'Present').length;
+  const absentCount = displayedSessions.filter(r => r.status === 'Absent').length;
   const attendanceRate = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
 
   return (
@@ -44,9 +140,28 @@ export default function StudentAttendancePage({ setActiveScreen }) {
           <p className="text-xs text-slate-500 font-medium">Recorded live class session attendance for {user?.name || 'Student'}.</p>
         </div>
 
-        <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-2 rounded-2xl text-xs font-black inline-flex items-center space-x-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>Present: {presentCount} / {totalSessions} Sessions ({attendanceRate}%)</span>
+        <div className="flex items-center gap-3">
+          {/* Course filter dropdown */}
+          {enrolledCourses.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500">Filter Course:</span>
+              <select
+                value={selectedCourseFilter}
+                onChange={(e) => setSelectedCourseFilter(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-blue-600 cursor-pointer"
+              >
+                <option value="All">All Courses</option>
+                {enrolledCourses.map(c => (
+                  <option key={c.id} value={c.title}>{c.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-2 rounded-2xl text-xs font-black inline-flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span>Present: {presentCount} / {totalSessions} Sessions ({attendanceRate}%)</span>
+          </div>
         </div>
       </div>
 
@@ -65,9 +180,9 @@ export default function StudentAttendancePage({ setActiveScreen }) {
       {/* Attendance Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-blue-600">
-          <p className="text-xs font-bold text-slate-500">Present / Total Sessions</p>
-          <p className="text-xl font-black text-slate-900 mt-1">{presentCount} / {totalSessions} <span className="text-xs font-bold text-slate-500">Present</span></p>
-          <p className="text-[10px] text-blue-600 font-bold mt-0.5">Live Class Attendance</p>
+          <p className="text-xs font-bold text-slate-500">Finished Sessions</p>
+          <p className="text-xl font-black text-slate-900 mt-1">{totalSessions} <span className="text-xs font-bold text-slate-500">Total</span></p>
+          <p className="text-[10px] text-blue-600 font-bold mt-0.5">Live Classes Completed</p>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-emerald-600">
@@ -79,7 +194,7 @@ export default function StudentAttendancePage({ setActiveScreen }) {
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-teal-500">
           <p className="text-xs font-bold text-slate-500">Present Count</p>
           <p className="text-xl font-black text-teal-700 mt-1">{presentCount} Sessions</p>
-          <p className="text-[10px] text-teal-600 font-bold mt-0.5">Completed</p>
+          <p className="text-[10px] text-teal-600 font-bold mt-0.5">Attended</p>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-rose-500">
@@ -95,37 +210,48 @@ export default function StudentAttendancePage({ setActiveScreen }) {
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider font-bold">
                 <th className="py-3 px-4">Course</th>
-                <th className="py-3 px-4">Remarks / Session</th>
                 <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Recorded At</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Recorded By</th>
+                <th className="py-3 px-4">Time</th>
+                <th className="py-3 px-4">Topic</th>
+                <th className="py-3 px-4">Trainer</th>
+                <th className="py-3 px-4 text-right">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {records.length === 0 ? (
+              {loading ? (
                 <tr>
                   <td colSpan="6" className="py-8 text-center text-slate-400 font-medium">
-                    No attendance records found.
+                    Loading attendance history...
+                  </td>
+                </tr>
+              ) : displayedSessions.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center text-slate-400 font-medium">
+                    No finished sessions found.
                   </td>
                 </tr>
               ) : (
-                records.map((rec) => (
+                displayedSessions.map((rec) => (
                   <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-4 px-4 font-bold text-blue-900">{rec.courseName || rec.courseId || rec.course || '-'}</td>
-                    <td className="py-4 px-4 text-slate-600">{rec.remarks || rec.topic || 'Live Session'}</td>
-                    <td className="py-4 px-4 text-slate-500">{rec.date || '-'}</td>
-                    <td className="py-4 px-4 font-bold text-slate-800">{rec.createdAt ? new Date(rec.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (rec.joinedAt || '-')}</td>
-                    <td className="py-4 px-4">
+                    <td className="py-4 px-4 font-bold text-blue-900">{rec.course}</td>
+                    <td className="py-4 px-4 text-slate-600">{rec.date}</td>
+                    <td className="py-4 px-4 text-slate-500 font-mono">{rec.time}</td>
+                    <td className="py-4 px-4 font-bold text-slate-800">{rec.topic}</td>
+                    <td className="py-4 px-4 text-slate-600">
+                      <span className="inline-flex items-center gap-1">
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        {rec.trainer}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-right">
                       <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${
-                        (rec.status === 'PRESENT' || rec.status === 'Present')
+                        rec.status === 'Present'
                           ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                           : 'bg-rose-100 text-rose-800 border-rose-200'
                       }`}>
                         {rec.status}
                       </span>
                     </td>
-                    <td className="py-4 px-4 text-slate-400 font-mono text-[10px]">{rec.recordedBy || rec.source || 'Portal'}</td>
                   </tr>
                 ))
               )}

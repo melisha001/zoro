@@ -35,3 +35,49 @@ body {
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(226, 232, 240, 0.8);
 }
+
+/* Unlock animation for B1 & B3 */
+@keyframes unlockCardGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    transform: scale(0.98);
+  }
+  30% {
+    box-shadow: 0 0 24px 6px rgba(59, 130, 246, 0.5);
+    transform: scale(1.03);
+    border-color: #3b82f6;
+  }
+  70% {
+    box-shadow: 0 0 16px 2px rgba(59, 130, 246, 0.3);
+    transform: scale(1.01);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    transform: scale(1);
+  }
+}
+
+@keyframes lockShakeAndUnlock {
+  0% { transform: scale(1) rotate(0deg); opacity: 1; }
+  15% { transform: scale(1.1) rotate(-8deg); }
+  30% { transform: scale(1.1) rotate(8deg); }
+  45% { transform: scale(1.15) rotate(-5deg); }
+  60% { transform: scale(1.15) rotate(5deg); }
+  80% { transform: scale(1.2) rotate(0deg); opacity: 0.9; }
+  100% { transform: scale(1.3) rotate(0deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-unlock-card {
+    animation: unlockCardGlow 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .animate-unlock-icon {
+    animation: lockShakeAndUnlock 1.2s ease-in-out forwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-unlock-card {
+    box-shadow: 0 0 12px 2px rgba(59, 130, 246, 0.5);
+  }
+}

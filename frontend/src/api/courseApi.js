@@ -6,14 +6,12 @@ export { parseJsonField };
 /**
  * Normalizes a module object so the UI always receives predictable shapes:
  * - videoStorageRef: { videoId, status } or null
- * - afterSessionAssessment: { type, title, googleFormUrl, file } or null
  * - files & thumbnails: both explicit fields and legacy aliases populated
  */
 export function normalizeModule(m) {
   if (!m) return m;
 
   const videoRef = parseJsonField(m.videoStorageRef);
-  const asa = parseJsonField(m.afterSessionAssessment);
 
   const notesUrl = m.notesFileUrl || m.notesFile?.fileUrl || (typeof m.notesFile === 'string' ? m.notesFile : '') || m.notesPdf?.fileUrl || '';
   const notesName = m.notesFileName || m.notesFile?.name || m.notesPdf?.name || (notesUrl ? 'Notes Document' : '');
@@ -45,8 +43,7 @@ export function normalizeModule(m) {
     assignmentPdf: assignmentObj,
     assignmentFileUrl: assignmentUrl || null,
     assignmentFileName: assignmentName || null,
-    videoStorageRef: videoRef,
-    afterSessionAssessment: asa
+    videoStorageRef: videoRef
   };
 }
 
@@ -152,6 +149,24 @@ export const deleteModule = async (courseId, moduleId) => {
   return apiResponse(false, false, res?.message || 'Failed to delete module');
 };
 
+export const reorderModules = async (courseId, moduleIds) => {
+  if (!courseId) {
+    return apiResponse(null, false, 'Course ID is required');
+  }
+  if (!Array.isArray(moduleIds)) {
+    return apiResponse(null, false, 'moduleIds array is required');
+  }
+  const res = await apiPut(`/courses/${encodeURIComponent(courseId)}/modules/reorder`, { moduleIds });
+  if (res.success && res.data) {
+    return apiResponse(
+      Array.isArray(res.data) ? res.data.map(normalizeModule) : res.data,
+      true,
+      res.message || 'Modules reordered successfully'
+    );
+  }
+  return apiResponse(null, false, res?.message || 'Failed to reorder modules');
+};
+
 export const addLesson = async (courseId, moduleId, lessonData) => {
   if (!courseId || !moduleId) {
     return apiResponse(null, false, 'Course ID and Module ID are required');
@@ -212,4 +227,15 @@ export const updateTrainerCourseRequestStatus = async (requestId, status) => {
     return apiResponse(true, true, 'Status updated');
   }
   return apiResponse(false, false, res?.message || 'Failed to update status');
+};
+
+export const getCourseStudents = async (courseId) => {
+  if (!courseId) {
+    return apiResponse([], false, 'Course ID is required');
+  }
+  const res = await apiGet(`/courses/${encodeURIComponent(courseId)}/students`);
+  if (res.success && Array.isArray(res.data)) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch course students');
 };

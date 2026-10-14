@@ -56,7 +56,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException ex) {
         String correlationId = UUID.randomUUID().toString();
-        log.warn("Data integrity violation [correlationId={}]: {}", correlationId, ex.getMessage());
+        String specificCause = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage();
+        log.warn("Data integrity violation [correlationId={}]: {}", correlationId, specificCause);
         String msg = "Operation cannot be completed because a database constraint was violated.";
         HttpStatus status = HttpStatus.CONFLICT;
         String errorCode = "DATA_INTEGRITY_VIOLATION";
@@ -132,6 +133,13 @@ public class GlobalExceptionHandler {
         String message = details.isEmpty() ? "Constraint validation failed." : "Validation error: " + details;
         log.warn("Constraint violation: {}", message);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error(message, "VALIDATION_FAILED", null));
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(org.springframework.web.HttpRequestMethodNotSupportedException ex) {
+        log.warn("Method not allowed: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ApiResponse.error(ex.getMessage(), "METHOD_NOT_ALLOWED", null));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

@@ -31,17 +31,35 @@ public class BunnyStreamService {
     private final VideoRepository videoRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final CourseModuleRepository courseModuleRepository;
+    private final com.zoroacademy.repository.AssignmentSubmissionRepository submissionRepository;
+    private final com.zoroacademy.repository.StudentModuleProgressRepository studentModuleProgressRepository;
+    private final com.zoroacademy.repository.StudentProgressRepository studentProgressRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public BunnyStreamService(BunnyStreamProperties properties,
+                              BunnyTokenService tokenService,
+                              VideoRepository videoRepository,
+                              EnrollmentRepository enrollmentRepository,
+                              CourseModuleRepository courseModuleRepository,
+                              @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.AssignmentSubmissionRepository submissionRepository,
+                              @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.StudentModuleProgressRepository studentModuleProgressRepository,
+                              @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.StudentProgressRepository studentProgressRepository) {
+        this.properties = properties;
+        this.tokenService = tokenService;
+        this.videoRepository = videoRepository;
+        this.enrollmentRepository = enrollmentRepository;
+        this.courseModuleRepository = courseModuleRepository;
+        this.submissionRepository = submissionRepository;
+        this.studentModuleProgressRepository = studentModuleProgressRepository;
+        this.studentProgressRepository = studentProgressRepository;
+    }
 
     public BunnyStreamService(BunnyStreamProperties properties,
                               BunnyTokenService tokenService,
                               VideoRepository videoRepository,
                               EnrollmentRepository enrollmentRepository,
                               CourseModuleRepository courseModuleRepository) {
-        this.properties = properties;
-        this.tokenService = tokenService;
-        this.videoRepository = videoRepository;
-        this.enrollmentRepository = enrollmentRepository;
-        this.courseModuleRepository = courseModuleRepository;
+        this(properties, tokenService, videoRepository, enrollmentRepository, courseModuleRepository, null, null, null);
     }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -286,7 +304,12 @@ public class BunnyStreamService {
                     || (userEmail != null && enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(userEmail, courseId))
                     || enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(authenticatedUserId, courseId);
             if (enrolled) {
-                isAuthorized = true;
+                if (moduleId != null && isModuleLocked(courseId, moduleId, authenticatedUserId, userEmail)) {
+                    isAuthorized = false;
+                    authMessage = "Access Denied: Complete previous module assignment to unlock.";
+                } else {
+                    isAuthorized = true;
+                }
             } else {
                 isAuthorized = false;
                 authMessage = "Access Denied: You are not enrolled in this course.";
@@ -379,5 +402,64 @@ public class BunnyStreamService {
             case 4 -> "Failed";
             default -> "Status-" + status;
         };
+    }
+
+    private boolean isModuleLocked(String courseId, String moduleId, String studentId, String studentEmail) {
+        if (moduleId == null || courseId == null) return false;
+        List<CourseModule> modules = courseModuleRepository.findByCourseIdOrderByModuleOrderAsc(courseId);
+        if (modules == null || modules.isEmpty()) return false;
+
+        // Module 1 is always unlocked
+        if (modules.get(0).getId().equals(moduleId)) {
+            return false;
+        }
+
+        boolean prevCompleted = true;
+        for (int i = 0; i < modules.size(); i++) {
+            CourseModule m = modules.get(i);
+            if (m.getId().equals(moduleId)) {
+                return !prevCompleted;
+            }
+
+            boolean hasAssignment = (m.getAssignmentFileUrl() != null && !m.getAssignmentFileUrl().isBlank())
+                    || (m.getAssignmentFileName() != null && !m.getAssignmentFileName().isBlank());
+
+            if (hasAssignment) {
+                boolean submitted = false;
+                if (submissionRepository != null) {
+                    if (studentId != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentId("module", m.getId(), studentId).isEmpty()) {
+                        submitted = true;
+                    }
+                    if (!submitted && studentEmail != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentEmailIgnoreCase("module", m.getId(), studentEmail).isEmpty()) {
+                        submitted = true;
+                    }
+                }
+                if (!submitted) {
+                    prevCompleted = false;
+                }
+            } else {
+                boolean videoDone = false;
+                if (studentId != null && studentModuleProgressRepository != null) {
+                    videoDone = studentModuleProgressRepository.findByStudentIdAndModuleId(studentId, m.getId())
+                            .map(smp -> Boolean.TRUE.equals(smp.getCompleted())).orElse(false);
+                }
+                if (!videoDone && studentId != null && studentProgressRepository != null) {
+                    videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(studentId, courseId, m.getId())
+                            .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
+                }
+                if (!videoDone && studentEmail != null && studentProgressRepository != null) {
+                    videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(studentEmail, courseId, m.getId())
+                            .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
+                }
+                if (!videoDone) {
+                    prevCompleted = false;
+                }
+            }
+
+            if (!prevCompleted) {
+                return true;
+            }
+        }
+        return false;
     }
 }

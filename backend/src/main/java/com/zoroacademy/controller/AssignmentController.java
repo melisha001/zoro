@@ -44,16 +44,45 @@ public class AssignmentController {
     public ApiResponse<List<AssignmentSubmission>> getSubmissions(@RequestParam(required = false) String studentId,
                                                                  @RequestParam(required = false) String studentEmail,
                                                                  @RequestParam(required = false) String trainerId,
-                                                                 @RequestParam(required = false) String trainer) {
+                                                                 @RequestParam(required = false) String trainer,
+                                                                 @RequestParam(required = false) String submitterRole) {
         String effectiveStudent = (studentId != null && !studentId.isBlank()) ? studentId : studentEmail;
+        String effectiveTrainer = (trainerId != null && !trainerId.isBlank()) ? trainerId : trainer;
+
+        if ("TRAINER".equalsIgnoreCase(submitterRole)) {
+            String targetTrainerId = (effectiveTrainer != null && !effectiveTrainer.isBlank()) ? effectiveTrainer : effectiveStudent;
+            if (targetTrainerId != null && !targetTrainerId.isBlank()) {
+                return ApiResponse.ok(assignmentService.getTrainerOwnSubmissions(targetTrainerId));
+            }
+            return ApiResponse.ok(assignmentService.getTrainerSubmissions());
+        }
+
         if (effectiveStudent != null && !effectiveStudent.isBlank()) {
             return ApiResponse.ok(assignmentService.getSubmissionsByStudent(effectiveStudent));
         }
-        String effectiveTrainer = (trainerId != null && !trainerId.isBlank()) ? trainerId : trainer;
         if (effectiveTrainer != null && !effectiveTrainer.isBlank()) {
             return ApiResponse.ok(assignmentService.getSubmissionsByTrainer(effectiveTrainer));
         }
         return ApiResponse.ok(assignmentService.getAllSubmissions());
+    }
+
+    // --- ADMIN TRAINER ASSIGNMENTS ENDPOINTS ---
+
+    @GetMapping("/api/admin/trainer-submissions")
+    public ApiResponse<List<AssignmentSubmission>> getAdminTrainerSubmissions() {
+        return ApiResponse.ok(assignmentService.getTrainerSubmissions());
+    }
+
+    @PutMapping("/api/admin/trainer-submissions/{id}/review")
+    public ApiResponse<AssignmentSubmission> reviewAdminTrainerSubmission(@PathVariable String id, @RequestBody Map<String, Object> body) {
+        String score = body.get("score") != null ? String.valueOf(body.get("score")) : null;
+        String remarks = body.get("feedback") != null ? String.valueOf(body.get("feedback")) : (body.get("remarks") != null ? String.valueOf(body.get("remarks")) : "");
+        String correctedBy = body.get("correctedBy") != null ? String.valueOf(body.get("correctedBy")) : "Admin";
+        String correctionAttachment = body.get("correctionAttachment") != null ? body.get("correctionAttachment").toString() : null;
+        String correctedFileUrl = body.get("correctedFileUrl") != null ? String.valueOf(body.get("correctedFileUrl")) : null;
+
+        AssignmentSubmission reviewed = assignmentService.reviewSubmission(id, score, remarks, correctedBy, correctionAttachment, correctedFileUrl);
+        return ApiResponse.ok(reviewed, "Trainer assignment reviewed successfully");
     }
 
     @PostMapping("/api/submissions")
@@ -63,12 +92,13 @@ public class AssignmentController {
 
     @PutMapping("/api/submissions/{id}/review")
     public ApiResponse<AssignmentSubmission> reviewSubmission(@PathVariable String id, @RequestBody Map<String, Object> body) {
-        String score = (String) body.get("score");
-        String remarks = (String) body.get("remarks");
-        String correctedBy = (String) body.get("correctedBy");
+        String score = body.get("score") != null ? String.valueOf(body.get("score")) : null;
+        String remarks = body.get("remarks") != null ? String.valueOf(body.get("remarks")) : (body.get("feedback") != null ? String.valueOf(body.get("feedback")) : "");
+        String correctedBy = body.get("correctedBy") != null ? String.valueOf(body.get("correctedBy")) : "Trainer";
         String correctionAttachment = body.get("correctionAttachment") != null ? body.get("correctionAttachment").toString() : null;
+        String correctedFileUrl = body.get("correctedFileUrl") != null ? String.valueOf(body.get("correctedFileUrl")) : null;
 
-        AssignmentSubmission reviewed = assignmentService.reviewSubmission(id, score, remarks, correctedBy, correctionAttachment);
+        AssignmentSubmission reviewed = assignmentService.reviewSubmission(id, score, remarks, correctedBy, correctionAttachment, correctedFileUrl);
         return ApiResponse.ok(reviewed, "Submission reviewed successfully");
     }
 

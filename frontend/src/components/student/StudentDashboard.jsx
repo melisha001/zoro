@@ -96,7 +96,7 @@ export default function StudentDashboard({ setActiveScreen }) {
         a.studentName?.toLowerCase() === studentName.toLowerCase()
       );
       const presentCount = myAtt.filter(a => a.status?.toUpperCase() === 'PRESENT').length;
-      const attRate = myAtt.length > 0 ? Math.round((presentCount / myAtt.length) * 100) : 100;
+      const attRate = myAtt.length > 0 ? Math.round((presentCount / myAtt.length) * 100) : 0;
       setCounts(prev => ({ ...prev, attendanceRate: attRate }));
 
     } catch (err) {

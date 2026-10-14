@@ -30,21 +30,25 @@ app:
       cdn-host: "test-cdn.b-cdn.net"
 
 admin:
-  email: "admin@zoro.com"
-  password: "adminPassword123!"
+  email: "${TEST_ADMIN_EMAIL:test-admin@example.com}"
+  password: "${TEST_ADMIN_PASSWORD:testAdminPassword123!}"
 
 bunny:
   stream:
-    library-id: "770045"
-    api-key: "test-bunny-api-key-test"
-    cdn-host: "vz-test.b-cdn.net"
-    token-auth-key: "test-bunny-token-key-test"
+    library-id: "${TEST_BUNNY_LIBRARY_ID:123456}"
+    api-key: "${TEST_BUNNY_API_KEY:test-bunny-api-key-test}"
+    cdn-host: "${TEST_BUNNY_CDN_HOST:vz-test.b-cdn.net}"
+    token-auth-key: "${TEST_BUNNY_TOKEN_AUTH_KEY:test-bunny-token-key-test}"
     token-expiration-seconds: 7200
-    webhook-secret: "test-webhook-secret"
+    webhook-secret: "${TEST_BUNNY_WEBHOOK_SECRET:test-webhook-secret}"
 
 jwt:
-  secret: "Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM="
+  secret: "${TEST_JWT_SECRET:dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItdW5pdC10ZXN0cy0xMjM0NTY3ODkwMTI=}"
   expiration-ms: 604800000
 
 cors:
   allowed-origins: "*"
+
+schedule:
+  resources-unlock-minutes: 60
+

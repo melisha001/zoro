@@ -35,6 +35,7 @@ const AdminCompetitionPage = lazy(() => import('./components/admin/AdminCompetit
 const AdminCompetitionRegistrationsPage = lazy(() => import('./components/admin/AdminCompetitionRegistrationsPage'));
 const AdminCompetitionModulesPage = lazy(() => import('./components/admin/AdminCompetitionModulesPage'));
 const AdminAssignmentsPage = lazy(() => import('./components/admin/AdminAssignmentsPage'));
+const AdminTrainerAssignmentsPage = lazy(() => import('./components/admin/AdminTrainerAssignmentsPage'));
 const AdminDoubtsPage = lazy(() => import('./components/admin/AdminDoubtsPage'));
 const AdminEnquiryPage = lazy(() => import('./components/admin/AdminEnquiryPage'));
 const AdminReportsPage = lazy(() => import('./components/admin/AdminReportsPage'));
@@ -58,6 +59,7 @@ const StudentAttendancePage = lazy(() => import('./components/student/Attendance
 const JoinSessionPage = lazy(() => import('./components/student/JoinSessionPage'));
 const AssignmentPage = lazy(() => import('./components/student/AssignmentPage'));
 const DoubtPage = lazy(() => import('./components/student/DoubtPage'));
+const StudentNotificationsPage = lazy(() => import('./components/student/StudentNotificationsPage'));
 const StudentProfilePage = lazy(() => import('./components/student/StudentProfilePage'));
 
 function PortalLoadingFallback() {
@@ -88,6 +90,7 @@ function getActiveScreenFromPath(path) {
   if (path === '/admin/attendance') return 'admin-attendance';
   if (path === '/admin/schedules') return 'admin-schedule';
   if (path === '/admin/assignments') return 'admin-assignments';
+  if (path === '/admin/trainer-assignments') return 'admin-trainer-assignments';
   if (path === '/admin/doubts') return 'admin-doubts';
   if (path === '/admin/enquiries') return 'admin-enquiries';
   if (path === '/admin/fees') return 'admin-fees';
@@ -118,6 +121,7 @@ function getActiveScreenFromPath(path) {
   if (path === '/student/join') return 'student-join';
   if (path === '/student/assignments') return 'student-assignment';
   if (path === '/student/doubts') return 'student-doubt';
+  if (path === '/student/notifications') return 'student-notifications';
   if (path === '/student/profile') return 'student-profile';
 
   return 'public-home';
@@ -142,6 +146,7 @@ function screenToPath(screen, params = {}) {
     case 'admin-attendance': return '/admin/attendance';
     case 'admin-schedule': return '/admin/schedules';
     case 'admin-assignments': return '/admin/assignments';
+    case 'admin-trainer-assignments': return '/admin/trainer-assignments';
     case 'admin-doubts': return '/admin/doubts';
     case 'admin-enquiries': return '/admin/enquiries';
     case 'admin-fees': return '/admin/fees';
@@ -174,6 +179,7 @@ function screenToPath(screen, params = {}) {
     case 'student-join': return '/student/join';
     case 'student-assignment': return '/student/assignments';
     case 'student-doubt': return '/student/doubts';
+    case 'student-notifications': return '/student/notifications';
     case 'student-profile': return '/student/profile';
 
     default:
@@ -476,6 +482,7 @@ function AppRoutes() {
           <Route path="attendance" element={<AdminAttendancePage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="schedules" element={<AdminSchedulePage />} />
           <Route path="assignments" element={<AdminAssignmentsPage />} />
+          <Route path="trainer-assignments" element={<AdminTrainerAssignmentsPage />} />
           <Route path="doubts" element={<AdminDoubtsPage />} />
           <Route path="enquiries" element={<AdminEnquiryPage />} />
           <Route path="fees" element={<AdminFeesPage />} />
@@ -522,6 +529,7 @@ function AppRoutes() {
           <Route path="join" element={<JoinSessionPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="assignments" element={<AssignmentPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="doubts" element={<DoubtPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
+          <Route path="notifications" element={<StudentNotificationsPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="profile" element={<StudentProfilePage />} />
           <Route path="*" element={<Navigate to="/student" replace />} />
         </Route>

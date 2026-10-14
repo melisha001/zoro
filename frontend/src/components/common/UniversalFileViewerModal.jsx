@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Download, FileText, Film, Music, Image as ImageIcon, FileSpreadsheet, Archive } from 'lucide-react';
 import { resolveFileUrl, getFileLink, openFileWithSignedLink } from '../../api/fileApi';
+import SafeImage from './SafeImage';
 
 export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDownload = false }) {
   const [resolvedUrl, setResolvedUrl] = useState('');
@@ -90,14 +91,11 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
           {/* 1. IMAGE VIEWER */}
           {isImage && (
             <div className="max-h-full max-w-full flex items-center justify-center">
-              <img
+              <SafeImage
                 src={fileUrl}
                 alt={fileName}
                 className="max-h-[70vh] w-auto max-w-full object-contain rounded-2xl shadow-lg border border-slate-200 bg-white"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800';
-                }}
+                fallbackSrc="/assets/course-placeholder.svg"
               />
             </div>
           )}

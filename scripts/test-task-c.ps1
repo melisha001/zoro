@@ -6,7 +6,9 @@ Write-Host "=== TASK C: COURSE MODULES & SECURED PLAYBACK VERIFICATION ===" -For
 
 # 1. Admin Login
 Write-Host "`n[1] Admin Login..."
-$adminLogin = @{ email = "admin@zoro.com"; password = "adminPassword123!" } | ConvertTo-Json
+$adminEmail = if ($env:TEST_ADMIN_EMAIL) { $env:TEST_ADMIN_EMAIL } elseif ($env:ADMIN_EMAIL) { $env:ADMIN_EMAIL } else { "admin@zoro.com" }
+$adminPassword = if ($env:TEST_ADMIN_PASSWORD) { $env:TEST_ADMIN_PASSWORD } elseif ($env:ADMIN_PASSWORD) { $env:ADMIN_PASSWORD } else { "placeholder_admin_pass" }
+$adminLogin = @{ email = $adminEmail; password = $adminPassword } | ConvertTo-Json
 $adminRes = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method Post -Body $adminLogin -ContentType "application/json"
 $adminToken = $adminRes.data.accessToken
 Write-Host "-> HTTP 200: Admin token obtained." -ForegroundColor Green
@@ -47,7 +49,6 @@ $modulePayload = @{
     description = "Core speaking concepts and fundamentals"
     duration = "" # Empty initially when video is processing (Requirement 1)
     videoStorageRef = (@{ videoId = $videoId; status = "Ready" } | ConvertTo-Json -Compress)
-    afterSessionAssessment = (@{ type = "google_form"; title = "Module 1 Quiz"; googleFormUrl = "https://forms.google.com/test-1" } | ConvertTo-Json -Compress)
 } | ConvertTo-Json
 $createModRes = Invoke-RestMethod -Uri "$baseUrl/courses/$($course.id)/modules" -Method Post -Headers $adminHeaders -Body $modulePayload
 $moduleId = $createModRes.data.id

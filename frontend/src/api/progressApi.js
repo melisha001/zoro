@@ -65,3 +65,39 @@ export const authorizeVideoPlayback = async (studentId, courseId, moduleId) => {
     return apiResponse(null, false, err.message || 'Playback authorization failed.');
   }
 };
+
+/**
+ * Send video playback heartbeat every 5s while playing.
+ * Server accumulates watched_seconds, capped by elapsed time,
+ * and sets video_completed = true when watched_seconds >= 95% of duration.
+ */
+export const sendVideoHeartbeat = async ({ moduleId, position, duration, courseId, studentId }) => {
+  try {
+    const res = await apiPost('/progress/heartbeat', {
+      moduleId,
+      position,
+      duration,
+      courseId,
+      studentId
+    });
+    return res;
+  } catch (e) {
+    console.error('[Progress] Heartbeat error:', e);
+    return apiResponse(null, false, e.message);
+  }
+};
+
+/**
+ * Get detailed module progress records (including video_completed, duration_seconds, watched_seconds, last_position)
+ */
+export const getStudentModuleProgress = async (studentId, courseId) => {
+  try {
+    const query = courseId ? `?courseId=${encodeURIComponent(courseId)}` : '';
+    const res = await apiGet(`/progress/modules/${encodeURIComponent(studentId)}${query}`);
+    return res;
+  } catch (e) {
+    console.error('[Progress] Fetch module progress error:', e);
+    return apiResponse([]);
+  }
+};
+

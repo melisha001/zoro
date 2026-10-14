@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Calendar as CalendarIcon, Menu, X, AlertTriangle, Clock, CheckCircle2, Info } from 'lucide-react';
+import { Bell, Calendar as CalendarIcon, Menu, X, AlertTriangle, Clock, CheckCircle2, Info, User } from 'lucide-react';
 import { getTrainers } from '../../api/userApi';
 import { getSchedules } from '../../api/scheduleApi';
 import { getMyNotifications } from '../../api/notificationApi';
@@ -219,11 +219,17 @@ export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScr
           className="flex items-center space-x-2.5 cursor-pointer hover:opacity-85 transition-opacity"
           title="View Profile"
         >
-          <img
-            src={resolveFileUrl(user.avatar) || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120"}
-            alt={user.name}
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-blue-500/20"
-          />
+          {user?.avatar ? (
+            <img
+              src={resolveFileUrl(user.avatar)}
+              alt={user.name || 'User'}
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-blue-500/20"
+            />
+          ) : (
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs ring-2 ring-blue-500/20">
+              {user?.name ? user.name.trim().charAt(0).toUpperCase() : <User className="w-4 h-4 text-blue-600" />}
+            </div>
+          )}
           <div className="hidden sm:block text-left leading-tight">
             <div className="text-xs font-bold text-slate-800">{user.name}</div>
             <div className="text-[10px] font-medium text-slate-500">{user.role}</div>

@@ -2,11 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, Video, FileText, Layers, Trash2, Edit, X, 
-  ExternalLink, Image as ImageIcon, AlertCircle, CheckCircle2,
-  Music, Download
+  ExternalLink, Image as ImageIcon, AlertCircle,
+  Music, Download, GripVertical, ChevronUp, ChevronDown
 } from 'lucide-react';
 import * as tus from 'tus-js-client';
-import { parseJsonField, getCourseById, addModule, updateModule, deleteModule } from '../../api/courseApi';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { parseJsonField, getCourseById, addModule, updateModule, deleteModule, reorderModules } from '../../api/courseApi';
 import { uploadFile, resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
 import { createVideoUploadSession, getVideoDetails } from '../../api/videoApi';
 import { useDialog } from '../../context/DialogContext';
@@ -18,6 +34,251 @@ const ALLOWED_EXTENSIONS = [
   'mp4', 'mov', 'avi', 'webm',
   'mp3', 'wav', 'm4a'
 ];
+
+function SortableModuleCard({
+  mod,
+  index,
+  totalModules,
+  moduleVideoStatuses,
+  openEditModal,
+  setDeleteModalData,
+  onMoveUp,
+  onMoveDown,
+  renderFileIcon,
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: mod.id || `mod-${index}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  const notes = mod.notesFile || mod.notesPdf;
+  const worksheet = mod.worksheetFile || mod.activitySheetPdf;
+  const assignment = mod.assignmentFile || mod.assignmentPdf;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`bg-white rounded-3xl border ${isDragging ? 'border-blue-500 shadow-xl' : 'border-slate-200/80 shadow-md'} overflow-hidden space-y-4`}
+    >
+      {/* Module Header Bar */}
+      <div className="bg-slate-900 text-white p-5 px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center space-x-3">
+          {/* Drag Handle */}
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-grab active:cursor-grabbing transition-colors shrink-0"
+            title="Drag to reorder"
+            aria-label={`Drag module ${index + 1} to reorder`}
+          >
+            <GripVertical className="w-5 h-5" />
+          </button>
+
+          {/* Up / Down Arrows (fallback) */}
+          <div className="flex flex-col space-y-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={onMoveUp}
+              disabled={index === 0}
+              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+              title="Move Up"
+              aria-label={`Move module ${index + 1} up`}
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={onMoveDown}
+              disabled={index === totalModules - 1}
+              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+              title="Move Down"
+              aria-label={`Move module ${index + 1} down`}
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="px-3 py-1.5 rounded-xl bg-blue-600 text-white font-black text-xs shrink-0 tracking-wide">
+            Module {index + 1}
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-black tracking-tight">{mod.title}</h3>
+              {(() => {
+                const vInfo = parseJsonField(mod.videoStorageRef);
+                const rawStatus = moduleVideoStatuses[mod.id] || vInfo?.status;
+                if (!vInfo && !rawStatus) return null;
+                const statusNorm = typeof rawStatus === 'string' ? rawStatus : 'Processing';
+                return (
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                    statusNorm === 'Ready'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : statusNorm === 'Failed'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      : statusNorm === 'Uploading'
+                      ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 animate-pulse'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
+                  }`}>
+                    <Video className="w-3 h-3" />
+                    <span>Video: {statusNorm}</span>
+                    {mod.duration && statusNorm === 'Ready' && <span className="opacity-80">({mod.duration})</span>}
+                  </span>
+                );
+              })()}
+            </div>
+            {mod.description && <p className="text-slate-400 text-xs mt-0.5 line-clamp-1">{mod.description}</p>}
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2 self-end sm:self-auto">
+          <button
+            onClick={() => openEditModal(mod)}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
+          >
+            <Edit className="w-3.5 h-3.5 text-blue-400" />
+            <span>Edit</span>
+          </button>
+          <button
+            onClick={() => setDeleteModalData(mod)}
+            className="bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span>Delete</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Module Body Content */}
+      <div className="p-6 pt-2 space-y-4">
+        {/* Thumbnail Preview & URL Link Row */}
+        <div className="flex flex-col md:flex-row gap-4 items-start border-b border-slate-100 pb-4">
+          {mod.thumbnail ? (
+            <div className="w-32 h-24 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0">
+              <img src={resolveFileUrl(mod.thumbnail)} alt={mod.title} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="w-32 h-24 rounded-xl bg-slate-100 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-[10px] font-semibold shrink-0">
+              <ImageIcon className="w-5 h-5 mb-1" />
+              No Thumbnail
+            </div>
+          )}
+
+          <div className="flex-1 space-y-2 text-xs">
+            {mod.url && (
+              <div className="flex items-center space-x-2 text-blue-600 font-bold">
+                <ExternalLink className="w-4 h-4 shrink-0" />
+                <a href={mod.url} target="_blank" rel="noopener noreferrer" className="hover:underline break-all">
+                  {mod.url}
+                </a>
+              </div>
+            )}
+            {mod.description && (
+              <p className="text-slate-600 leading-relaxed font-medium">{mod.description}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Module Resources Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Notes */}
+          <div className={`p-4 rounded-2xl border ${notes ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50 border-slate-200'} space-y-1.5`}>
+            <div className="flex items-center justify-between text-xs font-black">
+              <span className="text-slate-800 flex items-center gap-1.5">
+                {renderFileIcon(notes?.type)}
+                Notes
+              </span>
+              {notes && <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">Attached</span>}
+            </div>
+            {notes ? (
+              <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
+                <div>📄 {notes.name} {notes.size ? `(${notes.size})` : ''}</div>
+                {notes.fileUrl && (
+                  <button
+                    type="button"
+                    onClick={() => openFileWithSignedLink(notes.fileUrl, notes.name)}
+                    className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" /> Download / View
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="text-[11px] text-slate-400 font-medium italic">No Notes attached</div>
+            )}
+          </div>
+
+          {/* Worksheet */}
+          <div className={`p-4 rounded-2xl border ${worksheet ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50 border-slate-200'} space-y-1.5`}>
+            <div className="flex items-center justify-between text-xs font-black">
+              <span className="text-slate-800 flex items-center gap-1.5">
+                {renderFileIcon(worksheet?.type)}
+                Worksheet
+              </span>
+              {worksheet && <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">Attached</span>}
+            </div>
+            {worksheet ? (
+              <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
+                <div>📑 {worksheet.name} {worksheet.size ? `(${worksheet.size})` : ''}</div>
+                {worksheet.fileUrl && (
+                  <button
+                    type="button"
+                    onClick={() => openFileWithSignedLink(worksheet.fileUrl, worksheet.name)}
+                    className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" /> Download / View
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="text-[11px] text-slate-400 font-medium italic">No Worksheet attached</div>
+            )}
+          </div>
+
+          {/* Assignment */}
+          <div className={`p-4 rounded-2xl border ${assignment ? 'bg-amber-50/50 border-amber-200' : 'bg-slate-50 border-slate-200'} space-y-1.5`}>
+            <div className="flex items-center justify-between text-xs font-black">
+              <span className="text-slate-800 flex items-center gap-1.5">
+                {renderFileIcon(assignment?.type)}
+                Assignment
+              </span>
+              {assignment && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">Attached</span>}
+            </div>
+            {assignment ? (
+              <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
+                <div>📝 {assignment.name} {assignment.size ? `(${assignment.size})` : ''}</div>
+                {assignment.fileUrl && (
+                  <button
+                    type="button"
+                    onClick={() => openFileWithSignedLink(assignment.fileUrl, assignment.name)}
+                    className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" /> Download / View
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="text-[11px] text-slate-400 font-medium italic">No Assignment attached</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function CourseContentPage({ courseId: propCourseId, setActiveScreen }) {
   const { courseId: paramCourseId } = useParams();
@@ -49,15 +310,21 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     thumbnail: '',
     notesFile: null,
     worksheetFile: null,
-    assignmentFile: null,
-    afterSessionAssessmentEnabled: false,
-    assessmentType: 'uploaded',
-    assessmentTitle: '',
-    assessmentGoogleFormUrl: '',
-    assessmentFile: null
+    assignmentFile: null
   });
 
   const [moduleVideoStatuses, setModuleVideoStatuses] = useState({});
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const syncModuleVideoStatuses = (modulesList) => {
     if (!modulesList || modulesList.length === 0) return;
@@ -83,9 +350,10 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     if (courseId) {
       const res = await getCourseById(courseId);
       if (res.data) {
-        setCourse(res.data);
-        if (res.data.modules) {
-          syncModuleVideoStatuses(res.data.modules);
+        const sortedModules = [...(res.data.modules || [])].sort((a, b) => ((a.moduleOrder ?? a.module_order ?? 0) - (b.moduleOrder ?? b.module_order ?? 0)));
+        setCourse({ ...res.data, modules: sortedModules });
+        if (sortedModules.length > 0) {
+          syncModuleVideoStatuses(sortedModules);
         }
       }
     }
@@ -107,12 +375,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
       thumbnail: '',
       notesFile: null,
       worksheetFile: null,
-      assignmentFile: null,
-      afterSessionAssessmentEnabled: false,
-      assessmentType: 'uploaded',
-      assessmentTitle: '',
-      assessmentGoogleFormUrl: '',
-      assessmentFile: null
+      assignmentFile: null
     });
     setVideoUploadState({
       isUploading: false,
@@ -131,7 +394,6 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     if (fieldName === 'notesFile') return 'Notes';
     if (fieldName === 'worksheetFile') return 'Worksheet';
     if (fieldName === 'assignmentFile') return 'Assignment';
-    if (fieldName === 'assessmentFile') return 'Assessment';
     return 'Resource';
   };
 
@@ -332,16 +594,6 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     e.preventDefault();
     if (!formData.title.trim()) return;
 
-    let afterSessionAssessment = null;
-    if (formData.afterSessionAssessmentEnabled) {
-      afterSessionAssessment = {
-        type: formData.assessmentType,
-        title: formData.assessmentTitle.trim() || `${formData.title} Assessment`,
-        googleFormUrl: formData.assessmentType === 'google_form' ? formData.assessmentGoogleFormUrl.trim() : '',
-        file: formData.assessmentType === 'uploaded' ? formData.assessmentFile : null
-      };
-    }
-
     const isVideoReady = videoUploadState.status === 'Ready' || videoUploadState.status === 'Transcoded' || videoUploadState.status === 'Finished';
     const computedDuration = (isVideoReady && videoUploadState.duration)
       ? videoUploadState.duration
@@ -369,8 +621,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
       worksheetFileName: formData.worksheetFile?.name || null,
       assignmentFile: formData.assignmentFile,
       assignmentFileUrl: formData.assignmentFile?.fileUrl || (typeof formData.assignmentFile === 'string' ? formData.assignmentFile : null),
-      assignmentFileName: formData.assignmentFile?.name || null,
-      afterSessionAssessment
+      assignmentFileName: formData.assignmentFile?.name || null
     };
 
     if (editingModule) {
@@ -411,7 +662,6 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
 
   const openEditModal = (mod) => {
     setEditingModule(mod);
-    const asa = parseJsonField(mod.afterSessionAssessment);
     const videoRef = parseJsonField(mod.videoStorageRef);
     let existingVideoId = '';
     if (videoRef && typeof videoRef === 'object') {
@@ -427,12 +677,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
       thumbnail: mod.thumbnail || '',
       notesFile: mod.notesFile || mod.notesPdf || null,
       worksheetFile: mod.worksheetFile || mod.activitySheetPdf || null,
-      assignmentFile: mod.assignmentFile || mod.assignmentPdf || null,
-      afterSessionAssessmentEnabled: Boolean(asa),
-      assessmentType: asa?.type || 'uploaded',
-      assessmentTitle: asa?.title || '',
-      assessmentGoogleFormUrl: asa?.googleFormUrl || '',
-      assessmentFile: asa?.file || null
+      assignmentFile: mod.assignmentFile || mod.assignmentPdf || null
     });
 
     if (existingVideoId && typeof existingVideoId === 'string') {
@@ -449,6 +694,40 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
     if (['mp4', 'mov', 'avi', 'webm'].includes(type)) return <Video className="w-4 h-4 text-blue-600 shrink-0" />;
     if (['mp3', 'wav', 'm4a'].includes(type)) return <Music className="w-4 h-4 text-emerald-600 shrink-0" />;
     return <FileText className="w-4 h-4 text-amber-600 shrink-0" />;
+  };
+
+  const handleMoveModule = async (index, direction) => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (!course?.modules || targetIndex < 0 || targetIndex >= course.modules.length) return;
+
+    const newModules = arrayMove(course.modules, index, targetIndex);
+    setCourse(prev => ({ ...prev, modules: newModules }));
+
+    const moduleIds = newModules.map(m => m.id);
+    const res = await reorderModules(course.id, moduleIds);
+    if (!res.success) {
+      await showError(res.message || 'Failed to reorder modules', 'Reorder Error');
+      loadCourse();
+    }
+  };
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !course?.modules) return;
+
+    const oldIndex = course.modules.findIndex(m => (m.id || m) === active.id);
+    const newIndex = course.modules.findIndex(m => (m.id || m) === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newModules = arrayMove(course.modules, oldIndex, newIndex);
+    setCourse(prev => ({ ...prev, modules: newModules }));
+
+    const moduleIds = newModules.map(m => m.id);
+    const res = await reorderModules(course.id, moduleIds);
+    if (!res.success) {
+      await showError(res.message || 'Failed to reorder modules', 'Reorder Error');
+      loadCourse();
+    }
   };
 
   return (
@@ -518,225 +797,33 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
               </p>
             </div>
           ) : (
-            course.modules.map((mod, index) => {
-              const notes = mod.notesFile || mod.notesPdf;
-              const worksheet = mod.worksheetFile || mod.activitySheetPdf;
-              const assignment = mod.assignmentFile || mod.assignmentPdf;
-
-              return (
-                <div key={mod.id || index} className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden space-y-4">
-                  
-                  {/* Module Header Bar */}
-                  <div className="bg-slate-900 text-white p-5 px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 rounded-xl bg-blue-600 text-white font-black text-xs flex items-center justify-center shrink-0">
-                        {index + 1}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-base font-black tracking-tight">{mod.title}</h3>
-                          {(() => {
-                            const vInfo = parseJsonField(mod.videoStorageRef);
-                            const rawStatus = moduleVideoStatuses[mod.id] || vInfo?.status;
-                            if (!vInfo && !rawStatus) return null;
-                            const statusNorm = typeof rawStatus === 'string' ? rawStatus : 'Processing';
-                            return (
-                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                                statusNorm === 'Ready'
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                  : statusNorm === 'Failed'
-                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                                  : statusNorm === 'Uploading'
-                                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 animate-pulse'
-                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
-                              }`}>
-                                <Video className="w-3 h-3" />
-                                <span>Video: {statusNorm}</span>
-                                {mod.duration && statusNorm === 'Ready' && <span className="opacity-80">({mod.duration})</span>}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                        {mod.description && <p className="text-slate-400 text-xs mt-0.5 line-clamp-1">{mod.description}</p>}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2 self-end sm:self-auto">
-                      <button
-                        onClick={() => openEditModal(mod)}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
-                      >
-                        <Edit className="w-3.5 h-3.5 text-blue-400" />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        onClick={() => setDeleteModalData(mod)}
-                        className="bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                        <span>Delete</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Module Body Content */}
-                  <div className="p-6 pt-2 space-y-4">
-                    
-                    {/* Thumbnail Preview & URL Link Row */}
-                    <div className="flex flex-col md:flex-row gap-4 items-start border-b border-slate-100 pb-4">
-                      {mod.thumbnail ? (
-                        <div className="w-32 h-24 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0">
-                          <img src={resolveFileUrl(mod.thumbnail)} alt={mod.title} className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <div className="w-32 h-24 rounded-xl bg-slate-100 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-[10px] font-semibold shrink-0">
-                          <ImageIcon className="w-5 h-5 mb-1" />
-                          No Thumbnail
-                        </div>
-                      )}
-
-                      <div className="flex-1 space-y-2 text-xs">
-                        {mod.url && (
-                          <div className="flex items-center space-x-2 text-blue-600 font-bold">
-                            <ExternalLink className="w-4 h-4 shrink-0" />
-                            <a href={mod.url} target="_blank" rel="noopener noreferrer" className="hover:underline break-all">
-                              {mod.url}
-                            </a>
-                          </div>
-                        )}
-                        {mod.description && (
-                          <p className="text-slate-600 leading-relaxed font-medium">{mod.description}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Module Resources Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      
-                      {/* Notes */}
-                      <div className={`p-4 rounded-2xl border ${notes ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50 border-slate-200'} space-y-1.5`}>
-                        <div className="flex items-center justify-between text-xs font-black">
-                          <span className="text-slate-800 flex items-center gap-1.5">
-                            {renderFileIcon(notes?.type)}
-                            Notes
-                          </span>
-                          {notes && <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">Attached</span>}
-                        </div>
-                        {notes ? (
-                          <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
-                            <div>📄 {notes.name} {notes.size ? `(${notes.size})` : ''}</div>
-                            {notes.fileUrl && (
-                              <button
-                                type="button"
-                                onClick={() => openFileWithSignedLink(notes.fileUrl, notes.name)}
-                                className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
-                              >
-                                <Download className="w-3 h-3" /> Download / View
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-slate-400 font-medium italic">No Notes attached</div>
-                        )}
-                      </div>
-
-                      {/* Worksheet */}
-                      <div className={`p-4 rounded-2xl border ${worksheet ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50 border-slate-200'} space-y-1.5`}>
-                        <div className="flex items-center justify-between text-xs font-black">
-                          <span className="text-slate-800 flex items-center gap-1.5">
-                            {renderFileIcon(worksheet?.type)}
-                            Worksheet
-                          </span>
-                          {worksheet && <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">Attached</span>}
-                        </div>
-                        {worksheet ? (
-                          <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
-                            <div>📑 {worksheet.name} {worksheet.size ? `(${worksheet.size})` : ''}</div>
-                            {worksheet.fileUrl && (
-                              <button
-                                type="button"
-                                onClick={() => openFileWithSignedLink(worksheet.fileUrl, worksheet.name)}
-                                className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
-                              >
-                                <Download className="w-3 h-3" /> Download / View
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-slate-400 font-medium italic">No Worksheet attached</div>
-                        )}
-                      </div>
-
-                      {/* Assignment */}
-                      <div className={`p-4 rounded-2xl border ${assignment ? 'bg-amber-50/50 border-amber-200' : 'bg-slate-50 border-slate-200'} space-y-1.5`}>
-                        <div className="flex items-center justify-between text-xs font-black">
-                          <span className="text-slate-800 flex items-center gap-1.5">
-                            {renderFileIcon(assignment?.type)}
-                            Assignment
-                          </span>
-                          {assignment && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">Attached</span>}
-                        </div>
-                        {assignment ? (
-                          <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
-                            <div>📝 {assignment.name} {assignment.size ? `(${assignment.size})` : ''}</div>
-                            {assignment.fileUrl && (
-                              <button
-                                type="button"
-                                onClick={() => openFileWithSignedLink(assignment.fileUrl, assignment.name)}
-                                className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
-                              >
-                                <Download className="w-3 h-3" /> Download / View
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-slate-400 font-medium italic">No Assignment attached</div>
-                        )}
-                      </div>
-
-                      {/* After Session Assessment */}
-                      <div className={`p-4 rounded-2xl border ${mod.afterSessionAssessment ? 'bg-purple-50/50 border-purple-200' : 'bg-slate-50 border-slate-200'} space-y-1.5`}>
-                        <div className="flex items-center justify-between text-xs font-black">
-                          <span className="text-slate-800 flex items-center gap-1.5">
-                            <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />
-                            Assessment
-                          </span>
-                          {mod.afterSessionAssessment && (
-                            <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-bold">
-                              {mod.afterSessionAssessment.type === 'google_form' ? 'Google Form' : 'File'}
-                            </span>
-                          )}
-                        </div>
-                        {mod.afterSessionAssessment ? (
-                          <div className="text-[11px] font-bold text-slate-700 truncate space-y-1">
-                            <div className="line-clamp-1">📋 {mod.afterSessionAssessment.title || 'Post-Session Evaluation'}</div>
-                            {mod.afterSessionAssessment.type === 'google_form' ? (
-                              <a href={mod.afterSessionAssessment.googleFormUrl || '#'} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold">
-                                <ExternalLink className="w-3 h-3" /> Open Form URL
-                              </a>
-                            ) : mod.afterSessionAssessment.file?.fileUrl ? (
-                              <button
-                                type="button"
-                                onClick={() => openFileWithSignedLink(mod.afterSessionAssessment.file.fileUrl, mod.afterSessionAssessment.file.name)}
-                                className="text-purple-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
-                              >
-                                <Download className="w-3 h-3" /> Download / View ({mod.afterSessionAssessment.file.name})
-                              </button>
-                            ) : (
-                              <span className="text-[10px] text-slate-500 font-medium">Uploaded File attached</span>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-slate-400 font-medium italic">No Assessment configured</div>
-                        )}
-                      </div>
-
-                    </div>
-
-                  </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={course.modules.map((m, idx) => m.id || `mod-${idx}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-6">
+                  {course.modules.map((mod, index) => (
+                    <SortableModuleCard
+                      key={mod.id || index}
+                      mod={mod}
+                      index={index}
+                      totalModules={course.modules.length}
+                      moduleVideoStatuses={moduleVideoStatuses}
+                      openEditModal={openEditModal}
+                      setDeleteModalData={setDeleteModalData}
+                      onMoveUp={() => handleMoveModule(index, 'up')}
+                      onMoveDown={() => handleMoveModule(index, 'down')}
+                      renderFileIcon={renderFileIcon}
+                    />
+                  ))}
                 </div>
-              );
-            })
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       )}
@@ -966,110 +1053,6 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                   <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5" /> {fileErrors.assignmentFile}
                   </p>
-                )}
-              </div>
-
-              {/* 8. After-Session Assessment Section */}
-              <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="enableAssessment"
-                      checked={formData.afterSessionAssessmentEnabled}
-                      onChange={(e) => setFormData({ ...formData, afterSessionAssessmentEnabled: e.target.checked })}
-                      className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
-                    />
-                    <label htmlFor="enableAssessment" className="font-extrabold text-purple-950 text-xs cursor-pointer">
-                      Attach After-Session Assessment
-                    </label>
-                  </div>
-                  <span className="text-[10px] bg-purple-100 text-purple-800 font-extrabold px-2.5 py-0.5 rounded-full border border-purple-200 uppercase">
-                    Student Assessment
-                  </span>
-                </div>
-
-                {formData.afterSessionAssessmentEnabled && (
-                  <div className="space-y-3 pt-2 border-t border-purple-200/60">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Assessment Title / Instructions *</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Module 1 Post-Session Evaluation"
-                        value={formData.assessmentTitle}
-                        onChange={(e) => setFormData({ ...formData, assessmentTitle: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:border-purple-600"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Assessment Mode / Type</label>
-                      <div className="flex items-center space-x-4">
-                        <label className="flex items-center space-x-2 cursor-pointer font-bold text-xs text-slate-700">
-                          <input
-                            type="radio"
-                            name="assessmentType"
-                            value="uploaded"
-                            checked={formData.assessmentType === 'uploaded'}
-                            onChange={() => setFormData({ ...formData, assessmentType: 'uploaded' })}
-                            className="text-purple-600 focus:ring-purple-500"
-                          />
-                          <span>Uploaded Assessment File</span>
-                        </label>
-                        <label className="flex items-center space-x-2 cursor-pointer font-bold text-xs text-slate-700">
-                          <input
-                            type="radio"
-                            name="assessmentType"
-                            value="google_form"
-                            checked={formData.assessmentType === 'google_form'}
-                            onChange={() => setFormData({ ...formData, assessmentType: 'google_form' })}
-                            className="text-purple-600 focus:ring-purple-500"
-                          />
-                          <span>Google Form URL</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {formData.assessmentType === 'google_form' ? (
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Google Form URL *</label>
-                        <input
-                          type="url"
-                          placeholder="https://docs.google.com/forms/d/e/.../viewform"
-                          value={formData.assessmentGoogleFormUrl}
-                          onChange={(e) => setFormData({ ...formData, assessmentGoogleFormUrl: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-medium focus:border-purple-600"
-                        />
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <label className="block text-[11px] font-bold text-slate-700">Upload Assessment File (PDF, DOCX, PPTX, XLSX, MP4, MP3, Images, etc.)</label>
-                        {formData.assessmentFile ? (
-                          <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 text-xs font-bold">
-                            <span>📝 {formData.assessmentFile.name} ({formData.assessmentFile.size})</span>
-                            <button
-                              type="button"
-                              onClick={() => setFormData({ ...formData, assessmentFile: null })}
-                              className="text-rose-600 font-bold hover:underline"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ) : (
-                          <input
-                            type="file"
-                            onChange={(e) => handleFileUpload(e, 'assessmentFile')}
-                            className="w-full text-xs font-medium cursor-pointer"
-                          />
-                        )}
-                        {fileErrors.assessmentFile && (
-                          <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-1">
-                            <AlertCircle className="w-3.5 h-3.5" /> {fileErrors.assessmentFile}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
                 )}
               </div>
 

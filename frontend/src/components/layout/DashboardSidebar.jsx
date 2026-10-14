@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   LayoutDashboard, Users, BookOpen, UserCheck, Calendar, 
   CreditCard, FileText, HelpCircle, BarChart3, Settings, 
-  User, Video, Clock, LogOut, Bell, CheckSquare, X, Wallet, FileSpreadsheet, Layers, Trophy, MessageSquare
+  User, Video, Clock, LogOut, Bell, CheckSquare, X, Wallet, FileSpreadsheet, Layers, Trophy, MessageSquare, Award
 } from 'lucide-react';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
@@ -20,6 +20,7 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
       { id: 'admin-attendance', label: 'Attendance', icon: Clock },
       { id: 'admin-schedule', label: 'Schedule', icon: Calendar },
       { id: 'admin-assignments', label: 'Assignments', icon: FileText },
+      { id: 'admin-trainer-assignments', label: 'Trainer Assignments', icon: Award },
       { id: 'admin-doubts', label: 'Doubts', icon: HelpCircle },
       { id: 'admin-enquiries', label: 'Enquiry Details', icon: MessageSquare },
       { id: 'admin-fees', label: 'Student Fees', icon: CreditCard },
@@ -51,9 +52,10 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
     menuItems = [
       { id: 'student-dash', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'student-course-learn', label: 'My Courses (LMS)', icon: BookOpen },
-      { id: 'student-attendance', label: 'My Attendance', icon: Clock, badge: '92%' },
+      { id: 'student-attendance', label: 'My Attendance', icon: Clock },
       { id: 'student-assignment', label: 'Assignments', icon: FileText },
       { id: 'student-doubt', label: 'My Doubts', icon: HelpCircle },
+      { id: 'student-notifications', label: 'Notifications', icon: Bell },
       { id: 'student-profile', label: 'My Profile', icon: User },
     ];
   }

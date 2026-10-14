@@ -15,10 +15,10 @@ class BunnyTokenServiceTest {
     @BeforeEach
     void setUp() {
         properties = new BunnyStreamProperties();
-        properties.setLibraryId("770045");
-        properties.setApiKey("0726be56-9703-46cd-a987ac2f79f2-558e-4b2c4");
-        properties.setCdnHost("vz-251d06e3-32f.b-cdn.net");
-        properties.setTokenAuthKey("0726be56-9703-46cd-a987ac2f79f2-558e-4b2c4");
+        properties.setLibraryId(System.getenv().getOrDefault("TEST_BUNNY_LIBRARY_ID", "123456"));
+        properties.setApiKey(System.getenv().getOrDefault("TEST_BUNNY_API_KEY", "test-bunny-api-key-placeholder"));
+        properties.setCdnHost(System.getenv().getOrDefault("TEST_BUNNY_CDN_HOST", "test-cdn.b-cdn.net"));
+        properties.setTokenAuthKey(System.getenv().getOrDefault("TEST_BUNNY_TOKEN_AUTH_KEY", "test-bunny-token-key-placeholder"));
         properties.setTokenExpirationSeconds(7200);
 
         tokenService = new BunnyTokenService(properties);
@@ -44,7 +44,7 @@ class BunnyTokenServiceTest {
         String url = tokenService.generateSignedPlaybackUrl(videoId, "127.0.0.1");
 
         assertNotNull(url);
-        assertTrue(url.startsWith("https://vz-251d06e3-32f.b-cdn.net/sample-guid-456/playlist.m3u8?token="));
+        assertTrue(url.startsWith("https://" + properties.getCdnHost() + "/sample-guid-456/playlist.m3u8?token="));
         assertTrue(url.contains("&expires="));
     }
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Building, Check, Save, Globe, Info, Loader2 } from 'lucide-react';
+import { Building, Check, Save, Globe, Info, Loader2, HardDrive, Trash2, RefreshCw, ShieldAlert } from 'lucide-react';
 import { getWebsiteSettings, saveWebsiteSettings } from '../../api/websiteSettingsApi';
+import { getStorageMetrics, triggerStorageCleanup, updateStorageSettings } from '../../api/storageApi';
 import { useDialog } from '../../context/DialogContext';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
@@ -10,6 +11,15 @@ export default function AdminSettingsPage() {
   const [activeTab, setActiveTab] = useState('landing_content');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Storage and Cost Control State (Requirement C7)
+  const [storageMetrics, setStorageMetrics] = useState(null);
+  const [isLoadingStorage, setIsLoadingStorage] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [cleanupDryRun, setCleanupDryRun] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState(null);
+  const [retentionMonths, setRetentionMonths] = useState(0);
+  const [isSavingRetention, setIsSavingRetention] = useState(false);
 
   const [generalInfo, setGeneralInfo] = useState({
     academyName: 'Zoro English Academy',
@@ -97,6 +107,72 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes <= 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const loadStorageMetrics = async () => {
+    setIsLoadingStorage(true);
+    try {
+      const res = await getStorageMetrics();
+      if (res && res.success && res.data) {
+        setStorageMetrics(res.data);
+        setRetentionMonths(res.data.submissionRetentionMonths || 0);
+      }
+    } catch (err) {
+      console.error('Failed to load storage metrics:', err);
+    } finally {
+      setIsLoadingStorage(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'storage') {
+      loadStorageMetrics();
+    }
+  }, [activeTab]);
+
+  const handleRunCleanup = async () => {
+    setIsCleaning(true);
+    try {
+      const res = await triggerStorageCleanup(cleanupDryRun, 24);
+      if (res && res.success && res.data) {
+        setCleanupResult(res.data);
+        await showSuccess(res.data.message || 'Storage cleanup completed', 'Cleanup Executed');
+        await loadStorageMetrics();
+      } else {
+        await showError(res?.message || 'Failed to execute storage cleanup', 'Cleanup Error');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to trigger cleanup', 'Cleanup Error');
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
+  const handleSaveRetention = async (e) => {
+    if (e) e.preventDefault();
+    setIsSavingRetention(true);
+    try {
+      const res = await updateStorageSettings({ submissionRetentionMonths: retentionMonths });
+      if (res && res.success && res.data) {
+        setStorageMetrics(res.data);
+        const policyLabel = retentionMonths === 0 ? 'Disabled (Retain Indefinitely)' : `${retentionMonths} Months`;
+        await showSuccess(`Submission retention set to ${policyLabel}`, 'Policy Saved');
+      } else {
+        await showError(res?.message || 'Failed to save retention policy', 'Save Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to save retention policy', 'Save Failed');
+    } finally {
+      setIsSavingRetention(false);
+    }
+  };
+
   return (
     <div className="space-y-6 text-xs">
       {/* Header */}
@@ -139,6 +215,16 @@ export default function AdminSettingsPage() {
         >
           <Building className="w-4 h-4" />
           General Information
+        </button>
+
+        <button
+          onClick={() => setActiveTab('storage')}
+          className={`pb-3 transition-colors border-b-2 flex items-center gap-1.5 cursor-pointer ${
+            activeTab === 'storage' ? 'border-[#0F52BA] text-[#0F52BA] font-extrabold' : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <HardDrive className="w-4 h-4" />
+          Storage & Cost Control
         </button>
       </div>
 
@@ -491,6 +577,184 @@ export default function AdminSettingsPage() {
             </button>
           </div>
         </form>
+      )}
+
+      {/* 4. STORAGE & COST CONTROL TAB (Requirement C7) */}
+      {activeTab === 'storage' && (
+        <div className="space-y-6">
+          {/* Header Controls */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div>
+              <h2 className="text-base font-black text-slate-800 flex items-center gap-2">
+                <HardDrive className="w-5 h-5 text-[#0F52BA]" />
+                <span>Bunny Storage & Stream Overview</span>
+              </h2>
+              <p className="text-slate-500 text-xs mt-0.5">
+                Real-time storage telemetry, SHA-256 deduplication stats, and automated cleanup controls.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={loadStorageMetrics}
+              disabled={isLoadingStorage}
+              className="px-3.5 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingStorage ? 'animate-spin' : ''}`} />
+              <span>Refresh Metrics</span>
+            </button>
+          </div>
+
+          {/* Metrics Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 font-bold block mb-1">Total Stored Files</span>
+              <span className="text-2xl font-black text-slate-900">
+                {storageMetrics ? storageMetrics.totalFiles : '—'}
+              </span>
+              <span className="text-[11px] font-semibold text-slate-400 block mt-1">Across all categories</span>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 font-bold block mb-1">Total Storage Used</span>
+              <span className="text-2xl font-black text-[#0F52BA]">
+                {storageMetrics ? formatBytes(storageMetrics.totalSizeBytes) : '—'}
+              </span>
+              <span className="text-[11px] font-semibold text-emerald-600 block mt-1">SHA-256 Deduplicated</span>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 font-bold block mb-1">Orphan Files Detected</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black text-amber-600">
+                  {storageMetrics ? storageMetrics.orphanCount : '0'}
+                </span>
+                <span className="text-xs font-bold text-slate-400">
+                  ({storageMetrics ? formatBytes(storageMetrics.orphanSizeBytes) : '0 B'})
+                </span>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-400 block mt-1">&gt; 24h unreferenced</span>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <span className="text-slate-500 font-bold block mb-1">Last Cleanup Run</span>
+              <span className="text-sm font-black text-slate-800 block truncate">
+                {storageMetrics ? storageMetrics.lastCleanupTime : 'Never'}
+              </span>
+              <span className="text-[11px] font-semibold text-slate-400 block mt-1">
+                Reclaimed: {storageMetrics ? formatBytes(storageMetrics.lastReclaimedBytes) : '0 B'}
+              </span>
+            </div>
+          </div>
+
+          {/* Breakdown By Category */}
+          {storageMetrics && storageMetrics.sizeByCategory && (
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <h3 className="font-extrabold text-slate-800 text-sm">Storage Usage by Category</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {Object.entries(storageMetrics.sizeByCategory).map(([cat, bytes]) => (
+                  <div key={cat} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500 block truncate">{cat}</span>
+                    <span className="text-sm font-black text-slate-900 block mt-1">{formatBytes(bytes)}</span>
+                    <span className="text-[10px] text-slate-400 font-bold block">
+                      {storageMetrics.countByCategory?.[cat] || 0} files
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cleanup Trigger & Policy Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 1. Manual Cleanup Runner */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <div>
+                <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                  <Trash2 className="w-4 h-4 text-rose-600" />
+                  <span>Orphan & Video Cleanup</span>
+                </h3>
+                <p className="text-slate-500 text-xs mt-1">
+                  Permanently deletes files and Bunny Stream videos older than 24 hours that are unreferenced anywhere in courses, modules, schedules, submissions, or website assets.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="cleanupDryRunToggle"
+                  checked={cleanupDryRun}
+                  onChange={(e) => setCleanupDryRun(e.target.checked)}
+                  className="w-4 h-4 text-[#0F52BA] rounded cursor-pointer"
+                />
+                <label htmlFor="cleanupDryRunToggle" className="text-xs font-bold text-slate-700 cursor-pointer">
+                  Dry-run Preview Mode <span className="text-slate-400 font-medium">(scan & count without deleting)</span>
+                </label>
+              </div>
+
+              {cleanupResult && (
+                <div className={`p-4 rounded-xl text-xs border ${
+                  cleanupResult.dryRun ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                }`}>
+                  <span className="font-extrabold block mb-1">
+                    {cleanupResult.dryRun ? '🔍 Dry-Run Scan Results' : '✅ Cleanup Purge Executed'}
+                  </span>
+                  <p className="font-medium">{cleanupResult.message}</p>
+                </div>
+              )}
+
+              <div>
+                <button
+                  type="button"
+                  onClick={handleRunCleanup}
+                  disabled={isCleaning}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-xs inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 text-xs"
+                >
+                  {isCleaning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  <span>{isCleaning ? 'Running Cleanup...' : (cleanupDryRun ? 'Preview Cleanup Scan' : 'Run Cleanup Now')}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Retention Policy */}
+            <form onSubmit={handleSaveRetention} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <div>
+                <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-[#0F52BA]" />
+                  <span>Student Submission Retention Policy</span>
+                </h3>
+                <p className="text-slate-500 text-xs mt-1">
+                  Automatically prune assignment attachments and student submission files older than the specified retention window while preserving grade audit records.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Retention Duration</label>
+                <select
+                  value={retentionMonths}
+                  onChange={(e) => setRetentionMonths(parseInt(e.target.value))}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs cursor-pointer"
+                >
+                  <option value={0}>0 — Disabled (Retain Submission Files Indefinitely)</option>
+                  <option value={3}>3 Months (Purge completed submissions older than 3 months)</option>
+                  <option value={6}>6 Months (Purge completed submissions older than 6 months)</option>
+                  <option value={12}>12 Months (Purge completed submissions older than 1 year)</option>
+                  <option value={24}>24 Months (Purge completed submissions older than 2 years)</option>
+                </select>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingRetention}
+                  className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-xs inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 text-xs"
+                >
+                  {isSavingRetention ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>{isSavingRetention ? 'Saving Policy...' : 'Save Retention Policy'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
     </div>

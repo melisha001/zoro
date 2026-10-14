@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="50%" stop-color="#312e81" />
+      <stop offset="100%" stop-color="#4338ca" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#bgGrad)" />
+  <circle cx="700" cy="80" r="140" fill="#4f46e5" opacity="0.2" />
+  <circle cx="100" cy="380" r="180" fill="#7c3aed" opacity="0.15" />
+  <g transform="translate(350, 150)">
+    <rect x="-50" y="-50" width="100" height="100" rx="24" fill="url(#accentGrad)" opacity="0.9" />
+    <path d="M -20 -15 L 20 -15 C 25 -15 25 15 20 15 L -20 15 C -25 15 -25 -15 -20 -15 Z" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M -15 0 L 15 0 M 0 -15 L 0 15" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+  </g>
+  <text x="400" y="290" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="28" fill="#ffffff" letter-spacing="1">ZORO ACADEMY</text>
+  <text x="400" y="325" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="600" font-size="16" fill="#c7d2fe">Course Learning Program</text>
+</svg>

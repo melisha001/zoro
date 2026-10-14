@@ -25,6 +25,9 @@ public class Doubt {
     @Column(name = "course_title")
     private String courseTitle;
 
+    @Column(name = "batch_id", length = 128)
+    private String batchId;
+
     @Column(name = "module_id", length = 128)
     private String moduleId;
 
@@ -49,18 +52,23 @@ public class Doubt {
     @Column(length = 50)
     private String status = "Pending"; // Pending, Resolved
 
+    @Column(name = "course_mode", length = 50)
+    private String courseMode;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     public Doubt() {}
 
-    public Doubt(String id, String studentId, String studentName, String courseId, String courseTitle, String moduleId, String moduleTitle, String question, String trainerName, String trainerId, String reply, String replyDate, String status, LocalDateTime createdAt) {
+    public Doubt(String id, String studentId, String studentName, String courseId, String courseTitle, String courseMode, String batchId, String moduleId, String moduleTitle, String question, String trainerName, String trainerId, String reply, String replyDate, String status, LocalDateTime createdAt) {
         this.id = id;
         this.studentId = studentId;
         this.studentName = studentName;
         this.courseId = courseId;
         this.courseTitle = courseTitle;
+        this.courseMode = courseMode;
+        this.batchId = batchId;
         this.moduleId = moduleId;
         this.moduleTitle = moduleTitle;
         this.question = question;
@@ -70,6 +78,10 @@ public class Doubt {
         this.replyDate = replyDate;
         this.status = status;
         this.createdAt = createdAt;
+    }
+
+    public Doubt(String id, String studentId, String studentName, String courseId, String courseTitle, String moduleId, String moduleTitle, String question, String trainerName, String trainerId, String reply, String replyDate, String status, LocalDateTime createdAt) {
+        this(id, studentId, studentName, courseId, courseTitle, null, null, moduleId, moduleTitle, question, trainerName, trainerId, reply, replyDate, status, createdAt);
     }
 
     public String getId() {
@@ -110,6 +122,22 @@ public class Doubt {
 
     public void setCourseTitle(String courseTitle) {
         this.courseTitle = courseTitle;
+    }
+
+    public String getCourseMode() {
+        return courseMode;
+    }
+
+    public void setCourseMode(String courseMode) {
+        this.courseMode = courseMode;
+    }
+
+    public String getBatchId() {
+        return batchId;
+    }
+
+    public void setBatchId(String batchId) {
+        this.batchId = batchId;
     }
 
     public String getModuleId() {
@@ -194,6 +222,8 @@ public class Doubt {
         private String studentName;
         private String courseId;
         private String courseTitle;
+        private String courseMode;
+        private String batchId;
         private String moduleId;
         private String moduleTitle;
         private String question;
@@ -222,6 +252,14 @@ public class Doubt {
         }
         public Builder courseTitle(String courseTitle) {
             this.courseTitle = courseTitle;
+            return this;
+        }
+        public Builder courseMode(String courseMode) {
+            this.courseMode = courseMode;
+            return this;
+        }
+        public Builder batchId(String batchId) {
+            this.batchId = batchId;
             return this;
         }
         public Builder moduleId(String moduleId) {
@@ -262,7 +300,7 @@ public class Doubt {
         }
 
         public Doubt build() {
-            return new Doubt(id, studentId, studentName, courseId, courseTitle, moduleId, moduleTitle, question, trainerName, trainerId, reply, replyDate, status, createdAt);
+            return new Doubt(id, studentId, studentName, courseId, courseTitle, courseMode, batchId, moduleId, moduleTitle, question, trainerName, trainerId, reply, replyDate, status, createdAt);
         }
     }
 

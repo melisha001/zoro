@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Award, Layers, Clock, Video, FileText, CheckCircle2, UserCheck, Search, Send, AlertCircle, Plus, Check, Download, ExternalLink, ChevronDown, ChevronUp, Image as ImageIcon } from 'lucide-react';
+import { BookOpen, Award, Layers, Clock, Video, FileText, CheckCircle2, UserCheck, Search, Send, AlertCircle, Plus, Check, Download, ExternalLink, ChevronDown, ChevronUp, Image as ImageIcon, GraduationCap, Briefcase } from 'lucide-react';
 import { getCourses, getTrainerCourseRequests, createTrainerCourseRequest } from '../../api/courseApi';
 import { resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
 import { useAuth } from '../../context/AuthContext';
+import CourseLearningPage from '../student/CourseLearningPage';
+import SafeImage from '../common/SafeImage';
 
 function matchesTrainer(course, user) {
   if (!course || !user) return false;
@@ -58,6 +60,7 @@ export default function TrainerCoursesPage() {
   const trainerName = user?.name || '';
   const trainerEmail = user?.email || '';
 
+  const [mainTab, setMainTab] = useState('learning'); // 'learning' | 'teaching'
   const [activeSubTab, setActiveSubTab] = useState('enrolled'); // 'enrolled' | 'available'
   const [courses, setCourses] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -156,8 +159,40 @@ export default function TrainerCoursesPage() {
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+      {/* Main Tab Navigation: Learning vs Teaching */}
+      <div className="flex bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs gap-2">
+        <button
+          type="button"
+          onClick={() => setMainTab('learning')}
+          className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+            mainTab === 'learning'
+              ? 'bg-purple-700 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span>My Learning (Trainer Programs)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMainTab('teaching')}
+          className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+            mainTab === 'teaching'
+              ? 'bg-purple-700 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Briefcase className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span>Teaching Portfolio</span>
+        </button>
+      </div>
+
+      {mainTab === 'learning' ? (
+        <CourseLearningPage isTrainerLearning={true} />
+      ) : (
+        <>
+          {/* Header Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
         <div className="space-y-1">
           <div className="inline-flex items-center space-x-2 bg-purple-100 text-purple-800 font-extrabold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider">
             <UserCheck className="w-3.5 h-3.5" />
@@ -234,13 +269,11 @@ export default function TrainerCoursesPage() {
                 <div>
                   {/* Course Thumbnail */}
                   <div className="relative h-48 bg-slate-900 overflow-hidden">
-                    <img
-                      src={resolveFileUrl(course.thumbnail) || 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=800'}
+                    <SafeImage
+                      src={resolveFileUrl(course.thumbnail)}
                       alt={course.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90"
-                      onError={(e) => {
-                        e.target.src = 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=800';
-                      }}
+                      fallbackSrc="/assets/course-placeholder.svg"
                     />
                     <div className="absolute top-3 right-3 bg-purple-600 text-white text-[10px] font-extrabold px-3 py-1 rounded-full shadow">
                       {isAssignedToMe ? 'Assigned Educator' : 'Trainer Course'}
@@ -373,11 +406,10 @@ export default function TrainerCoursesPage() {
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {course.modules.map((mod, idx) => {
+                        {[...(course.modules || [])].sort((a, b) => ((a.moduleOrder ?? a.module_order ?? 0) - (b.moduleOrder ?? b.module_order ?? 0))).map((mod, idx) => {
                           const notes = mod.notesFile || mod.notesPdf;
                           const worksheet = mod.worksheetFile || mod.activitySheetPdf;
                           const assignment = mod.assignmentFile || mod.assignmentPdf;
-                          const asa = mod.afterSessionAssessment;
 
                           return (
                             <div key={mod.id || idx} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
@@ -406,7 +438,7 @@ export default function TrainerCoursesPage() {
                               </div>
 
                               {/* Resources Row */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-2 border-t border-slate-100 text-xs">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-xs">
                                 {/* Notes */}
                                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
                                   <div className="font-extrabold text-[11px] text-slate-700 flex items-center gap-1">
@@ -475,36 +507,6 @@ export default function TrainerCoursesPage() {
                                     <span className="text-[10px] text-slate-400 italic">None</span>
                                   )}
                                 </div>
-
-                                {/* Assessment */}
-                                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-                                  <div className="font-extrabold text-[11px] text-slate-700 flex items-center gap-1">
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" /> Assessment
-                                  </div>
-                                  {asa ? (
-                                    <div className="space-y-1">
-                                      <div className="text-[10px] text-slate-600 font-semibold truncate">📋 {asa.title || 'Evaluation'}</div>
-                                      {asa.type === 'google_form' ? (
-                                        <a href={asa.googleFormUrl || '#'} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline text-[10px] font-bold inline-flex items-center gap-1">
-                                          <ExternalLink className="w-3 h-3" /> Google Form
-                                        </a>
-                                      ) : asa.file?.fileUrl ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => openFileWithSignedLink(asa.file.fileUrl, asa.file.name)}
-                                          className="text-purple-600 hover:underline text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
-                                        >
-                                          <Download className="w-3 h-3" /> Download ({asa.file.name})
-                                        </button>
-                                      ) : (
-                                        <span className="text-[10px] text-slate-500 font-medium">Task Configured</span>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-[10px] text-slate-400 italic">None</span>
-                                  )}
-                                </div>
-
                               </div>
 
                             </div>
@@ -519,6 +521,8 @@ export default function TrainerCoursesPage() {
             );
           })}
         </div>
+      )}
+        </>
       )}
 
     </div>

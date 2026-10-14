@@ -43,6 +43,18 @@ public class Enrollment {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @Transient
+    private String courseMode;
+
+    @Transient
+    private String trainerId;
+
+    @Transient
+    private String trainerName;
+
+    @Transient
+    private java.util.List<java.util.Map<String, String>> trainers;
+
     public Enrollment() {}
 
     public Enrollment(String id, String studentId, String studentEmail, String courseId, String courseTitle, String batchName, String batchId, String enrolledDate, String status, LocalDateTime createdAt) {
@@ -136,6 +148,38 @@ public class Enrollment {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getCourseMode() {
+        return courseMode;
+    }
+
+    public void setCourseMode(String courseMode) {
+        this.courseMode = courseMode;
+    }
+
+    public String getTrainerId() {
+        return trainerId;
+    }
+
+    public void setTrainerId(String trainerId) {
+        this.trainerId = trainerId;
+    }
+
+    public String getTrainerName() {
+        return trainerName;
+    }
+
+    public void setTrainerName(String trainerName) {
+        this.trainerName = trainerName;
+    }
+
+    public java.util.List<java.util.Map<String, String>> getTrainers() {
+        return trainers;
+    }
+
+    public void setTrainers(java.util.List<java.util.Map<String, String>> trainers) {
+        this.trainers = trainers;
     }
 
     public static Builder builder() {

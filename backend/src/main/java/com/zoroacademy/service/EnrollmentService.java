@@ -45,16 +45,71 @@ public class EnrollmentService {
 
     @Transactional(readOnly = true)
     public List<Enrollment> getAllEnrollments() {
-        return enrollmentRepository.findAll();
+        List<Enrollment> list = enrollmentRepository.findAll();
+        list.forEach(this::enrichEnrollment);
+        return list;
     }
 
     @Transactional(readOnly = true)
     public List<Enrollment> getStudentEnrollments(String studentIdOrEmail) {
         List<Enrollment> byId = enrollmentRepository.findByStudentId(studentIdOrEmail);
         if (byId.isEmpty()) {
-            return enrollmentRepository.findByStudentEmailIgnoreCase(studentIdOrEmail);
+            byId = enrollmentRepository.findByStudentEmailIgnoreCase(studentIdOrEmail);
         }
+        byId.forEach(this::enrichEnrollment);
         return byId;
+    }
+
+    private void enrichEnrollment(Enrollment e) {
+        if (e == null) return;
+        if (courseRepository != null && e.getCourseId() != null) {
+            courseRepository.findById(e.getCourseId()).ifPresent(c -> {
+                e.setCourseMode(c.getMode());
+                String mode = c.getMode() != null ? c.getMode() : "Online";
+                if ("Recorded".equalsIgnoreCase(mode)) {
+                    String tId = c.getTrainerId() != null ? c.getTrainerId() : c.getAssignedTrainerId();
+                    e.setTrainerId(tId);
+                    e.setTrainerName(c.getAssignedTrainer());
+                }
+            });
+        }
+        String mode = e.getCourseMode() != null ? e.getCourseMode() : "Online";
+        if (!"Recorded".equalsIgnoreCase(mode)) {
+            String bId = e.getBatchId();
+            if ((bId == null || bId.isBlank()) && studentCourseBatchRepository != null && e.getStudentId() != null && e.getCourseId() != null) {
+                studentCourseBatchRepository.findByStudentIdAndCourseId(e.getStudentId(), e.getCourseId()).ifPresent(scb -> {
+                    e.setBatchId(scb.getBatchId());
+                    e.setBatchName(scb.getBatchName());
+                });
+                bId = e.getBatchId();
+            }
+            if (bId != null && !bId.isBlank() && batchRepository != null) {
+                batchRepository.findById(bId).ifPresent(b -> {
+                    if (e.getBatchName() == null || e.getBatchName().isBlank()) {
+                        e.setBatchName(b.getName());
+                    }
+                    java.util.List<java.util.Map<String, String>> trainerList = new java.util.ArrayList<>();
+                    if (b.getTrainerIds() != null && !b.getTrainerIds().isEmpty()) {
+                        for (String tId : b.getTrainerIds()) {
+                            if (userRepository != null) {
+                                userRepository.findById(tId).ifPresent(u -> {
+                                    java.util.Map<String, String> m = new java.util.HashMap<>();
+                                    m.put("id", u.getId());
+                                    m.put("name", u.getName());
+                                    trainerList.add(m);
+                                });
+                            }
+                        }
+                    } else if (b.getTrainerId() != null && !b.getTrainerId().isBlank()) {
+                        java.util.Map<String, String> m = new java.util.HashMap<>();
+                        m.put("id", b.getTrainerId());
+                        m.put("name", b.getTrainerName() != null ? b.getTrainerName() : "Trainer");
+                        trainerList.add(m);
+                    }
+                    e.setTrainers(trainerList);
+                });
+            }
+        }
     }
 
     @Transactional
@@ -102,10 +157,12 @@ public class EnrollmentService {
         String finalCourseId = course.getId();
         String finalCourseTitle = course.getTitle();
 
+        boolean isRecorded = "Recorded".equalsIgnoreCase(course.getMode());
+
         // Resolve batch
         String finalBatchId = null;
-        String finalBatchName = "";
-        if (batchIdOrName != null && !batchIdOrName.isBlank()) {
+        String finalBatchName = null;
+        if (!isRecorded && batchIdOrName != null && !batchIdOrName.isBlank()) {
             Optional<Batch> batchOpt = batchRepository.findById(batchIdOrName)
                     .or(() -> batchRepository.findByNameIgnoreCaseAndCourseId(batchIdOrName, finalCourseId))
                     .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(batchIdOrName, finalCourseTitle));
@@ -153,8 +210,13 @@ public class EnrollmentService {
         // 3. Create StudentFee with amount = course.fee, paid = 0, status = 'Pending' (if not present)
         studentFeeRepository.findByStudentIdAndCourseId(finalEffectiveStudentId, finalCourseId).ifPresentOrElse(
                 existingFee -> {
-                    if (resolvedBatchId != null) existingFee.setBatchId(resolvedBatchId);
-                    if (!resolvedBatchName.isBlank()) existingFee.setBatch(resolvedBatchName);
+                    if (isRecorded) {
+                        existingFee.setBatchId(null);
+                        existingFee.setBatch(null);
+                    } else {
+                        if (resolvedBatchId != null) existingFee.setBatchId(resolvedBatchId);
+                        if (resolvedBatchName != null && !resolvedBatchName.isBlank()) existingFee.setBatch(resolvedBatchName);
+                    }
                     studentFeeRepository.save(existingFee);
                 },
                 () -> {
@@ -165,8 +227,8 @@ public class EnrollmentService {
                             .studentName(finalStudentName)
                             .courseId(finalCourseId)
                             .course(finalCourseTitle)
-                            .batchId(resolvedBatchId)
-                            .batch(!resolvedBatchName.isBlank() ? resolvedBatchName : "Unassigned")
+                            .batchId(isRecorded ? null : resolvedBatchId)
+                            .batch(isRecorded ? null : (resolvedBatchName != null && !resolvedBatchName.isBlank() ? resolvedBatchName : "Unassigned"))
                             .totalFee(feeAmount)
                             .paidAmount(java.math.BigDecimal.ZERO)
                             .dueAmount(feeAmount)
@@ -189,13 +251,13 @@ public class EnrollmentService {
                 .recipientId(effectiveStudentId)
                 .recipientRole("STUDENT")
                 .title("Enrolled in " + finalCourseTitle)
-                .message("You have been enrolled in " + finalCourseTitle + (!resolvedBatchName.isBlank() ? " (" + resolvedBatchName + ")" : "") + ".")
+                .message("You have been enrolled in " + finalCourseTitle + (resolvedBatchName != null && !resolvedBatchName.isBlank() ? " (" + resolvedBatchName + ")" : "") + ".")
                 .readStatus(false)
                 .build();
         notificationService.createNotification(notif);
 
         activityLogService.logAction(effectiveStudentId, studentName, "COURSE_ENROLLED",
-                "Enrolled in course: " + finalCourseTitle + (!resolvedBatchName.isBlank() ? " [" + resolvedBatchName + "]" : ""), "System");
+                "Enrolled in course: " + finalCourseTitle + (resolvedBatchName != null && !resolvedBatchName.isBlank() ? " [" + resolvedBatchName + "]" : ""), "System");
 
         return enrollment;
     }

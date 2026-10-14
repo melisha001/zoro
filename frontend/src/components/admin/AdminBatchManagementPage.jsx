@@ -26,8 +26,7 @@ export default function AdminBatchManagementPage() {
     courseName: '',
     selectedDays: ['Monday', 'Wednesday', 'Friday'],
     session: 'Morning',
-    trainerId: '',
-    trainerName: '',
+    trainerIds: [],
     status: 'Active'
   });
 
@@ -59,8 +58,7 @@ export default function AdminBatchManagementPage() {
       courseName: '',
       selectedDays: ['Monday', 'Wednesday', 'Friday'],
       session: 'Morning',
-      trainerId: '',
-      trainerName: '',
+      trainerIds: [],
       status: 'Active'
     });
     setEditingBatch(null);
@@ -78,17 +76,23 @@ export default function AdminBatchManagementPage() {
     if (updated.length > 0) setDayError('');
   };
 
+  const handleToggleTrainer = (trainerId) => {
+    const current = formData.trainerIds || [];
+    let updated;
+    if (current.includes(trainerId)) {
+      updated = current.filter(id => id !== trainerId);
+    } else {
+      updated = [...current, trainerId];
+    }
+    setFormData({ ...formData, trainerIds: updated });
+  };
+
   const handleCreateOrUpdate = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
 
     if (!formData.courseId && !formData.courseName) {
       setDayError('Please select a course for this batch.');
-      return;
-    }
-
-    if (!formData.trainerId && !formData.trainerName) {
-      setDayError('Please select a trainer for this batch.');
       return;
     }
 
@@ -99,15 +103,18 @@ export default function AdminBatchManagementPage() {
     setDayError('');
 
     const matchedCourse = coursesList.find(c => c.id === formData.courseId || c.title?.toLowerCase().trim() === formData.courseName?.toLowerCase().trim());
-    const matchedTrainer = trainersList.find(t => t.id === formData.trainerId || t.name?.toLowerCase().trim() === formData.trainerName?.toLowerCase().trim());
+    const selectedTrainerObjs = trainersList.filter(t => (formData.trainerIds || []).includes(t.id));
+    const primaryTrainer = selectedTrainerObjs[0];
+    const trainerNamesStr = selectedTrainerObjs.map(t => t.name).join(', ');
 
     const payload = {
       name: formData.name.trim(),
       courseId: formData.courseId || matchedCourse?.id || '',
       courseName: formData.courseName || matchedCourse?.title || '',
-      trainerId: formData.trainerId || matchedTrainer?.id || '',
-      trainerName: formData.trainerName || matchedTrainer?.name || '',
-      days: formData.selectedDays,
+      trainerId: primaryTrainer?.id || '',
+      trainerName: trainerNamesStr,
+      trainerIds: formData.trainerIds || [],
+      days: formData.selectedDays.join(', '),
       day: formData.selectedDays.join(', '),
       session: formData.session,
       status: formData.status
@@ -178,7 +185,19 @@ export default function AdminBatchManagementPage() {
     }
 
     const matchedCourse = coursesList.find(c => c.id === batch.courseId || (batch.courseName && c.title?.toLowerCase().trim() === batch.courseName?.toLowerCase().trim()));
-    const matchedTrainer = trainersList.find(t => t.id === batch.trainerId || (batch.trainerName && t.name?.toLowerCase().trim() === batch.trainerName?.toLowerCase().trim()));
+
+    // Extract assigned trainer IDs
+    let assignedTrainerIds = [];
+    if (Array.isArray(batch.trainerIds) && batch.trainerIds.length > 0) {
+      assignedTrainerIds = batch.trainerIds;
+    } else if (Array.isArray(batch.trainers) && batch.trainers.length > 0) {
+      assignedTrainerIds = batch.trainers.map(t => t.id);
+    } else if (batch.trainerId) {
+      assignedTrainerIds = batch.trainerId.split(',').map(s => s.trim()).filter(Boolean);
+    } else if (batch.trainerName) {
+      const names = batch.trainerName.split(',').map(s => s.trim().toLowerCase());
+      assignedTrainerIds = trainersList.filter(t => names.includes(t.name?.toLowerCase().trim())).map(t => t.id);
+    }
 
     setFormData({
       name: batch.name || '',
@@ -186,8 +205,7 @@ export default function AdminBatchManagementPage() {
       courseName: batch.courseName || matchedCourse?.title || '',
       selectedDays: daysArr,
       session: batch.session || 'Morning',
-      trainerId: batch.trainerId || matchedTrainer?.id || '',
-      trainerName: batch.trainerName || matchedTrainer?.name || '',
+      trainerIds: assignedTrainerIds,
       status: batch.status || 'Active'
     });
   };
@@ -196,14 +214,22 @@ export default function AdminBatchManagementPage() {
     const q = searchTerm.toLowerCase().trim();
     if (!q) return true;
     const daysStr = Array.isArray(b.days) ? b.days.join(' ') : (b.day || '');
+    const trainerNames = Array.isArray(b.trainers)
+      ? b.trainers.map(t => t.name).join(' ')
+      : (b.trainerName || '');
     return (
       (b.name && b.name.toLowerCase().includes(q)) ||
       (b.courseName && b.courseName.toLowerCase().includes(q)) ||
-      (b.trainerName && b.trainerName.toLowerCase().includes(q)) ||
+      trainerNames.toLowerCase().includes(q) ||
       daysStr.toLowerCase().includes(q) ||
       (b.session && b.session.toLowerCase().includes(q)) ||
       (b.status && b.status.toLowerCase().includes(q))
     );
+  });
+
+  const eligibleCourses = (coursesList || []).filter(c => {
+    const mode = (c.mode || '').toLowerCase();
+    return mode === 'online' || mode === 'hybrid';
   });
 
   return (
@@ -225,7 +251,7 @@ export default function AdminBatchManagementPage() {
         </h3>
 
         <form onSubmit={handleCreateOrUpdate} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             
             {/* Batch Name */}
             <div>
@@ -240,14 +266,14 @@ export default function AdminBatchManagementPage() {
               />
             </div>
 
-              {/* Course Dropdown */}
+            {/* Course Dropdown */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Course *</label>
               <select
                 value={formData.courseId || ''}
                 onChange={(e) => {
                   const selId = e.target.value;
-                  const matched = coursesList.find(c => c.id === selId);
+                  const matched = eligibleCourses.find(c => c.id === selId);
                   setFormData({
                     ...formData,
                     courseId: selId,
@@ -256,9 +282,9 @@ export default function AdminBatchManagementPage() {
                 }}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none"
               >
-                <option value="">{coursesList.length === 0 ? "No courses available" : "-- Select Course --"}</option>
-                {coursesList.map(c => (
-                  <option key={c.id} value={c.id}>{c.title}</option>
+                <option value="">{eligibleCourses.length === 0 ? "No courses available" : "-- Select Course --"}</option>
+                {eligibleCourses.map(c => (
+                  <option key={c.id} value={c.id}>{c.title} ({c.mode || 'Online'})</option>
                 ))}
               </select>
             </div>
@@ -277,29 +303,51 @@ export default function AdminBatchManagementPage() {
               </select>
             </div>
 
-            {/* Trainer Dropdown */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Trainer *</label>
-              <select
-                value={formData.trainerId || ''}
-                onChange={(e) => {
-                  const selId = e.target.value;
-                  const matched = trainersList.find(t => t.id === selId);
-                  setFormData({
-                    ...formData,
-                    trainerId: selId,
-                    trainerName: matched?.name || ''
-                  });
-                }}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none"
-              >
-                <option value="">{trainersList.length === 0 ? "No trainers available" : "-- Select Trainer --"}</option>
-                {trainersList.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-            </div>
+          </div>
 
+          {/* Multiple Trainers Selection (Phase 3 Multi-Trainer Support) */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-extrabold text-slate-800">
+                Assigned Trainers (Multi-Trainer Support)
+              </label>
+              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                (formData.trainerIds || []).length > 0 
+                  ? 'bg-indigo-100 text-indigo-700' 
+                  : 'bg-amber-100 text-amber-700'
+              }`}>
+                {(formData.trainerIds || []).length} assigned
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Assign one or more trainers to this batch. Batches can be created with 0 trainers, but at least one trainer must be assigned before scheduling live sessions.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {trainersList.map((t) => {
+                const isSelected = (formData.trainerIds || []).includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => handleToggleTrainer(t.id)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white shadow-xs scale-105'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:border-indigo-400'
+                    }`}
+                  >
+                    <span>{t.name}</span>
+                    {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                  </button>
+                );
+              })}
+            </div>
+            {(formData.trainerIds || []).length === 0 && (
+              <p className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mt-1 flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>No trainer assigned yet. You can save this batch and assign trainers later, but live class sessions cannot be scheduled for this batch until a trainer is assigned.</span>
+              </p>
+            )}
           </div>
 
           {/* Multiple Days Selection (Requirement #1.1) */}
@@ -378,7 +426,7 @@ export default function AdminBatchManagementPage() {
                 <th className="py-3 px-4">Course</th>
                 <th className="py-3 px-4">Selected Days</th>
                 <th className="py-3 px-4">Session</th>
-                <th className="py-3 px-4">Assigned Trainer</th>
+                <th className="py-3 px-4">Assigned Trainers</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -403,7 +451,31 @@ export default function AdminBatchManagementPage() {
                         </div>
                       </td>
                       <td className="py-4 px-4 text-slate-600">{batch.session}</td>
-                      <td className="py-4 px-4 text-slate-800 font-bold">{batch.trainerName}</td>
+                      <td className="py-4 px-4 text-slate-800 font-bold">
+                        {(() => {
+                          const list = Array.isArray(batch.trainers) && batch.trainers.length > 0
+                            ? batch.trainers
+                            : (batch.trainerName
+                                ? batch.trainerName.split(',').map(n => ({ id: n.trim(), name: n.trim() }))
+                                : []);
+                          if (list.length === 0) {
+                            return (
+                              <span className="inline-flex items-center text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[10px]">
+                                No trainer assigned
+                              </span>
+                            );
+                          }
+                          return (
+                            <div className="flex flex-wrap gap-1 max-w-xs">
+                              {list.map((t, idx) => (
+                                <span key={idx} className="bg-indigo-50 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                                  {t.name}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td className="py-4 px-4">
                         <button
                           onClick={() => handleToggleStatus(batch)}

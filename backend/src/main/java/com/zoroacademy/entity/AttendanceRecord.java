@@ -46,6 +46,21 @@ public class AttendanceRecord {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "joined_at")
+    private LocalDateTime joinedAt;
+
+    @Transient
+    private String course;
+
+    @Transient
+    private String topic;
+
+    @Transient
+    private String trainer;
+
+    @Transient
+    private String time;
+
     public AttendanceRecord() {}
 
     public AttendanceRecord(String id, String scheduleId, String studentId, String studentName, String courseId, String batchId, String date, String status, String remarks, String recordedBy, LocalDateTime createdAt) {
@@ -150,6 +165,46 @@ public class AttendanceRecord {
         this.createdAt = createdAt;
     }
 
+    public LocalDateTime getJoinedAt() {
+        return joinedAt;
+    }
+
+    public void setJoinedAt(LocalDateTime joinedAt) {
+        this.joinedAt = joinedAt;
+    }
+
+    public String getCourse() {
+        return course;
+    }
+
+    public void setCourse(String course) {
+        this.course = course;
+    }
+
+    public String getTopic() {
+        return topic;
+    }
+
+    public void setTopic(String topic) {
+        this.topic = topic;
+    }
+
+    public String getTrainer() {
+        return trainer;
+    }
+
+    public void setTrainer(String trainer) {
+        this.trainer = trainer;
+    }
+
+    public String getTime() {
+        return time;
+    }
+
+    public void setTime(String time) {
+        this.time = time;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -166,6 +221,7 @@ public class AttendanceRecord {
         private String remarks;
         private String recordedBy;
         private LocalDateTime createdAt;
+        private LocalDateTime joinedAt;
 
         public Builder id(String id) {
             this.id = id;
@@ -211,9 +267,15 @@ public class AttendanceRecord {
             this.createdAt = createdAt;
             return this;
         }
+        public Builder joinedAt(LocalDateTime joinedAt) {
+            this.joinedAt = joinedAt;
+            return this;
+        }
 
         public AttendanceRecord build() {
-            return new AttendanceRecord(id, scheduleId, studentId, studentName, courseId, batchId, date, status, remarks, recordedBy, createdAt);
+            AttendanceRecord r = new AttendanceRecord(id, scheduleId, studentId, studentName, courseId, batchId, date, status, remarks, recordedBy, createdAt);
+            r.setJoinedAt(joinedAt);
+            return r;
         }
     }
 

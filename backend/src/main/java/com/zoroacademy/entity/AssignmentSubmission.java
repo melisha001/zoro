@@ -90,6 +90,18 @@ public class AssignmentSubmission {
     @JsonRawValue
     private String correctionAttachment;
 
+    @Column(name = "submitter_role", length = 20)
+    private String submitterRole;
+
+    @Column(length = 20)
+    private String reviewer = "ADMIN";
+
+    @Column(columnDefinition = "TEXT")
+    private String feedback;
+
+    @Column(name = "corrected_file_url", length = 1000)
+    private String correctedFileUrl;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -101,6 +113,10 @@ public class AssignmentSubmission {
     public AssignmentSubmission() {}
 
     public AssignmentSubmission(String id, String studentId, String trainerId, String assignmentId, String batchId, String mode, String courseTitle, String courseId, String batchName, String studentName, String studentEmail, String assignmentTitle, String sourceType, String sourceId, String submittedAt, String answerText, String attachment, String status, String assignedTrainer, String correctedBy, String correctedAt, String remarks, String score, String correctionAttachment, LocalDateTime createdAt, LocalDateTime updatedAt) {
+        this(id, studentId, trainerId, assignmentId, batchId, mode, courseTitle, courseId, batchName, studentName, studentEmail, assignmentTitle, sourceType, sourceId, submittedAt, answerText, attachment, status, assignedTrainer, correctedBy, correctedAt, remarks, score, correctionAttachment, "STUDENT", "ADMIN", remarks, null, createdAt, updatedAt);
+    }
+
+    public AssignmentSubmission(String id, String studentId, String trainerId, String assignmentId, String batchId, String mode, String courseTitle, String courseId, String batchName, String studentName, String studentEmail, String assignmentTitle, String sourceType, String sourceId, String submittedAt, String answerText, String attachment, String status, String assignedTrainer, String correctedBy, String correctedAt, String remarks, String score, String correctionAttachment, String submitterRole, String reviewer, String feedback, String correctedFileUrl, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.studentId = studentId;
         this.trainerId = trainerId;
@@ -125,6 +141,10 @@ public class AssignmentSubmission {
         this.remarks = remarks;
         this.score = score;
         this.correctionAttachment = correctionAttachment;
+        this.submitterRole = (submitterRole != null && !submitterRole.isBlank()) ? submitterRole : "STUDENT";
+        this.reviewer = (reviewer != null && !reviewer.isBlank()) ? reviewer : "ADMIN";
+        this.feedback = feedback != null ? feedback : remarks;
+        this.correctedFileUrl = correctedFileUrl;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -333,8 +353,36 @@ public class AssignmentSubmission {
         return updatedAt;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    public String getSubmitterRole() {
+        return submitterRole;
+    }
+
+    public void setSubmitterRole(String submitterRole) {
+        this.submitterRole = submitterRole;
+    }
+
+    public String getReviewer() {
+        return reviewer;
+    }
+
+    public void setReviewer(String reviewer) {
+        this.reviewer = reviewer;
+    }
+
+    public String getFeedback() {
+        return feedback;
+    }
+
+    public void setFeedback(String feedback) {
+        this.feedback = feedback;
+    }
+
+    public String getCorrectedFileUrl() {
+        return correctedFileUrl;
+    }
+
+    public void setCorrectedFileUrl(String correctedFileUrl) {
+        this.correctedFileUrl = correctedFileUrl;
     }
 
     public static Builder builder() {
@@ -366,6 +414,10 @@ public class AssignmentSubmission {
         private String remarks;
         private String score;
         private String correctionAttachment;
+        private String submitterRole;
+        private String reviewer = "ADMIN";
+        private String feedback;
+        private String correctedFileUrl;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
 
@@ -465,6 +517,22 @@ public class AssignmentSubmission {
             this.correctionAttachment = correctionAttachment;
             return this;
         }
+        public Builder submitterRole(String submitterRole) {
+            this.submitterRole = submitterRole;
+            return this;
+        }
+        public Builder reviewer(String reviewer) {
+            this.reviewer = reviewer;
+            return this;
+        }
+        public Builder feedback(String feedback) {
+            this.feedback = feedback;
+            return this;
+        }
+        public Builder correctedFileUrl(String correctedFileUrl) {
+            this.correctedFileUrl = correctedFileUrl;
+            return this;
+        }
         public Builder createdAt(LocalDateTime createdAt) {
             this.createdAt = createdAt;
             return this;
@@ -475,7 +543,7 @@ public class AssignmentSubmission {
         }
 
         public AssignmentSubmission build() {
-            return new AssignmentSubmission(id, studentId, trainerId, assignmentId, batchId, mode, courseTitle, courseId, batchName, studentName, studentEmail, assignmentTitle, sourceType, sourceId, submittedAt, answerText, attachment, status, assignedTrainer, correctedBy, correctedAt, remarks, score, correctionAttachment, createdAt, updatedAt);
+            return new AssignmentSubmission(id, studentId, trainerId, assignmentId, batchId, mode, courseTitle, courseId, batchName, studentName, studentEmail, assignmentTitle, sourceType, sourceId, submittedAt, answerText, attachment, status, assignedTrainer, correctedBy, correctedAt, remarks, score, correctionAttachment, submitterRole, reviewer, feedback, correctedFileUrl, createdAt, updatedAt);
         }
     }
 

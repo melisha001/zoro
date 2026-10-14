@@ -6,9 +6,11 @@ Write-Host "=== TASK G VERIFICATION SCRIPT ===" -ForegroundColor Cyan
 
 # Step 1: Admin login
 Write-Host "Step 1: Admin login..." -NoNewline
+$adminEmail = if ($env:TEST_ADMIN_EMAIL) { $env:TEST_ADMIN_EMAIL } elseif ($env:ADMIN_EMAIL) { $env:ADMIN_EMAIL } else { "admin@zoro.com" }
+$adminPassword = if ($env:TEST_ADMIN_PASSWORD) { $env:TEST_ADMIN_PASSWORD } elseif ($env:ADMIN_PASSWORD) { $env:ADMIN_PASSWORD } else { "placeholder_admin_pass" }
 $loginBody = @{
-    email = "admin@zoro.com"
-    password = "adminPassword123!"
+    email = $adminEmail
+    password = $adminPassword
 } | ConvertTo-Json
 
 $loginRes = Invoke-RestMethod -Method Post -Uri "$baseUrl/auth/login" -Body $loginBody -ContentType "application/json"
@@ -28,6 +30,7 @@ $coursePayload = @{
     price = 12000
     level = "Beginner"
     mode = "Online"
+    googleMeetUrl = "https://meet.google.com/abc-defg-hij"
     status = "Active"
 } | ConvertTo-Json
 

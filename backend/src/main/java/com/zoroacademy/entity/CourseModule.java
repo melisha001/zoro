@@ -42,12 +42,6 @@ public class CourseModule {
     @JsonRawValue
     private String videoStorageRef;
 
-    @Column(name = "after_session_assessment", columnDefinition = "jsonb")
-    @org.hibernate.annotations.ColumnTransformer(write = "?::jsonb")
-    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.zoroacademy.util.JsonAsStringDeserializer.class)
-    @JsonRawValue
-    private String afterSessionAssessment;
-
     @Column(name = "thumbnail_url", columnDefinition = "TEXT")
     private String thumbnailUrl;
 
@@ -77,9 +71,32 @@ public class CourseModule {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Transient
+    private Boolean locked;
+
+    public Boolean getLocked() {
+        return locked;
+    }
+
+    public void setLocked(Boolean locked) {
+        this.locked = locked;
+    }
+
+    @JsonProperty("isLocked")
+    public Boolean isLocked() {
+        return Boolean.TRUE.equals(locked);
+    }
+
+    @PrePersist
+    public void ensureId() {
+        if (this.id == null || this.id.isBlank()) {
+            this.id = "mod_" + java.util.UUID.randomUUID();
+        }
+    }
+
     public CourseModule() {}
 
-    public CourseModule(String id, Course course, Integer moduleOrder, String title, String description, String duration, String videoStorageRef, String afterSessionAssessment, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public CourseModule(String id, Course course, Integer moduleOrder, String title, String description, String duration, String videoStorageRef, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.course = course;
         this.moduleOrder = moduleOrder;
@@ -87,12 +104,11 @@ public class CourseModule {
         this.description = description;
         this.duration = duration;
         this.videoStorageRef = videoStorageRef;
-        this.afterSessionAssessment = afterSessionAssessment;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
-    public CourseModule(String id, Course course, Integer moduleOrder, String title, String description, String duration, String videoStorageRef, String afterSessionAssessment, String thumbnailUrl, String notesFileUrl, String notesFileName, String worksheetFileUrl, String worksheetFileName, String assignmentFileUrl, String assignmentFileName, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public CourseModule(String id, Course course, Integer moduleOrder, String title, String description, String duration, String videoStorageRef, String thumbnailUrl, String notesFileUrl, String notesFileName, String worksheetFileUrl, String worksheetFileName, String assignmentFileUrl, String assignmentFileName, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.course = course;
         this.moduleOrder = moduleOrder;
@@ -100,7 +116,6 @@ public class CourseModule {
         this.description = description;
         this.duration = duration;
         this.videoStorageRef = videoStorageRef;
-        this.afterSessionAssessment = afterSessionAssessment;
         this.thumbnailUrl = thumbnailUrl;
         this.notesFileUrl = notesFileUrl;
         this.notesFileName = notesFileName;
@@ -166,14 +181,6 @@ public class CourseModule {
 
     public void setVideoStorageRef(String videoStorageRef) {
         this.videoStorageRef = (videoStorageRef == null || videoStorageRef.trim().isEmpty()) ? null : videoStorageRef.trim();
-    }
-
-    public String getAfterSessionAssessment() {
-        return (afterSessionAssessment == null || afterSessionAssessment.trim().isEmpty()) ? null : afterSessionAssessment.trim();
-    }
-
-    public void setAfterSessionAssessment(String afterSessionAssessment) {
-        this.afterSessionAssessment = (afterSessionAssessment == null || afterSessionAssessment.trim().isEmpty()) ? null : afterSessionAssessment.trim();
     }
 
     public String getThumbnailUrl() {
@@ -338,7 +345,6 @@ public class CourseModule {
         private String description;
         private String duration;
         private String videoStorageRef;
-        private String afterSessionAssessment;
         private String thumbnailUrl;
         private String notesFileUrl;
         private String notesFileName;
@@ -375,10 +381,6 @@ public class CourseModule {
         }
         public Builder videoStorageRef(String videoStorageRef) {
             this.videoStorageRef = videoStorageRef;
-            return this;
-        }
-        public Builder afterSessionAssessment(String afterSessionAssessment) {
-            this.afterSessionAssessment = afterSessionAssessment;
             return this;
         }
         public Builder thumbnailUrl(String thumbnailUrl) {
@@ -419,7 +421,7 @@ public class CourseModule {
         }
 
         public CourseModule build() {
-            return new CourseModule(id, course, moduleOrder, title, description, duration, videoStorageRef, afterSessionAssessment, thumbnailUrl, notesFileUrl, notesFileName, worksheetFileUrl, worksheetFileName, assignmentFileUrl, assignmentFileName, createdAt, updatedAt);
+            return new CourseModule(id, course, moduleOrder, title, description, duration, videoStorageRef, thumbnailUrl, notesFileUrl, notesFileName, worksheetFileUrl, worksheetFileName, assignmentFileUrl, assignmentFileName, createdAt, updatedAt);
         }
     }
 

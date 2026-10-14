@@ -36,4 +36,26 @@ public class ProgressController {
         StudentProgress updated = progressService.updateModuleProgress(studentId, courseId, moduleId, lastPosition, completionPercentage, status);
         return ApiResponse.ok(updated, "Progress saved successfully");
     }
+
+    @PostMapping("/heartbeat")
+    public ApiResponse<com.zoroacademy.dto.HeartbeatResponseDto> recordHeartbeat(
+            @RequestBody com.zoroacademy.dto.HeartbeatRequestDto request,
+            org.springframework.security.core.Authentication authentication) {
+        String effectiveStudentId = null;
+        if (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getPrincipal())) {
+            effectiveStudentId = authentication.getName();
+        }
+        if (effectiveStudentId == null || effectiveStudentId.isBlank()) {
+            effectiveStudentId = request.getStudentId();
+        }
+        com.zoroacademy.dto.HeartbeatResponseDto resp = progressService.recordVideoHeartbeat(effectiveStudentId, request);
+        return ApiResponse.ok(resp, resp.getMessage());
+    }
+
+    @GetMapping("/modules/{studentId}")
+    public ApiResponse<List<com.zoroacademy.entity.StudentModuleProgress>> getModuleProgress(
+            @PathVariable String studentId,
+            @RequestParam(required = false) String courseId) {
+        return ApiResponse.ok(progressService.getModuleProgressForStudent(studentId, courseId));
+    }
 }

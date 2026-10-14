@@ -1,11 +1,13 @@
 package com.zoroacademy.controller;
 
 import com.zoroacademy.common.ApiResponse;
+import com.zoroacademy.dto.ReorderModulesRequest;
 import com.zoroacademy.entity.Course;
 import com.zoroacademy.entity.CourseModule;
 import com.zoroacademy.entity.CourseResource;
 import com.zoroacademy.repository.EnrollmentRepository;
 import com.zoroacademy.service.CourseService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -58,12 +60,38 @@ public class CourseController {
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<Course> getCourseById(@PathVariable String id) {
+    public ApiResponse<Course> getCourseById(@PathVariable String id,
+                                             @org.springframework.security.core.annotation.AuthenticationPrincipal com.zoroacademy.security.UserPrincipal principal) {
         Course course = courseService.getCourseById(id);
-        if (!isStaffUser() && !isEnrolledStudent(course.getId())) {
-            course = courseService.sanitizeCourseForPublic(course);
+        boolean isStaff = isStaffUser();
+        boolean isEnrolled = isEnrolledStudent(course.getId());
+
+        if (!isStaff && !isEnrolled) {
+            return ApiResponse.ok(courseService.sanitizeCourseForPublic(course));
         }
-        return ApiResponse.ok(course);
+
+        if (isStaff) {
+            if (course.getModules() != null) {
+                course.getModules().forEach(m -> m.setLocked(false));
+            }
+            return ApiResponse.ok(course);
+        }
+
+        // Enrolled student
+        String studentId = principal != null ? principal.getId() : null;
+        String studentEmail = principal != null ? principal.getEmail() : null;
+        Course studentCourse = courseService.getCourseForStudent(course.getId(), studentId, studentEmail);
+        return ApiResponse.ok(studentCourse);
+    }
+
+    @GetMapping("/{courseId}/modules/{moduleId}")
+    public ApiResponse<CourseModule> getModuleById(@PathVariable String courseId,
+                                                   @PathVariable String moduleId,
+                                                   @org.springframework.security.core.annotation.AuthenticationPrincipal com.zoroacademy.security.UserPrincipal principal) {
+        String userId = principal != null ? principal.getId() : null;
+        String userEmail = principal != null ? principal.getEmail() : null;
+        String userRole = principal != null ? principal.getRole() : "STUDENT";
+        return ApiResponse.ok(courseService.getModuleForUser(courseId, moduleId, userId, userEmail, userRole));
     }
 
     @PostMapping
@@ -100,6 +128,13 @@ public class CourseController {
         return ApiResponse.ok(true, "Module deleted successfully");
     }
 
+    @PutMapping("/{courseId}/modules/reorder")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<List<CourseModule>> reorderModules(@PathVariable String courseId,
+                                                         @RequestBody ReorderModulesRequest request) {
+        return ApiResponse.ok(courseService.reorderModules(courseId, request != null ? request.getModuleIds() : null), "Modules reordered successfully");
+    }
+
     @PostMapping("/{courseId}/resources")
     public ApiResponse<CourseResource> addResource(@PathVariable String courseId, @RequestBody CourseResource resource) {
         return ApiResponse.ok(courseService.addResource(courseId, resource), "Resource added successfully");
@@ -109,5 +144,11 @@ public class CourseController {
     public ApiResponse<Boolean> deleteResource(@PathVariable String courseId, @PathVariable String resourceId) {
         courseService.deleteResource(resourceId);
         return ApiResponse.ok(true, "Resource deleted successfully");
+    }
+
+    @GetMapping("/{courseId}/students")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN', 'TRAINER')")
+    public ApiResponse<java.util.List<java.util.Map<String, Object>>> getCourseStudents(@PathVariable String courseId) {
+        return ApiResponse.ok(courseService.getStudentsForCourse(courseId));
     }
 }

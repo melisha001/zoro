@@ -160,5 +160,45 @@ export const assignRecordedSubmissionsToTrainer = async (batchName, courseTitle,
   };
 };
 
+export const getAdminTrainerSubmissions = async () => {
+  const res = await apiGet('/admin/trainer-submissions');
+  if (res && res.success && Array.isArray(res.data)) {
+    return apiResponse(res.data.map(normalizeSubmission));
+  }
+  return {
+    success: false,
+    message: res?.message || 'Failed to fetch trainer submissions',
+    data: []
+  };
+};
+
+export const reviewAdminTrainerSubmission = async (id, reviewData) => {
+  if (!id) {
+    return { success: false, message: 'Submission ID is required', data: null };
+  }
+  const res = await apiPut(`/admin/trainer-submissions/${id}/review`, reviewData);
+  if (res && res.success && res.data) {
+    return apiResponse(normalizeSubmission(res.data), true, 'Trainer assignment reviewed successfully');
+  }
+  return {
+    success: false,
+    message: res?.message || 'Failed to review trainer submission',
+    data: null
+  };
+};
+
+export const getMyTrainerSubmissions = async () => {
+  const res = await apiGet('/me/trainer-submissions');
+  if (res && res.success && Array.isArray(res.data)) {
+    return apiResponse(res.data.map(normalizeSubmission));
+  }
+  return {
+    success: false,
+    message: res?.message || 'Failed to fetch your trainer submissions',
+    data: []
+  };
+};
+
 export const getCreatedAssignments = getAssignments;
 export const createExtraAssignment = createAssignment;
+

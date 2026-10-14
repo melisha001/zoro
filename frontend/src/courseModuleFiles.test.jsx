@@ -73,12 +73,6 @@ describe('Task 2: Course Modules Extended Files & Real Backend Fixture Tests', (
     expect(testModule.assignmentFile.name).toBe('Test_Assignment.pdf');
     expect(testModule.assignmentFile.fileUrl).toBe('https://zoro-academy-files-cdn.b-cdn.net/private/assignment/Test_Assignment.pdf');
 
-    // Verify afterSessionAssessment
-    expect(testModule.afterSessionAssessment).toBeDefined();
-    expect(testModule.afterSessionAssessment.type).toBe('uploaded');
-    expect(testModule.afterSessionAssessment.title).toBe('Session 1 Assessment Task');
-    expect(testModule.afterSessionAssessment.file?.name).toBe('Test_Assessment.pdf');
-
     // Verify videoStorageRef is normalized object
     expect(typeof testModule.videoStorageRef).toBe('object');
     expect(testModule.videoStorageRef.videoId).toBe('test-vid-123');

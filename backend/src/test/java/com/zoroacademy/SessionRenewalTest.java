@@ -42,7 +42,7 @@ class SessionRenewalTest {
         tokenProvider = new JwtTokenProvider();
         Field secretField = JwtTokenProvider.class.getDeclaredField("jwtSecret");
         secretField.setAccessible(true);
-        secretField.set(tokenProvider, "Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=");
+        secretField.set(tokenProvider, System.getenv().getOrDefault("TEST_JWT_SECRET", "dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItdW5pdC10ZXN0cy0xMjM0NTY3ODkwMTI="));
 
         Field expField = JwtTokenProvider.class.getDeclaredField("jwtExpirationMs");
         expField.setAccessible(true);
@@ -214,7 +214,7 @@ class SessionRenewalTest {
         JwtTokenProvider shortClockProvider = new JwtTokenProvider();
         Field secretField = JwtTokenProvider.class.getDeclaredField("jwtSecret");
         secretField.setAccessible(true);
-        secretField.set(shortClockProvider, "Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=");
+        secretField.set(shortClockProvider, System.getenv().getOrDefault("TEST_JWT_SECRET", "dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItdW5pdC10ZXN0cy0xMjM0NTY3ODkwMTI="));
 
         Field expField = JwtTokenProvider.class.getDeclaredField("jwtExpirationMs");
         expField.setAccessible(true);

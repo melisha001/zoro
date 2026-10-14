@@ -195,13 +195,13 @@ Configure the following environment variables in production before starting the 
 | `DB_NAME` | PostgreSQL database name | `zoro_academy` |
 | `DB_USER` | PostgreSQL database user | `postgres` |
 | `DB_PASSWORD` | PostgreSQL database password | *(Strong password)* |
-| `JWT_SECRET` | Base64-encoded key for HMAC-SHA256 (>= 32 bytes) | `Wmd2Wk9ST1NFQ1VSRUpXVFNFQ1JFVEtFWTIwMjZaT1JPQUM=` |
+| `JWT_SECRET` | Base64-encoded key for HMAC-SHA256 (>= 32 bytes) | `your_base64_encoded_256bit_jwt_secret_here` |
 | `JWT_EXPIRATION` | JWT token expiration in ms | `86400000` |
-| `ADMIN_EMAIL` | Administrator account email for bootstrap | `admin@zoro.com` |
-| `ADMIN_PASSWORD` | Administrator account password for bootstrap | `Admin@123` |
-| `BUNNY_LIBRARY_ID` | Bunny.net Video Library ID (Required) | `770045` |
+| `ADMIN_EMAIL` | Administrator account email for bootstrap | `your_admin_email_here` |
+| `ADMIN_PASSWORD` | Administrator account password for bootstrap | `your_secure_admin_password_here` |
+| `BUNNY_LIBRARY_ID` | Bunny.net Video Library ID (Required) | `your_bunny_library_id` |
 | `BUNNY_API_KEY` | Bunny.net Video Library API key | *(Bunny dashboard API key)* |
-| `BUNNY_CDN_HOST` | Bunny Stream Pull Zone hostname (Required) | `vz-770045.b-cdn.net` |
+| `BUNNY_CDN_HOST` | Bunny Stream Pull Zone hostname (Required) | `your-pull-zone.b-cdn.net` |
 | `BUNNY_TOKEN_AUTH_KEY`| Bunny.net Stream Token authentication key | *(Bunny CDN Token key)* |
 | `BUNNY_WEBHOOK_SECRET` | Bunny webhook verification shared secret | *(Secret string)* |
 | `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `http://localhost:5173,http://localhost:3000` |

@@ -37,7 +37,13 @@ export default function TrainerDoubtsPage() {
         getTrainerCourseRequests()
       ]);
 
-      if (dRes.data) setDoubts(dRes.data);
+      if (dRes.data) {
+        const myDoubts = dRes.data.filter(d =>
+          (d.trainerId && user?.id && d.trainerId === user.id) ||
+          (d.trainerName && user?.name && d.trainerName.toLowerCase() === user.name.toLowerCase())
+        );
+        setDoubts(myDoubts.length > 0 ? myDoubts : dRes.data);
+      }
 
       const allCourses = cRes.data || [];
       const allBatches = bRes.data || [];
@@ -86,7 +92,7 @@ export default function TrainerDoubtsPage() {
   // Filter doubts by active tab, Course, Batch, and search term
   const filteredDoubts = doubts.filter(d => {
     const isStatusMatch = activeTab === 'open' 
-      ? d.status?.toUpperCase() === 'OPEN'
+      ? (d.status?.toUpperCase() === 'OPEN' || d.status?.toUpperCase() === 'PENDING')
       : (d.status?.toUpperCase() === 'RESOLVED' || d.status?.toUpperCase() === 'ANSWERED');
 
     const matchesCourse = selectedCourse === 'All' || d.course === selectedCourse;
@@ -96,7 +102,7 @@ export default function TrainerDoubtsPage() {
     return isStatusMatch && matchesCourse && matchesBatch && matchesSearch;
   });
 
-  const openCount = doubts.filter(d => d.status?.toUpperCase() === 'OPEN').length;
+  const openCount = doubts.filter(d => d.status?.toUpperCase() === 'OPEN' || d.status?.toUpperCase() === 'PENDING').length;
   const answeredCount = doubts.filter(d => d.status?.toUpperCase() === 'RESOLVED' || d.status?.toUpperCase() === 'ANSWERED').length;
 
   return (

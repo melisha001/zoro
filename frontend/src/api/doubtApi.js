@@ -8,14 +8,18 @@ export const getDoubts = async () => {
       studentId: d.studentId,
       studentName: d.studentName || 'Student',
       studentEmail: d.studentEmail || '',
+      courseId: d.courseId || '',
       course: d.courseTitle || d.course || '',
       courseTitle: d.courseTitle || d.course || '',
-      mode: d.mode || 'Online',
+      mode: d.courseMode || d.mode || 'Online',
+      courseMode: d.courseMode || d.mode || 'Online',
+      batchId: d.batchId || '',
       batchName: d.batchName || d.batch || '',
       batch: d.batchName || d.batch || '',
       topic: d.moduleTitle || d.topic || '',
       question: d.question || '',
-      status: (d.status || 'OPEN').toUpperCase(),
+      status: (d.status && (d.status.toUpperCase() === 'RESOLVED' || d.status.toUpperCase() === 'ANSWERED')) ? 'RESOLVED' : 'PENDING',
+      trainerId: d.trainerId || '',
       trainerName: d.trainerName || '',
       answer: d.reply || d.answer || '',
       reply: d.reply || d.answer || '',
@@ -33,10 +37,15 @@ export const createDoubt = async (doubtData) => {
   const payload = {
     studentId: doubtData.studentId,
     studentName: doubtData.studentName,
+    courseId: doubtData.courseId,
     courseTitle: doubtData.course || doubtData.courseTitle,
+    courseMode: doubtData.courseMode || doubtData.mode,
+    batchId: doubtData.batchId,
+    trainerId: doubtData.trainerId,
+    trainerName: doubtData.trainerName,
     moduleTitle: doubtData.topic || doubtData.moduleTitle,
     question: doubtData.question,
-    status: 'OPEN'
+    status: 'Pending'
   };
   const res = await apiPost('/doubts', payload);
   if (res && res.success) {

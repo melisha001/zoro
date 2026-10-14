@@ -116,7 +116,7 @@ describe('Task 3: CourseContentPage CRUD and Safe JSON Parsing Tests', () => {
     expect(reactChildErrors).toEqual([]);
   });
 
-  it('2. Clicking Edit on module with object videoStorageRef and afterSessionAssessment does not crash and populates form', async () => {
+  it('2. Clicking Edit on module with object videoStorageRef does not crash and populates form', async () => {
     render(
       <MemoryRouter>
         <DialogProvider>

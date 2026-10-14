@@ -29,6 +29,14 @@ public class Batch {
     @Column(name = "trainer_id", length = 64)
     private String trainerId;
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "batch_trainers", joinColumns = @JoinColumn(name = "batch_id"))
+    @Column(name = "trainer_id")
+    private java.util.Set<String> trainerIds = new java.util.LinkedHashSet<>();
+
+    @Transient
+    private java.util.List<java.util.Map<String, String>> trainers = new java.util.ArrayList<>();
+
     @Column(columnDefinition = "TEXT")
     private String days;
 
@@ -110,12 +118,41 @@ public class Batch {
         this.trainerId = trainerId;
     }
 
+    public java.util.Set<String> getTrainerIds() {
+        return trainerIds != null ? trainerIds : new java.util.LinkedHashSet<>();
+    }
+
+    public void setTrainerIds(java.util.Set<String> trainerIds) {
+        this.trainerIds = trainerIds != null ? trainerIds : new java.util.LinkedHashSet<>();
+    }
+
+    public java.util.List<java.util.Map<String, String>> getTrainers() {
+        return trainers != null ? trainers : new java.util.ArrayList<>();
+    }
+
+    public void setTrainers(java.util.List<java.util.Map<String, String>> trainers) {
+        this.trainers = trainers != null ? trainers : new java.util.ArrayList<>();
+    }
+
     public String getDays() {
         return days;
     }
 
     public void setDays(String days) {
         this.days = days;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonSetter("days")
+    public void setDaysJson(com.fasterxml.jackson.databind.JsonNode node) {
+        if (node == null || node.isNull()) {
+            this.days = null;
+        } else if (node.isArray()) {
+            java.util.List<String> list = new java.util.ArrayList<>();
+            node.forEach(item -> list.add(item.asText()));
+            this.days = String.join(", ", list);
+        } else {
+            this.days = node.asText();
+        }
     }
 
     public String getSession() {

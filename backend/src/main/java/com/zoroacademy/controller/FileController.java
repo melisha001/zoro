@@ -4,6 +4,8 @@ import com.zoroacademy.common.ApiResponse;
 import com.zoroacademy.entity.StoredFile;
 import com.zoroacademy.security.UserPrincipal;
 import com.zoroacademy.service.FileStorageService;
+import com.zoroacademy.service.CourseService;
+import com.zoroacademy.service.ScheduleService;
 import com.zoroacademy.repository.CompetitionRepository;
 import com.zoroacademy.entity.Competition;
 import org.springframework.core.io.Resource;
@@ -26,13 +28,26 @@ public class FileController {
 
     private final FileStorageService fileStorageService;
     private final CompetitionRepository competitionRepository;
+    private final com.zoroacademy.repository.CourseModuleRepository courseModuleRepository;
+    private final CourseService courseService;
+    private final com.zoroacademy.repository.ScheduleRepository scheduleRepository;
+    private final ScheduleService scheduleService;
 
-    public FileController(FileStorageService fileStorageService, CompetitionRepository competitionRepository) {
+    public FileController(FileStorageService fileStorageService,
+                          CompetitionRepository competitionRepository,
+                          @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.CourseModuleRepository courseModuleRepository,
+                          @org.springframework.beans.factory.annotation.Autowired(required = false) CourseService courseService,
+                          @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.ScheduleRepository scheduleRepository,
+                          @org.springframework.beans.factory.annotation.Autowired(required = false) ScheduleService scheduleService) {
         this.fileStorageService = fileStorageService;
         this.competitionRepository = competitionRepository;
+        this.courseModuleRepository = courseModuleRepository;
+        this.courseService = courseService;
+        this.scheduleRepository = scheduleRepository;
+        this.scheduleService = scheduleService;
     }
 
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = {"", "/upload"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<Map<String, Object>> uploadFile(
             @RequestParam("file") MultipartFile file,
@@ -50,12 +65,24 @@ public class FileController {
         result.put("contentType", storedFile.getContentType());
         result.put("category", storedFile.getCategory());
         result.put("isPublic", storedFile.getIsPublic());
+        result.put("storagePath", storedFile.getStoragePath());
+        result.put("refCount", storedFile.getRefCount());
 
         return ApiResponse.ok(result, "File uploaded successfully");
     }
 
+    @GetMapping("/{id}/meta")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<StoredFile> getFileMetadata(
+            @PathVariable String id,
+            @AuthenticationPrincipal UserPrincipal currentUser
+    ) {
+        StoredFile storedFile = fileStorageService.getFileMetadata(id);
+        return ApiResponse.ok(storedFile);
+    }
+
     @GetMapping("/{id}/link")
-    public ApiResponse<Map<String, Object>> getFileLink(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getFileLink(
             @PathVariable String id,
             @AuthenticationPrincipal UserPrincipal currentUser
     ) {
@@ -63,10 +90,11 @@ public class FileController {
 
         if (!Boolean.TRUE.equals(storedFile.getIsPublic())) {
             if (currentUser == null) {
-                return ApiResponse.error("Authentication required to access private file");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error("Authentication required to access private file"));
             }
 
             String userId = currentUser.getId();
+            String userEmail = currentUser.getEmail();
             String roleUpper = currentUser.getRole() != null ? currentUser.getRole().toUpperCase() : "";
 
             boolean isAdmin = roleUpper.equals("ADMIN") || roleUpper.equals("SUPER_ADMIN");
@@ -75,24 +103,46 @@ public class FileController {
             if (!isAdmin && !isOwner) {
                 boolean isTrainer = roleUpper.equals("TRAINER");
                 boolean isStudent = roleUpper.equals("STUDENT");
+
+                if (isStudent) {
+                    if (courseModuleRepository != null && courseService != null) {
+                        java.util.List<com.zoroacademy.entity.CourseModule> modules = courseModuleRepository.findByAnyFileUrlContaining(id);
+                        for (com.zoroacademy.entity.CourseModule mod : modules) {
+                            if (mod.getCourse() != null && courseService.isModuleLockedForStudent(mod.getCourse().getId(), mod.getId(), userId, userEmail)) {
+                                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("Forbidden: Module is locked"));
+                            }
+                        }
+                    }
+
+                    if (scheduleRepository != null && scheduleService != null) {
+                        java.util.List<com.zoroacademy.entity.Schedule> schedules = scheduleRepository.findByAnyFileUrlContaining(id);
+                        for (com.zoroacademy.entity.Schedule s : schedules) {
+                            if (scheduleService.isScheduleLockedForStudent(s, userId, userEmail)) {
+                                String unlockLabel = com.zoroacademy.util.ScheduleTimeUtil.formatUnlockTime(s.getDate(), s.getTime(), scheduleService.getResourcesUnlockMinutes());
+                                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("Forbidden: Schedule resources are locked. " + unlockLabel));
+                            }
+                        }
+                    }
+                }
+
                 String cat = (storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "");
 
                 if (cat.contains("submission") || cat.contains("doubt")) {
                     if (!isTrainer) {
-                        return ApiResponse.error("Forbidden: You do not have permission to access this file link");
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("Forbidden: You do not have permission to access this file link"));
                     }
                 } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("assessment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module")) {
                     if (!isStudent && !isTrainer) {
-                        return ApiResponse.error("Forbidden: You do not have permission to access this file link");
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("Forbidden: You do not have permission to access this file link"));
                     }
                 } else {
-                    return ApiResponse.error("Forbidden: You do not have permission to access this file link");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("Forbidden: You do not have permission to access this file link"));
                 }
             }
         }
 
         Map<String, Object> linkData = fileStorageService.generateFileLink(storedFile, 7200);
-        return ApiResponse.ok(linkData);
+        return ResponseEntity.ok(ApiResponse.ok(linkData));
     }
 
     @GetMapping("/{id}")
@@ -114,15 +164,36 @@ public class FileController {
                 }
 
                 String userId = currentUser.getId();
+                String userEmail = currentUser.getEmail();
                 String roleUpper = currentUser.getRole() != null ? currentUser.getRole().toUpperCase() : "";
 
                 boolean isAdmin = roleUpper.equals("ADMIN") || roleUpper.equals("SUPER_ADMIN");
                 boolean isOwner = userId != null && userId.equals(storedFile.getOwnerId());
 
                 if (!isAdmin && !isOwner) {
-                    // Check if user is trainer or student and file is educational content/submission
                     boolean isTrainer = roleUpper.equals("TRAINER");
                     boolean isStudent = roleUpper.equals("STUDENT");
+
+                    if (isStudent) {
+                        if (courseModuleRepository != null && courseService != null) {
+                            java.util.List<com.zoroacademy.entity.CourseModule> modules = courseModuleRepository.findByAnyFileUrlContaining(id);
+                            for (com.zoroacademy.entity.CourseModule mod : modules) {
+                                if (mod.getCourse() != null && courseService.isModuleLockedForStudent(mod.getCourse().getId(), mod.getId(), userId, userEmail)) {
+                                    return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                                }
+                            }
+                        }
+
+                        if (scheduleRepository != null && scheduleService != null) {
+                            java.util.List<com.zoroacademy.entity.Schedule> schedules = scheduleRepository.findByAnyFileUrlContaining(id);
+                            for (com.zoroacademy.entity.Schedule s : schedules) {
+                                if (scheduleService.isScheduleLockedForStudent(s, userId, userEmail)) {
+                                    return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                                }
+                            }
+                        }
+                    }
+
                     String cat = (storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "");
 
                     if (cat.contains("submission") || cat.contains("doubt")) {

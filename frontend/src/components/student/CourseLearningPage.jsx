@@ -1,20 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, Play, FileText, BookOpen, PlusCircle, Sparkles, ExternalLink, Calendar, Clock, Video, Lock, Layers, CheckCircle2, Eye, Send, Award, Download } from 'lucide-react';
-import { getCourses, getCourseById } from '../../api/courseApi';
+import { ArrowLeft, CheckCircle, Play, FileText, BookOpen, PlusCircle, Sparkles, ExternalLink, Calendar, Clock, Video, Lock, Unlock, Layers, CheckCircle2, Eye, Send, Award, Download } from 'lucide-react';
+import { getCourses, getCourseById, getTrainerCourseRequests } from '../../api/courseApi';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { createEnquiry, getMyEnquiries } from '../../api/enquiryApi';
-import { getStudentProgress, updateModuleProgress, authorizeVideoPlayback } from '../../api/progressApi';
-import { getSchedules } from '../../api/scheduleApi';
-import { getSubmissions, createSubmission } from '../../api/assignmentApi';
+import { getStudentProgress, getStudentModuleProgress, authorizeVideoPlayback } from '../../api/progressApi';
+import { getSchedules, joinSchedule } from '../../api/scheduleApi';
+import { getSubmissions, createSubmission, getMyTrainerSubmissions } from '../../api/assignmentApi';
 import { uploadFile, resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
-import { recordAttendance } from '../../api/attendanceApi';
 import { useAuth } from '../../context/AuthContext';
 import SecureVideoPlayer from '../common/SecureVideoPlayer';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 import { useDialog } from '../../context/DialogContext';
+import { evaluateScheduleLocks, getScheduleJoinState, syncServerTime } from '../../utils/scheduleSortUtil';
+import { usePolling } from '../../hooks/usePolling';
 
-export default function CourseLearningPage({ courseId: initialCourseId, _setActiveScreen }) {
+function matchesTrainer(course, user) {
+  if (!course || !user) return false;
+  if (course.trainerId && user.id && course.trainerId === user.id) return true;
+  const assigned = course.assignedTrainer || course.trainerName || course.trainer;
+  if (!assigned || assigned === 'None (Self-Paced)' || assigned === 'Unassigned') return false;
+  const a = String(assigned).toLowerCase().trim();
+  const name = String(user.name || '').toLowerCase().trim();
+  const email = String(user.email || '').toLowerCase().trim();
+  if (name && (a === name || a.includes(name) || name.includes(a))) return true;
+  if (email && a === email) return true;
+  return false;
+}
+
+export default function CourseLearningPage({ courseId: initialCourseId, _setActiveScreen, isTrainerLearning = false }) {
   const { user } = useAuth();
+  const isTrainer = isTrainerLearning || user?.role === 'TRAINER';
   const { showError } = useDialog();
   const [activeTab, setActiveTab] = useState('my-courses'); // 'my-courses' | 'explore' | 'learn'
   const [hybridTab, setHybridTab] = useState('live'); // 'live' | 'recorded'
@@ -36,13 +51,26 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
   const [authMsg, setAuthMsg] = useState('');
   const [msg, setMsg] = useState('');
   const [playbackData, setPlaybackData] = useState(null);
+  const [justUnlockedModuleId, setJustUnlockedModuleId] = useState(null);
+  const [, setTimerTick] = useState(0);
+
+  // Periodically re-evaluate schedule locks every 30s without needing full refresh (Requirement B3)
+  usePolling(async () => {
+    setTimerTick(prev => prev + 1);
+    try {
+      const schRes = await getSchedules();
+      if (schRes?.data) setAllSchedules(schRes.data);
+    } catch {
+      // ignore
+    }
+  }, 30000, Boolean(selectedCourse));
 
   const studentIdentifier = user?.email || user?.id || '';
   const studentName = user?.name || '';
 
   const loadSubmissionsData = async () => {
     try {
-      const res = await getSubmissions();
+      const res = isTrainer ? await getMyTrainerSubmissions() : await getSubmissions();
       if (res.data) setStudentSubmissions(res.data);
     } catch (err) {
       console.error('Error loading submissions:', err);
@@ -50,43 +78,73 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
   };
 
   useEffect(() => {
+    syncServerTime();
     loadAllData();
     loadSubmissionsData();
-  }, [studentIdentifier]);
+  }, [studentIdentifier, isTrainer]);
 
   useEffect(() => {
     if (activeModule?.id && selectedCourse?.id && studentIdentifier) {
-      authorizeVideoPlayback(studentIdentifier, selectedCourse.id, activeModule.id).then(res => {
-        if (res.success && res.data) {
-          setIsAuthorized(true);
-          setPlaybackData(res.data);
-        } else {
-          setIsAuthorized(false);
-          setAuthMsg(res.message || 'Access Denied: You are not enrolled in this course.');
-          setPlaybackData(null);
-        }
-      });
+      if (isTrainer) {
+        setIsAuthorized(true);
+        setPlaybackData({ videoUrl: activeModule.videoUrl, streamId: activeModule.videoStreamId });
+      } else {
+        authorizeVideoPlayback(studentIdentifier, selectedCourse.id, activeModule.id).then(res => {
+          if (res.success && res.data) {
+            setIsAuthorized(true);
+            setPlaybackData(res.data);
+          } else {
+            setIsAuthorized(false);
+            setAuthMsg(res.message || 'Access Denied: You are not enrolled in this course.');
+            setPlaybackData(null);
+          }
+        });
+      }
     }
-  }, [activeModule?.id, selectedCourse?.id, studentIdentifier]);
+  }, [activeModule?.id, selectedCourse?.id, studentIdentifier, isTrainer]);
 
   const loadAllData = async () => {
     try {
       const coursesRes = await getCourses();
       const allCourses = coursesRes.data || [];
-      const studentCourses = allCourses.filter(c => !c.audience || c.audience === 'student');
-      setAvailableCourses(studentCourses);
 
-      const enrolledRaw = await getStudentEnrolledCourses(studentIdentifier);
-      const enrolled = enrolledRaw.map(e => {
-        const fullCourse = allCourses.find(c => c.id === e.id || c.title === e.title);
-        return {
-          ...(fullCourse || {}),
-          ...e,
-          batchName: e.batch || fullCourse?.batchName || 'Unassigned',
-          assignedTrainer: fullCourse?.assignedTrainer || 'Course Trainer'
-        };
-      });
-      setEnrolledCourses(enrolled);
+      if (isTrainer) {
+        let requests = [];
+        try {
+          const reqRes = await getTrainerCourseRequests();
+          if (reqRes?.data) requests = reqRes.data;
+        } catch {
+          // ignore
+        }
+        const trainerCourses = allCourses.filter(c => c.audience === 'trainer');
+        setAvailableCourses(trainerCourses);
+
+        const enrolled = trainerCourses.filter(c => {
+          const req = requests.find(r => 
+            ((user?.id && r.trainerId === user.id) ||
+             (user?.email && r.trainerEmail === user.email) || 
+             (user?.name && r.trainerName === user.name)) && 
+            (r.courseId === c.id || r.courseTitle === c.title)
+          );
+          return matchesTrainer(c, user) || (req && req.status === 'Approved');
+        });
+        setEnrolledCourses(enrolled.length > 0 ? enrolled : trainerCourses);
+      } else {
+        const studentCourses = allCourses.filter(c => !c.audience || c.audience === 'student');
+        setAvailableCourses(studentCourses);
+
+        const enrolledRaw = await getStudentEnrolledCourses(studentIdentifier);
+        const enrolled = enrolledRaw.map(e => {
+          const fullCourse = allCourses.find(c => c.id === e.id || c.title === e.title);
+          return {
+            ...(fullCourse || {}),
+            ...e,
+            batchName: e.batch || fullCourse?.batchName || 'Unassigned',
+            assignedTrainer: fullCourse?.assignedTrainer || 'Course Trainer'
+          };
+        });
+        setEnrolledCourses(enrolled);
+      }
 
       const schRes = await getSchedules();
       setAllSchedules(schRes.data || []);
@@ -97,7 +155,8 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
       await loadSubmissionsData();
 
       if (initialCourseId) {
-        const target = studentCourses.find(c => c.id === initialCourseId) || enrolled.find(c => c.id === initialCourseId) || studentCourses[0] || enrolled[0];
+        const coursePool = isTrainer ? allCourses.filter(c => c.audience === 'trainer') : allCourses.filter(c => !c.audience || c.audience === 'student');
+        const target = coursePool.find(c => c.id === initialCourseId) || coursePool[0];
         if (target) selectCourseToLearn(target);
       } else {
         setActiveTab('my-courses');
@@ -132,8 +191,8 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
 
     setAssessmentSubmitting(true);
     try {
-      const asa = activeModule.afterSessionAssessment;
-      const title = asa?.title || `${activeModule.title} Assessment`;
+      const assignmentDoc = activeModule.assignmentPdf || activeModule.assignmentFile;
+      const title = assignmentDoc?.name || `${activeModule.title} Assignment`;
 
       await createSubmission({
         mode: selectedCourse.mode || 'Recorded',
@@ -141,22 +200,64 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
         batchName: selectedCourse.batchName || 'Unassigned',
         studentName: studentName,
         studentEmail: studentIdentifier,
+        studentId: user?.id,
+        trainerId: selectedCourse.trainerId,
         assignmentTitle: title,
         sourceType: 'module',
         sourceId: activeModule.id,
         courseId: selectedCourse.id,
         attachment: assessmentFile || null,
-        answerText: assessmentNotes.trim() || 'Completed after-session assessment task.',
-        assignedTrainer: selectedCourse.assignedTrainer || 'Course Trainer'
+        answerText: assessmentNotes.trim() || 'Completed assignment solution.',
+        assignedTrainer: isTrainer ? 'Admin' : (selectedCourse.assignedTrainer || 'Course Trainer'),
+        submitterRole: isTrainer ? 'TRAINER' : 'STUDENT',
+        reviewer: isTrainer ? 'ADMIN' : 'TRAINER'
       });
 
-      setMsg('Assessment submitted successfully! Trainer will review and assign score.');
-      setTimeout(() => setMsg(''), 4000);
+      const currentIdx = modulesList.findIndex(m => m.id === activeModule.id);
+      if (currentIdx >= 0 && currentIdx + 1 < modulesList.length) {
+        const nextMod = modulesList[currentIdx + 1];
+        setJustUnlockedModuleId(nextMod.id);
+        setMsg(`Assignment submitted successfully! Module ${currentIdx + 2} unlocked.`);
+        setTimeout(() => setJustUnlockedModuleId(null), 3000);
+      } else {
+        setMsg(isTrainer ? 'Assignment submitted to Admin for review successfully!' : 'Assignment submitted successfully! Trainer will review and assign score.');
+      }
+      setTimeout(() => setMsg(''), 4500);
+
       setAssessmentFile(null);
       setAssessmentNotes('');
       await loadSubmissionsData();
+
+      // Refresh student progress from backend immediately
+      if (selectedCourse?.id && studentIdentifier) {
+        const [progRes, modProgRes] = await Promise.all([
+          getStudentProgress(studentIdentifier, selectedCourse.id),
+          getStudentModuleProgress(studentIdentifier, selectedCourse.id)
+        ]);
+        const pMap = {};
+        (progRes.data || []).forEach(p => {
+          pMap[p.moduleId] = { ...(pMap[p.moduleId] || {}), ...p };
+        });
+        (modProgRes.data || []).forEach(mp => {
+          pMap[mp.moduleId] = {
+            ...(pMap[mp.moduleId] || {}),
+            ...mp,
+            videoCompleted: Boolean(mp.videoCompleted),
+            lastPosition: mp.lastPosition != null ? mp.lastPosition : mp.lastPositionSeconds
+          };
+        });
+        setStudentProgressMap(pMap);
+      }
+
+      // Refresh course data from backend to receive freshly unlocked modules
+      if (selectedCourse?.id) {
+        const cRes = await getCourseById(selectedCourse.id);
+        if (cRes.success && cRes.data) {
+          setSelectedCourse(prev => ({ ...prev, ...cRes.data }));
+        }
+      }
     } catch (err) {
-      console.error('Failed to submit assessment:', err);
+      console.error('Failed to submit assignment:', err);
     } finally {
       setAssessmentSubmitting(false);
     }
@@ -186,11 +287,23 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
     setIsAuthorized(authRes.success);
     setAuthMsg(authRes.message || '');
 
-    // Load progress for this course
-    const progRes = await getStudentProgress(studentIdentifier, fullCourse.id);
+    // Load progress and submissions for this course
+    await loadSubmissionsData();
+    const [progRes, modProgRes] = await Promise.all([
+      getStudentProgress(studentIdentifier, fullCourse.id),
+      getStudentModuleProgress(studentIdentifier, fullCourse.id)
+    ]);
     const pMap = {};
     (progRes.data || []).forEach(p => {
-      pMap[p.moduleId] = p;
+      pMap[p.moduleId] = { ...(pMap[p.moduleId] || {}), ...p };
+    });
+    (modProgRes.data || []).forEach(mp => {
+      pMap[mp.moduleId] = {
+        ...(pMap[mp.moduleId] || {}),
+        ...mp,
+        videoCompleted: Boolean(mp.videoCompleted),
+        lastPosition: mp.lastPosition != null ? mp.lastPosition : mp.lastPositionSeconds
+      };
     });
     setStudentProgressMap(pMap);
 
@@ -199,7 +312,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
 
     // Default tab based on course mode (Online -> live, Recorded/Hybrid -> recorded)
     const mode = fullCourse.mode || 'Online';
-    if (mode === 'Online') {
+    if (mode === 'Online' || mode === 'Hybrid') {
       setHybridTab('live');
     } else {
       setHybridTab('recorded');
@@ -211,10 +324,21 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
   const isModuleLocked = (index) => {
     if (index === 0) return false; // Module 1 is always unlocked
     if (!modulesList || modulesList.length === 0) return false;
+    const mod = modulesList[index];
+    if (mod?.locked !== undefined) return Boolean(mod.locked);
+    if (mod?.isLocked !== undefined) return Boolean(mod.isLocked);
     const prevMod = modulesList[index - 1];
     if (!prevMod) return false;
+    const prevHasAssignment = Boolean(prevMod.assignmentFile || prevMod.assignmentFileUrl || prevMod.assignmentPdf);
+    if (prevHasAssignment) {
+      const submitted = studentSubmissions.some(s =>
+        (s.sourceId === prevMod.id || (s.assignmentTitle && prevMod.title && s.assignmentTitle.toLowerCase().includes(prevMod.title.toLowerCase())))
+      );
+      return !submitted;
+    }
     const prevProg = studentProgressMap[prevMod.id];
-    return prevProg?.status !== 'Completed';
+    const isDone = prevProg?.status === 'Completed' || Boolean(prevProg?.completed) || Boolean(prevProg?.videoCompleted);
+    return !isDone;
   };
 
   const getStudentEnquiryForCourse = (courseId, courseTitle) => {
@@ -269,76 +393,55 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
 
   const handleProgressUpdate = async (moduleId, progressData) => {
     if (!selectedCourse || !moduleId) return;
-    setStudentProgressMap(prev => ({
-      ...prev,
-      [moduleId]: {
-        ...(prev[moduleId] || {}),
-        ...progressData
-      }
-    }));
-
-    await updateModuleProgress({
-      studentId: studentIdentifier,
-      courseId: selectedCourse.id,
-      moduleId,
-      ...progressData
+    setStudentProgressMap(prev => {
+      const existing = prev[moduleId] || {};
+      const isVidDone = progressData.videoCompleted !== undefined ? Boolean(progressData.videoCompleted) : existing.videoCompleted;
+      const isModDone = progressData.moduleCompleted !== undefined ? Boolean(progressData.moduleCompleted) : (existing.status === 'Completed');
+      return {
+        ...prev,
+        [moduleId]: {
+          ...existing,
+          ...progressData,
+          videoCompleted: isVidDone,
+          status: isModDone ? 'Completed' : (progressData.watchedSeconds > 0 ? 'In Progress' : (existing.status || 'In Progress'))
+        }
+      };
     });
   };
 
-  // Calculate live session status dynamically (Requirement #2)
-  const computeLiveSessionStatus = (sessionDateStr, startTimeStr, endTimeStr) => {
-    const today = new Date().toISOString().split('T')[0];
-    if (sessionDateStr < today) return 'COMPLETED';
-    if (sessionDateStr > today) return 'UPCOMING';
-
-    const now = new Date();
-    const currentMins = now.getHours() * 60 + now.getMinutes();
-
-    const parseMins = (tStr) => {
-      if (!tStr) return 0;
-      const match = tStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-      if (!match) return 0;
-      let h = parseInt(match[1], 10);
-      const m = parseInt(match[2], 10);
-      if (match[3]?.toUpperCase() === 'PM' && h < 12) h += 12;
-      if (match[3]?.toUpperCase() === 'AM' && h === 12) h = 0;
-      return h * 60 + m;
-    };
-
-    const sMins = parseMins(startTimeStr);
-    const eMins = parseMins(endTimeStr) || (sMins + 60);
-
-    if (currentMins < sMins) return 'UPCOMING';
-    if (currentMins >= sMins && currentMins <= eMins) return 'LIVE';
-    return 'COMPLETED';
-  };
-
-  // Live sessions for selected course
-  const courseLiveSessions = (selectedCourse?.liveSessions && selectedCourse.liveSessions.length > 0)
+  // Live sessions for selected course (Requirement B3: sorted chronologically and locks evaluated)
+  const rawLiveSessions = (selectedCourse?.liveSessions && selectedCourse.liveSessions.length > 0)
     ? selectedCourse.liveSessions
     : allSchedules.filter(s => {
-        const matchesCourse = (s.course || '').toLowerCase().trim() === (selectedCourse?.title || '').toLowerCase().trim();
+        const matchesCourse = (s.course || '').toLowerCase().trim() === (selectedCourse?.title || '').toLowerCase().trim() ||
+          (s.courseId && s.courseId === selectedCourse?.id);
         return matchesCourse;
-      }).map(s => {
-        const parts = (s.time || '05:00 PM - 06:00 PM').split('-');
-        return {
-          id: s.id,
-          title: s.title || `${selectedCourse?.title} Live Class`,
-          date: s.date || new Date().toISOString().split('T')[0],
-          day: new Date(s.date || Date.now()).toLocaleDateString('en-US', { weekday: 'long' }),
-          startTime: parts[0]?.trim() || '05:00 PM',
-          endTime: parts[1]?.trim() || '06:00 PM',
-          trainer: s.trainer || selectedCourse?.assignedTrainer || 'Course Trainer',
-          batch: s.batch || selectedCourse?.batchName || 'Unassigned',
-          googleMeetUrl: s.meetUrl || s.googleMeetUrl || 'https://meet.google.com/zoro-live-class',
-          assignmentPdf: s.assignmentPdf || s.assignment || null,
-          worksheetPdf: s.worksheetPdf || s.worksheet || null,
-          notesPdf: s.notesPdf || s.notes || null
-        };
       });
 
+  const courseLiveSessions = evaluateScheduleLocks(rawLiveSessions.map(s => {
+    const timeStr = s.time || s.startTime || '05:00 PM - 06:00 PM';
+    const parts = timeStr.split('-');
+    return {
+      ...s,
+      id: s.id,
+      title: s.title || `${selectedCourse?.title} Live Class`,
+      date: s.date || '2026-10-12',
+      time: timeStr,
+      startTime: parts[0]?.trim() || '05:00 PM',
+      endTime: parts[1]?.trim() || '06:00 PM',
+      day: s.date ? new Date(s.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : '',
+      trainer: s.trainer || selectedCourse?.assignedTrainer || 'Course Trainer',
+      batch: s.batch || selectedCourse?.batchName || 'Unassigned',
+      googleMeetUrl: s.meetUrl || s.googleMeetUrl || s.meetLink || '',
+      assignmentPdf: s.assignmentPdf || (s.assignmentFileUrl ? { name: s.assignmentFileName || `${s.title} Assignment.pdf`, fileUrl: s.assignmentFileUrl } : null),
+      worksheetPdf: s.worksheetPdf || (s.worksheetFileUrl ? { name: s.worksheetFileName || `${s.title} Worksheet.pdf`, fileUrl: s.worksheetFileUrl } : null),
+      notesPdf: s.notesPdf || (s.notesFileUrl ? { name: s.notesFileName || `${s.title} Notes.pdf`, fileUrl: s.notesFileUrl } : null),
+      locked: s.locked
+    };
+  }));
+
   // Calculate overall course progress (Requirement #9)
-  const modulesList = selectedCourse?.modules || [];
+  const modulesList = [...(selectedCourse?.modules || [])].sort((a, b) => ((a.moduleOrder ?? a.module_order ?? 0) - (b.moduleOrder ?? b.module_order ?? 0)));
   const completedModulesCount = modulesList.filter(m => (studentProgressMap[m.id]?.status === 'Completed')).length;
   const overallProgressPct = modulesList.length > 0 ? Math.round((completedModulesCount / modulesList.length) * 100) : 0;
 
@@ -623,24 +726,40 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {courseLiveSessions.map((session) => {
-                        const status = computeLiveSessionStatus(session.date, session.startTime, session.endTime);
-                        const isLive = status === 'LIVE';
+                        const isLive = session.status === 'LIVE';
+                        const isLocked = session.isLocked;
 
                         return (
-                          <div key={session.id} className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-md space-y-4 flex flex-col justify-between">
+                          <div
+                            key={session.id}
+                            className={`p-6 rounded-3xl border shadow-md space-y-4 flex flex-col justify-between transition-all duration-300 ${
+                              isLocked
+                                ? 'bg-slate-50/70 border-slate-200/90 text-slate-500'
+                                : session.isNearestUpcoming
+                                ? 'bg-white border-blue-300 ring-2 ring-blue-500/20'
+                                : 'bg-white border-slate-200/80'
+                            }`}
+                          >
                             <div className="space-y-3">
                               <div className="flex items-center justify-between">
-                                <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${
-                                  isLive ? 'bg-rose-100 text-rose-700 border-rose-300 animate-pulse' :
-                                  status === 'UPCOMING' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                                  'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                }`}>
-                                  {status === 'LIVE' ? '🔴 LIVE NOW' : status}
-                                </span>
+                                {isLocked ? (
+                                  <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1.5">
+                                    <Lock className="w-3 h-3 text-amber-600" />
+                                    <span>{session.unlockLabel || 'LOCKED'}</span>
+                                  </span>
+                                ) : (
+                                  <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${
+                                    isLive ? 'bg-rose-100 text-rose-700 border-rose-300 animate-pulse' :
+                                    session.status === 'UPCOMING' ? 'bg-blue-100 text-blue-800 border-blue-200 flex items-center gap-1' :
+                                    'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                  }`}>
+                                    {isLive ? '🔴 LIVE NOW' : session.status === 'UPCOMING' ? (session.isNearestUpcoming ? 'NEXT SESSION' : 'UPCOMING') : 'COMPLETED'}
+                                  </span>
+                                )}
                                 <span className="text-xs font-bold text-slate-400">{session.day}</span>
                               </div>
 
-                              <h4 className="text-base font-black text-slate-900">{session.title}</h4>
+                              <h4 className={`text-base font-black ${isLocked ? 'text-slate-700' : 'text-slate-900'}`}>{session.title}</h4>
 
                               <div className="space-y-1 text-xs text-slate-600 font-semibold">
                                 <div className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-blue-600" /> {session.date}</div>
@@ -648,75 +767,100 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                 <div className="flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-amber-500" /> Trainer: {session.trainer} • Batch: {session.batch || selectedCourse.batchName || 'Unassigned'}</div>
                               </div>
 
-                              {/* Requirement 10: Admin Live Session Resources */}
-                              {(session.assignmentPdf || session.worksheetPdf || session.notesPdf) && (
-                                <div className="pt-2 border-t border-slate-100 space-y-1">
-                                  <div className="text-[10px] font-black text-slate-400 uppercase">Classroom Session Resources</div>
-                                  <div className="flex flex-wrap gap-1.5 text-[11px]">
-                                    {session.assignmentPdf && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setViewerFile(typeof session.assignmentPdf === 'object' ? session.assignmentPdf : { name: `${session.title} Assignment.pdf`, fileUrl: session.assignmentPdf, type: 'pdf' })}
-                                        className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-lg font-bold flex items-center space-x-1 cursor-pointer"
-                                      >
-                                        <Eye className="w-3 h-3 text-purple-600" />
-                                        <span>Assignment [View]</span>
-                                      </button>
-                                    )}
-                                    {session.worksheetPdf && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setViewerFile(typeof session.worksheetPdf === 'object' ? session.worksheetPdf : { name: `${session.title} Worksheet.pdf`, fileUrl: session.worksheetPdf, type: 'pdf' })}
-                                        className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-lg font-bold flex items-center space-x-1 cursor-pointer"
-                                      >
-                                        <Eye className="w-3 h-3 text-blue-600" />
-                                        <span>Worksheet [View]</span>
-                                      </button>
-                                    )}
-                                    {session.notesPdf && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setViewerFile(typeof session.notesPdf === 'object' ? session.notesPdf : { name: `${session.title} Notes.pdf`, fileUrl: session.notesPdf, type: 'pdf' })}
-                                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 rounded-lg font-bold flex items-center space-x-1 cursor-pointer"
-                                      >
-                                        <Eye className="w-3 h-3 text-emerald-600" />
-                                        <span>Notes [View]</span>
-                                      </button>
-                                    )}
+                              {/* Requirement B3: If locked, hide classroom documents and show unlock note */}
+                              {isLocked ? (
+                                <div className="pt-2 border-t border-slate-200/60">
+                                  <div className="px-3 py-2 bg-white/80 border border-slate-200 rounded-xl flex items-center gap-2 text-[11px] text-slate-500 font-semibold">
+                                    <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                    <span>Classroom documents unlock 30 minutes before class</span>
                                   </div>
                                 </div>
+                              ) : (
+                                (session.assignmentPdf || session.worksheetPdf || session.notesPdf) && (
+                                  <div className="pt-2 border-t border-slate-100 space-y-1">
+                                    <div className="text-[10px] font-black text-slate-400 uppercase">Classroom Session Resources</div>
+                                    <div className="flex flex-wrap gap-1.5 text-[11px]">
+                                      {session.assignmentPdf && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setViewerFile(typeof session.assignmentPdf === 'object' ? session.assignmentPdf : { name: `${session.title} Assignment.pdf`, fileUrl: session.assignmentPdf, type: 'pdf' })}
+                                          className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-lg font-bold flex items-center space-x-1 cursor-pointer"
+                                        >
+                                          <Eye className="w-3 h-3 text-purple-600" />
+                                          <span>Assignment [View]</span>
+                                        </button>
+                                      )}
+                                      {session.worksheetPdf && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setViewerFile(typeof session.worksheetPdf === 'object' ? session.worksheetPdf : { name: `${session.title} Worksheet.pdf`, fileUrl: session.worksheetPdf, type: 'pdf' })}
+                                          className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-lg font-bold flex items-center space-x-1 cursor-pointer"
+                                        >
+                                          <Eye className="w-3 h-3 text-blue-600" />
+                                          <span>Worksheet [View]</span>
+                                        </button>
+                                      )}
+                                      {session.notesPdf && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setViewerFile(typeof session.notesPdf === 'object' ? session.notesPdf : { name: `${session.title} Notes.pdf`, fileUrl: session.notesPdf, type: 'pdf' })}
+                                          className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 rounded-lg font-bold flex items-center space-x-1 cursor-pointer"
+                                        >
+                                          <Eye className="w-3 h-3 text-emerald-600" />
+                                          <span>Notes [View]</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
                               )}
                             </div>
 
-                            {/* Requirement 9.3 & 9.4: JOIN NOW BUTTON WITH AUTOMATIC ATTENDANCE */}
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const meetUrl = session.googleMeetUrl || session.meetUrl;
-                                if (!meetUrl) {
-                                  setMsg('Meeting link not available for this session.');
-                                  setTimeout(() => setMsg(''), 4000);
-                                  return;
-                                }
+                            {/* JOIN BUTTON */}
+                            {(() => {
+                              const joinState = getScheduleJoinState(session);
+                              if (!joinState.enabled) {
+                                return (
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="w-full py-3 rounded-xl font-bold text-xs text-center flex items-center justify-center space-x-2 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none"
+                                  >
+                                    <Lock className="w-4 h-4 text-slate-400" />
+                                    <span>{joinState.label}</span>
+                                  </button>
+                                );
+                              }
 
-                                await recordAttendance({
-                                  course: selectedCourse.title,
-                                  batch: session.batch || selectedCourse.batchName || 'Unassigned',
-                                  topic: session.title,
-                                  date: session.date
-                                }, studentName, studentIdentifier);
-
-                                window.open(meetUrl, '_blank');
-                              }}
-                              className={`w-full py-3 rounded-xl font-black text-xs text-center flex items-center justify-center space-x-2 shadow-md transition-transform transform active:scale-95 cursor-pointer ${
-                                isLive
-                                  ? 'bg-rose-600 hover:bg-rose-700 text-white animate-bounce'
-                                  : 'bg-[#0F52BA] hover:bg-blue-700 text-white'
-                              }`}
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                              <span>JOIN NOW (Google Meet)</span>
-                            </button>
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      const res = await joinSchedule(session.id);
+                                      if (res && res.success && (res.data?.meetUrl || res.meetUrl)) {
+                                        const finalUrl = res.data?.meetUrl || res.meetUrl;
+                                        window.open(finalUrl, '_blank');
+                                      } else {
+                                        setMsg(res?.message || 'Could not join session');
+                                        setTimeout(() => setMsg(''), 4000);
+                                      }
+                                    } catch (err) {
+                                      setMsg(err?.message || 'Failed to join session');
+                                      setTimeout(() => setMsg(''), 4000);
+                                    }
+                                  }}
+                                  className={`w-full py-3 rounded-xl font-black text-xs text-center flex items-center justify-center space-x-2 shadow-md transition-transform transform active:scale-95 cursor-pointer ${
+                                    isLive
+                                      ? 'bg-rose-600 hover:bg-rose-700 text-white animate-bounce'
+                                      : 'bg-[#0F52BA] hover:bg-blue-700 text-white'
+                                  }`}
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                  <span>{joinState.label}</span>
+                                </button>
+                              );
+                            })()}
                           </div>
                         );
                       })}
@@ -755,12 +899,25 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                   videoRefData={playbackData || activeModule?.videoStorageRef}
                   videoTitle={activeModule?.title || selectedCourse.title}
                   courseTitle={selectedCourse.title}
+                  poster={activeModule?.thumbnail || activeModule?.thumbnailUrl || null}
                   studentName={studentName}
                   studentEmail={studentIdentifier}
                   isAuthorized={isAuthorized}
                   authErrorMsg={authMsg}
                   initialPosition={studentProgressMap[activeModule?.id]?.lastPosition || 0}
+                  moduleId={activeModule?.id}
+                  courseId={selectedCourse?.id}
                   onProgressUpdate={(progData) => handleProgressUpdate(activeModule?.id, progData)}
+                  onTokenExpired={() => {
+                    if (selectedCourse?.id && activeModule?.id && studentIdentifier) {
+                      authorizeVideoPlayback(studentIdentifier, selectedCourse.id, activeModule.id).then(res => {
+                        if (res.success && res.data) {
+                          setIsAuthorized(true);
+                          setPlaybackData(res.data);
+                        }
+                      });
+                    }
+                  }}
                 />
 
                 {/* Module Details & Download PDF Attachments */}
@@ -779,15 +936,15 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                         </div>
                       </div>
 
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border shrink-0 ${
-                        studentProgressMap[activeModule.id]?.status === 'Completed'
-                          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                          : studentProgressMap[activeModule.id]?.status === 'In Progress'
-                          ? 'bg-amber-100 text-amber-800 border-amber-200'
-                          : 'bg-slate-100 text-slate-600 border-slate-200'
-                      }`}>
-                        {studentProgressMap[activeModule.id]?.status || 'Not Started'}
-                      </span>
+                      {['Completed', 'In Progress'].includes(studentProgressMap[activeModule.id]?.status) && (
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border shrink-0 ${
+                          studentProgressMap[activeModule.id]?.status === 'Completed'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                            : 'bg-amber-100 text-amber-800 border-amber-200'
+                        }`}>
+                          {studentProgressMap[activeModule.id]?.status}
+                        </span>
+                      )}
                     </div>
 
                     {/* PDF Resources (Requirement #3, #14) */}
@@ -851,7 +1008,9 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                         (s.sourceId === activeModule.id || (s.assignmentTitle && activeModule.title && s.assignmentTitle.toLowerCase().includes(activeModule.title.toLowerCase())))
                       );
 
-                      return (activeModule.afterSessionAssessment || activeModule.assignmentPdf) ? (
+                      const assignmentDoc = activeModule.assignmentPdf || activeModule.assignmentFile;
+
+                      return assignmentDoc ? (
                         <div className="mt-6 pt-6 border-t border-slate-100 space-y-4">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2">
@@ -859,9 +1018,9 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                 <CheckCircle2 className="w-4 h-4" />
                               </div>
                               <div>
-                                <h4 className="text-sm font-black text-slate-900">After-Session Assessment</h4>
+                                <h4 className="text-sm font-black text-slate-900">Assignment</h4>
                                 <p className="text-[11px] text-slate-500 font-medium">
-                                  {activeModule.afterSessionAssessment?.title || `${activeModule.title} Post-Session Evaluation`}
+                                  {assignmentDoc.name || `${activeModule.title} Assignment`}
                                 </p>
                               </div>
                             </div>
@@ -872,67 +1031,42 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                   ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                                   : 'bg-amber-100 text-amber-800 border-amber-300'
                               }`}>
-                                {currentSub.status === 'Corrected' || currentSub.status === 'Reviewed' ? '✓ Corrected' : '⏳ Pending Trainer Correction'}
+                                {currentSub.status === 'Corrected' || currentSub.status === 'Reviewed' ? '✓ Corrected' : (isTrainer ? '⏳ Pending Admin Review' : '⏳ Pending Trainer Correction')}
                               </span>
                             ) : (
                               <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border bg-purple-100 text-purple-800 border-purple-200">
-                                Assessment Active
+                                Assignment Active
                               </span>
                             )}
                           </div>
 
-                          {/* ASSESSMENT TYPE 1: GOOGLE FORM */}
-                          {activeModule.afterSessionAssessment?.type === 'google_form' && (
-                            <div className="p-4 bg-purple-50 rounded-2xl border border-purple-200 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-black text-purple-950 flex items-center gap-1.5">
-                                  <Sparkles className="w-4 h-4 text-purple-600" /> Google Form Online Test
-                                </span>
-                                <span className="text-[10px] bg-purple-200 text-purple-900 px-2 py-0.5 rounded-md font-extrabold">External Form</span>
-                              </div>
-                              <p className="text-xs text-slate-600 font-medium">
-                                Click below to open the official Google Form assessment in a new browser tab. Your assigned trainer ({selectedCourse.assignedTrainer || 'Course Trainer'}) will automatically review your responses once submitted.
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => window.open(activeModule.afterSessionAssessment.googleFormUrl || 'https://forms.google.com', '_blank')}
-                                className="bg-purple-700 hover:bg-purple-800 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-md text-xs inline-flex items-center space-x-2 cursor-pointer"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                                <span>Open Assessment (Google Form)</span>
-                              </button>
-                            </div>
-                          )}
-
-                          {/* ASSESSMENT TYPE 2: UPLOADED FILE TASK */}
-                          {(activeModule.afterSessionAssessment?.type === 'uploaded' || (!activeModule.afterSessionAssessment && activeModule.assignmentPdf)) && (
-                            <div className="space-y-4">
-                              
-                              {/* Assessment Task Attachment View */}
-                              {activeModule.afterSessionAssessment?.file && (
-                                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
-                                  <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                                    <FileText className="w-4 h-4 text-purple-600" />
-                                    <span>Task Document: {activeModule.afterSessionAssessment.file.name}</span>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <button
-                                      type="button"
-                                      onClick={() => setViewerFile(activeModule.afterSessionAssessment.file)}
-                                      className="text-[11px] font-extrabold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
-                                    >
-                                      <Eye className="w-3.5 h-3.5" /> View Task File
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => openFileWithSignedLink(activeModule.afterSessionAssessment.file.fileUrl, activeModule.afterSessionAssessment.file.name)}
-                                      className="text-[11px] font-extrabold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
-                                    >
-                                      <Download className="w-3.5 h-3.5" /> Download
-                                    </button>
-                                  </div>
+                          {/* ASSIGNMENT TASK UPLOADED FILE TASK */}
+                          <div className="space-y-4">
+                            {/* Assessment Task Attachment View */}
+                            {assignmentDoc.fileUrl && (
+                              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                                <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                                  <FileText className="w-4 h-4 text-purple-600" />
+                                  <span>Task Document: {assignmentDoc.name}</span>
                                 </div>
-                              )}
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewerFile(assignmentDoc)}
+                                    className="text-[11px] font-extrabold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" /> View Task File
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openFileWithSignedLink(assignmentDoc.fileUrl, assignmentDoc.name)}
+                                    className="text-[11px] font-extrabold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Download className="w-3.5 h-3.5" /> Download
+                                  </button>
+                                </div>
+                              </div>
+                            )}
 
                               {/* SUBMISSION RECEIVED / TRAINER RESULT VIEW */}
                               {currentSub ? (
@@ -963,7 +1097,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center space-x-1.5 font-black text-xs text-emerald-300">
                                           <Award className="w-4 h-4 text-emerald-400" />
-                                          <span>Trainer Evaluation Result</span>
+                                          <span>{isTrainer ? 'Admin Evaluation Result' : 'Trainer Evaluation Result'}</span>
                                         </div>
                                         {currentSub.score && (
                                           <span className="bg-emerald-500 text-slate-950 font-black text-xs px-3 py-1 rounded-lg">
@@ -972,29 +1106,42 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                         )}
                                       </div>
 
-                                      {currentSub.remarks ? (
+                                      {(currentSub.feedback || currentSub.remarks) ? (
                                         <p className="text-xs text-emerald-100 font-semibold leading-relaxed">
-                                          "{currentSub.remarks}"
+                                          "{currentSub.feedback || currentSub.remarks}"
                                         </p>
                                       ) : (
-                                        <p className="text-[11px] text-emerald-300/80 font-medium italic">Evaluated by {currentSub.correctedBy || currentSub.assignedTrainer || 'Trainer'}</p>
+                                        <p className="text-[11px] text-emerald-300/80 font-medium italic">Evaluated by {currentSub.correctedBy || currentSub.reviewer || (isTrainer ? 'Admin' : 'Trainer')}</p>
+                                      )}
+
+                                      {currentSub.correctedFileUrl && (
+                                        <div className="flex items-center justify-between bg-emerald-900/60 p-2.5 rounded-xl border border-emerald-700/60 text-xs">
+                                          <span className="font-bold text-emerald-200 truncate">📄 Corrected Document</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => openFileWithSignedLink(currentSub.correctedFileUrl, 'Corrected_Assignment')}
+                                            className="text-emerald-300 hover:text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <Download className="w-3.5 h-3.5" /> Download Correction
+                                          </button>
+                                        </div>
                                       )}
                                       
                                       <div className="text-[10px] font-mono text-emerald-400 text-right pt-1">
-                                        Reviewed by {currentSub.correctedBy || currentSub.assignedTrainer} on {currentSub.correctedAt}
+                                        Reviewed by {currentSub.correctedBy || currentSub.reviewer || (isTrainer ? 'Admin' : 'Trainer')} on {currentSub.correctedAt || currentSub.updatedAt || ''}
                                       </div>
                                     </div>
                                   ) : (
                                     <div className="p-3.5 bg-amber-950/40 border border-amber-800/40 rounded-xl text-xs text-amber-300 font-semibold flex items-center space-x-2">
                                       <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-                                      <span>Your submission is awaiting evaluation by your assigned trainer ({selectedCourse.assignedTrainer || 'Course Trainer'}). Marks and feedback will appear here once corrected.</span>
+                                      <span>{isTrainer ? 'Your submission is awaiting evaluation by Admin. Marks and feedback will appear here once corrected.' : `Your submission is awaiting evaluation by your assigned trainer (${selectedCourse.assignedTrainer || 'Course Trainer'}). Marks and feedback will appear here once corrected.`}</span>
                                     </div>
                                   )}
                                 </div>
                               ) : (
                                 /* STUDENT SUBMISSION FORM */
                                 <form onSubmit={handleSubmitStudentAssessment} className="p-5 bg-purple-50/50 border border-purple-200 rounded-2xl space-y-4">
-                                  <h5 className="text-xs font-black text-purple-950 uppercase tracking-wider">Submit Your After-Session Solution</h5>
+                                  <h5 className="text-xs font-black text-purple-950 uppercase tracking-wider">Submit Your Assignment Solution</h5>
                                   
                                   <div>
                                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
@@ -1022,29 +1169,65 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                   </div>
 
                                   <div>
-                                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Answer Notes / Remarks (Optional)</label>
+                                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Answer Notes / Remarks *</label>
                                     <textarea
                                       rows={2}
-                                      placeholder="Add any notes or comments for your trainer..."
+                                      required
+                                      placeholder="Add your notes or remarks for your trainer..."
                                       value={assessmentNotes}
                                       onChange={(e) => setAssessmentNotes(e.target.value)}
                                       className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-600"
                                     />
                                   </div>
 
-                                  <button
-                                    type="submit"
-                                    disabled={assessmentSubmitting}
-                                    className="bg-purple-700 hover:bg-purple-800 text-white font-extrabold px-6 py-2.5 rounded-xl shadow-md text-xs inline-flex items-center space-x-2 cursor-pointer disabled:opacity-50"
-                                  >
-                                    <Send className="w-3.5 h-3.5" />
-                                    <span>{assessmentSubmitting ? 'Submitting...' : 'Submit Assessment Solution'}</span>
-                                  </button>
+                                  {(() => {
+                                    const hasVideo = Boolean(
+                                      activeModule?.videoStorageRef &&
+                                      activeModule.videoStorageRef !== 'null' &&
+                                      activeModule.videoStorageRef !== '{}' &&
+                                      (typeof activeModule.videoStorageRef === 'string' ? activeModule.videoStorageRef.trim().length > 2 : true)
+                                    );
+                                    const curProg = studentProgressMap[activeModule?.id];
+                                    const isVideoCompleted = hasVideo ? Boolean(curProg?.videoCompleted) : true;
+                                    const hasFile = Boolean(assessmentFile);
+                                    const hasNotes = Boolean(assessmentNotes && assessmentNotes.trim().length > 0);
+                                    const isSubmitValid = isVideoCompleted && hasFile && hasNotes;
+
+                                    let hintText = '';
+                                    if (!isVideoCompleted) {
+                                      hintText = 'Watch the full video to enable submission';
+                                    } else if (!hasFile) {
+                                      hintText = 'Choose a file to submit assignment solution';
+                                    } else if (!hasNotes) {
+                                      hintText = 'Add your answer notes/remarks';
+                                    }
+
+                                    return (
+                                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                        <button
+                                          type="submit"
+                                          disabled={!isSubmitValid || assessmentSubmitting}
+                                          className={`font-extrabold px-6 py-2.5 rounded-xl shadow-md text-xs inline-flex items-center space-x-2 transition-all ${
+                                            isSubmitValid && !assessmentSubmitting
+                                              ? 'bg-purple-700 hover:bg-purple-800 text-white cursor-pointer'
+                                              : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
+                                          }`}
+                                        >
+                                          <Send className="w-3.5 h-3.5" />
+                                          <span>{assessmentSubmitting ? 'Submitting...' : 'Submit Assignment Solution'}</span>
+                                        </button>
+                                        {!isSubmitValid && (
+                                          <span className="text-[11px] text-amber-700 font-semibold italic">
+                                            {hintText}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </form>
                               )}
 
                             </div>
-                          )}
 
                         </div>
                       ) : null;
@@ -1066,8 +1249,9 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                     modulesList.map((mod, index) => {
                       const locked = isModuleLocked(index);
                       const isActive = activeModule?.id === mod.id;
+                      const isJustUnlocked = justUnlockedModuleId === mod.id;
                       const prog = studentProgressMap[mod.id];
-                      const modStatus = prog?.status || 'Not Started';
+                      const modStatus = prog?.status || '';
 
                       return (
                         <button
@@ -1077,7 +1261,9 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                           }}
                           disabled={locked}
                           className={`w-full text-left p-4 rounded-2xl text-xs font-bold transition-all border space-y-2 ${
-                            locked
+                            isJustUnlocked
+                              ? 'animate-unlock-card bg-emerald-50 border-emerald-500 text-emerald-950 shadow-md'
+                              : locked
                               ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-75'
                               : isActive
                               ? 'bg-blue-50 border-blue-600 text-blue-900 shadow-sm cursor-pointer'
@@ -1096,19 +1282,29 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-1.5">
                                   <span className="font-black text-sm">Module {index + 1}</span>
-                                  {locked && <Lock className="w-3.5 h-3.5 text-slate-400" />}
+                                  {isJustUnlocked ? (
+                                    <Unlock className="w-3.5 h-3.5 text-emerald-600 animate-unlock-icon" />
+                                  ) : locked ? (
+                                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                                  ) : null}
                                 </div>
-                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border uppercase ${
-                                  locked
-                                    ? 'bg-slate-200 text-slate-500 border-slate-300'
-                                    : modStatus === 'Completed'
-                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                    : modStatus === 'In Progress'
-                                    ? 'bg-amber-100 text-amber-800 border-amber-200'
-                                    : 'bg-slate-100 text-slate-500 border-slate-200'
-                                }`}>
-                                  {locked ? 'LOCKED' : modStatus}
-                                </span>
+                                {isJustUnlocked ? (
+                                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border uppercase bg-emerald-200 text-emerald-900 border-emerald-400">
+                                    UNLOCKED!
+                                  </span>
+                                ) : locked ? (
+                                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border uppercase bg-slate-200 text-slate-500 border-slate-300">
+                                    LOCKED
+                                  </span>
+                                ) : modStatus === 'Completed' ? (
+                                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border uppercase bg-emerald-100 text-emerald-800 border-emerald-200">
+                                    Completed
+                                  </span>
+                                ) : modStatus === 'In Progress' ? (
+                                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border uppercase bg-amber-100 text-amber-800 border-amber-200">
+                                    In Progress
+                                  </span>
+                                ) : null}
                               </div>
 
                               <div className="text-xs font-bold line-clamp-1 mt-0.5">{mod.title}</div>
@@ -1117,7 +1313,11 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
 
                           {locked ? (
                             <div className="text-[10px] text-rose-500 font-semibold flex items-center gap-1 mt-1">
-                              <Lock className="w-3 h-3 shrink-0" /> Complete Module {index} to unlock Module {index + 1}
+                              <Lock className="w-3 h-3 shrink-0" /> {
+                                (modulesList[index - 1]?.assignmentPdf || modulesList[index - 1]?.assignmentFile || modulesList[index - 1]?.assignmentFileUrl)
+                                  ? `Complete Module ${index} assignment to unlock`
+                                  : `Complete Module ${index} to unlock`
+                              }
                             </div>
                           ) : (
                             prog?.completionPercentage > 0 && (

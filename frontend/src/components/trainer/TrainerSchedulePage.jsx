@@ -86,7 +86,7 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
                         {item.date && <span className="text-[10px] font-bold text-slate-400">{item.date}</span>}
                       </div>
                       <h5 className="text-sm font-black text-slate-900">{item.title}</h5>
-                      <p className="text-xs font-semibold text-slate-500">{item.course} • {item.mode}</p>
+                      <p className="text-xs font-semibold text-slate-500">{item.course}</p>
                     </div>
 
                     <button 

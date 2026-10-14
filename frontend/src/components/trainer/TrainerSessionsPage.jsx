@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Video, Copy, Calendar, Clock, AlertTriangle, Eye, FileText } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerSchedules } from '../../api/scheduleApi';
-import { sortSchedulesChronologically } from '../../utils/scheduleSortUtil';
+import { sortSchedulesChronologically, isValidGoogleMeetUrl } from '../../utils/scheduleSortUtil';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 
 export default function TrainerSessionsPage() {
@@ -48,9 +48,12 @@ export default function TrainerSessionsPage() {
     return null;
   };
 
+  const rawMeetUrl = currentSchedule?.googleMeetUrl || currentSchedule?.meetingUrl || currentSchedule?.meetLink || '';
+  const hasValidMeet = isValidGoogleMeetUrl(rawMeetUrl);
+
   const handleCopyLink = () => {
-    const meetUrl = currentSchedule?.googleMeetUrl || currentSchedule?.meetingUrl || 'https://meet.google.com/abc-defg-hij';
-    navigator.clipboard.writeText(meetUrl);
+    if (!hasValidMeet) return;
+    navigator.clipboard.writeText(rawMeetUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -133,23 +136,37 @@ export default function TrainerSessionsPage() {
                   <span className="flex items-center space-x-1"><Calendar className="w-3.5 h-3.5 text-blue-600" /> {currentSchedule.date}</span>
                 )}
                 <span className="flex items-center space-x-1"><Clock className="w-3.5 h-3.5 text-blue-600" /> {currentSchedule.time}</span>
-                <span className="flex items-center space-x-1"><Video className="w-3.5 h-3.5 text-emerald-600" /> {currentSchedule.mode || 'Online (Google Meet)'}</span>
+                <span className="flex items-center space-x-1"><Video className="w-3.5 h-3.5 text-emerald-600" /> Live Interactive Session</span>
                 <span className="bg-purple-50 text-purple-700 px-2.5 py-0.5 rounded-md text-[10px] font-extrabold">{currentSchedule.batch}</span>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
               <button 
-                onClick={() => window.open(currentSchedule.googleMeetUrl || currentSchedule.meetingUrl || 'https://meet.google.com/abc-defg-hij', '_blank')}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl shadow-md text-xs flex items-center space-x-2 cursor-pointer"
+                disabled={!hasValidMeet}
+                onClick={() => {
+                  if (hasValidMeet) {
+                    window.open(rawMeetUrl, '_blank');
+                  }
+                }}
+                className={`font-extrabold px-6 py-3 rounded-xl shadow-md text-xs flex items-center space-x-2 ${
+                  hasValidMeet
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                }`}
               >
                 <Video className="w-4 h-4" />
-                <span>Start Session (Google Meet)</span>
+                <span>{hasValidMeet ? 'Start Session (Google Meet)' : 'Meeting link not set'}</span>
               </button>
 
               <button 
+                disabled={!hasValidMeet}
                 onClick={handleCopyLink}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-5 py-3 rounded-xl text-xs flex items-center space-x-2 border border-slate-200 cursor-pointer"
+                className={`font-bold px-5 py-3 rounded-xl text-xs flex items-center space-x-2 border ${
+                  hasValidMeet
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 cursor-pointer'
+                    : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                }`}
               >
                 <Copy className="w-4 h-4 text-slate-500" />
                 <span>{copied ? 'Copied Link!' : 'Copy Meet Link'}</span>

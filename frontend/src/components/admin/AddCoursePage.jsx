@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Video, Link, Calendar, Clock, User, Layers, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Save, Video, Layers, CheckCircle2 } from 'lucide-react';
 import { createCourse } from '../../api/courseApi';
 import { getTrainers } from '../../api/userApi';
 import FileUploader from '../common/FileUploader';
 import MoneyInput from '../common/MoneyInput';
 import { useDialog } from '../../context/DialogContext';
+import { normalizeGoogleMeetUrl, isValidGoogleMeetUrl } from '../../utils/scheduleSortUtil';
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -26,7 +27,7 @@ export default function AddCoursePage({ setActiveScreen }) {
     endTime: '06:00 PM',
     youtubeUrl: '',
     overview: '',
-    thumbnail: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=800'
+    thumbnail: '/assets/course-placeholder.svg'
   });
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -61,10 +62,24 @@ export default function AddCoursePage({ setActiveScreen }) {
       setErrorMsg('Course For selection is required. Please select Student or Trainer.');
       return;
     }
-    if (formData.mode !== 'Recorded' && (!formData.trainerId || !formData.assignedTrainer)) {
-      setErrorMsg(`A real trainer is required for ${formData.mode} courses. Please select a trainer.`);
-      return;
+    let normalizedMeetUrl = null;
+    let trainerId = null;
+    let assignedTrainer = null;
+
+    if (formData.mode === 'Online' || formData.mode === 'Hybrid') {
+      normalizedMeetUrl = normalizeGoogleMeetUrl(formData.googleMeetUrl || '');
+      if (!isValidGoogleMeetUrl(normalizedMeetUrl)) {
+        setErrorMsg(`A valid Google Meet URL is required for ${formData.mode} courses (e.g. https://meet.google.com/xxx-xxxx-xxx).`);
+        return;
+      }
+      trainerId = null;
+      assignedTrainer = null;
+    } else {
+      // Recorded
+      trainerId = formData.trainerId || null;
+      assignedTrainer = formData.assignedTrainer || 'None (Self-Paced)';
     }
+
     setErrorMsg('');
     setSaving(true);
     try {
@@ -72,8 +87,9 @@ export default function AddCoursePage({ setActiveScreen }) {
       const res = await createCourse({
         ...formData,
         price: submitPrice,
-        trainerId: formData.trainerId || null,
-        assignedTrainer: formData.assignedTrainer || (formData.mode === 'Recorded' ? 'None (Self-Paced)' : ''),
+        googleMeetUrl: normalizedMeetUrl,
+        trainerId,
+        assignedTrainer,
         audience: formData.audience || 'student'
       });
       setSaving(false);
@@ -225,39 +241,38 @@ export default function AddCoursePage({ setActiveScreen }) {
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Assign Trainer {formData.mode === 'Recorded' ? '(Optional)' : '*'}
-              </label>
-              <select
-                required={formData.mode !== 'Recorded'}
-                value={formData.trainerId || ''}
-                onChange={(e) => {
-                  const selId = e.target.value;
-                  const matched = trainersList.find(t => t.id === selId);
-                  setFormData({
-                    ...formData,
-                    trainerId: selId,
-                    assignedTrainer: matched ? matched.name : (formData.mode === 'Recorded' ? 'None (Self-Paced)' : '')
-                  });
-                }}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
-              >
-                {formData.mode === 'Recorded' && <option value="">None (Self-Paced)</option>}
-                {trainersList.length === 0 ? (
-                  <option value="" disabled={formData.mode !== 'Recorded'}>No trainers available</option>
-                ) : (
-                  <>
-                    <option value="">-- Select Trainer --</option>
-                    {trainersList.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} {t.specialty ? `(${t.specialty})` : ''}
-                      </option>
-                    ))}
-                  </>
-                )}
-              </select>
-            </div>
+            {isOnlineOrHybrid ? (
+              <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-900 font-semibold flex items-center gap-2">
+                <span className="text-blue-600 font-bold">ℹ️</span>
+                <span>Trainers are assigned per batch in <strong>Batch Management</strong>. Online & Hybrid courses do not have a course-level trainer.</span>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Assign Trainer (Optional - For Student Doubts)
+                </label>
+                <select
+                  value={formData.trainerId || ''}
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    const matched = trainersList.find(t => t.id === selId);
+                    setFormData({
+                      ...formData,
+                      trainerId: selId,
+                      assignedTrainer: matched ? matched.name : 'None (Self-Paced)'
+                    });
+                  }}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
+                >
+                  <option value="">None (Self-Paced)</option>
+                  {trainersList.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} {t.specialty ? `(${t.specialty})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* REQUIREMENT #2: ONLINE & HYBRID LIVE SESSION FIELDS */}
