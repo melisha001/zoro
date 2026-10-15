@@ -6,8 +6,6 @@ import { getTrainers } from '../../api/userApi';
 import ConfirmModal from '../common/ConfirmModal';
 import { useDialog } from '../../context/DialogContext';
 
-const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
 export default function AdminBatchManagementPage() {
   const { showSuccess, showError } = useDialog();
   const [batches, setBatches] = useState([]);
@@ -15,7 +13,6 @@ export default function AdminBatchManagementPage() {
   const [trainersList, setTrainersList] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [_loading, setLoading] = useState(true);
-  const [dayError, setDayError] = useState('');
   
   const [editingBatch, setEditingBatch] = useState(null);
   const [deleteBatchData, setDeleteBatchData] = useState(null);
@@ -24,8 +21,6 @@ export default function AdminBatchManagementPage() {
     name: '',
     courseId: '',
     courseName: '',
-    selectedDays: ['Monday', 'Wednesday', 'Friday'],
-    session: 'Morning',
     trainerIds: [],
     status: 'Active'
   });
@@ -51,29 +46,14 @@ export default function AdminBatchManagementPage() {
   }, []);
 
   const resetForm = () => {
-    setDayError('');
     setFormData({
       name: '',
       courseId: '',
       courseName: '',
-      selectedDays: ['Monday', 'Wednesday', 'Friday'],
-      session: 'Morning',
       trainerIds: [],
       status: 'Active'
     });
     setEditingBatch(null);
-  };
-
-  const handleToggleDay = (dayName) => {
-    const current = formData.selectedDays || [];
-    let updated;
-    if (current.includes(dayName)) {
-      updated = current.filter(d => d !== dayName);
-    } else {
-      updated = [...current, dayName];
-    }
-    setFormData({ ...formData, selectedDays: updated });
-    if (updated.length > 0) setDayError('');
   };
 
   const handleToggleTrainer = (trainerId) => {
@@ -92,15 +72,9 @@ export default function AdminBatchManagementPage() {
     if (!formData.name.trim()) return;
 
     if (!formData.courseId && !formData.courseName) {
-      setDayError('Please select a course for this batch.');
+      await showError('Please select a course for this batch.', 'Validation Error');
       return;
     }
-
-    if (!formData.selectedDays || formData.selectedDays.length === 0) {
-      setDayError('Please select at least one day for this batch.');
-      return;
-    }
-    setDayError('');
 
     const matchedCourse = coursesList.find(c => c.id === formData.courseId || c.title?.toLowerCase().trim() === formData.courseName?.toLowerCase().trim());
     const selectedTrainerObjs = trainersList.filter(t => (formData.trainerIds || []).includes(t.id));
@@ -114,9 +88,6 @@ export default function AdminBatchManagementPage() {
       trainerId: primaryTrainer?.id || '',
       trainerName: trainerNamesStr,
       trainerIds: formData.trainerIds || [],
-      days: formData.selectedDays.join(', '),
-      day: formData.selectedDays.join(', '),
-      session: formData.session,
       status: formData.status
     };
 
@@ -174,15 +145,6 @@ export default function AdminBatchManagementPage() {
 
   const openEditModal = (batch) => {
     setEditingBatch(batch);
-    setDayError('');
-    let daysArr = [];
-    if (Array.isArray(batch.days) && batch.days.length > 0) {
-      daysArr = batch.days;
-    } else if (batch.day) {
-      daysArr = batch.day.split(',').map(d => d.trim());
-    } else {
-      daysArr = ['Monday'];
-    }
 
     const matchedCourse = coursesList.find(c => c.id === batch.courseId || (batch.courseName && c.title?.toLowerCase().trim() === batch.courseName?.toLowerCase().trim()));
 
@@ -203,8 +165,6 @@ export default function AdminBatchManagementPage() {
       name: batch.name || '',
       courseId: batch.courseId || matchedCourse?.id || '',
       courseName: batch.courseName || matchedCourse?.title || '',
-      selectedDays: daysArr,
-      session: batch.session || 'Morning',
       trainerIds: assignedTrainerIds,
       status: batch.status || 'Active'
     });
@@ -213,7 +173,6 @@ export default function AdminBatchManagementPage() {
   const filteredBatches = batches.filter(b => {
     const q = searchTerm.toLowerCase().trim();
     if (!q) return true;
-    const daysStr = Array.isArray(b.days) ? b.days.join(' ') : (b.day || '');
     const trainerNames = Array.isArray(b.trainers)
       ? b.trainers.map(t => t.name).join(' ')
       : (b.trainerName || '');
@@ -221,15 +180,15 @@ export default function AdminBatchManagementPage() {
       (b.name && b.name.toLowerCase().includes(q)) ||
       (b.courseName && b.courseName.toLowerCase().includes(q)) ||
       trainerNames.toLowerCase().includes(q) ||
-      daysStr.toLowerCase().includes(q) ||
-      (b.session && b.session.toLowerCase().includes(q)) ||
       (b.status && b.status.toLowerCase().includes(q))
     );
   });
 
   const eligibleCourses = (coursesList || []).filter(c => {
     const mode = (c.mode || '').toLowerCase();
-    return mode === 'online' || mode === 'hybrid';
+    const isOnlineOrHybrid = mode === 'online' || mode === 'hybrid';
+    const isStudentAudience = !c.audience || c.audience.toLowerCase() === 'student';
+    return isOnlineOrHybrid && isStudentAudience;
   });
 
   return (
@@ -239,7 +198,7 @@ export default function AdminBatchManagementPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Batch Management</h1>
-          <p className="text-xs text-slate-500 font-medium">Create course batches with multiple schedule days, assign trainers, and manage active status.</p>
+          <p className="text-xs text-slate-500 font-medium">Create course batches, assign trainers, and manage active status.</p>
         </div>
       </div>
 
@@ -251,7 +210,7 @@ export default function AdminBatchManagementPage() {
         </h3>
 
         <form onSubmit={handleCreateOrUpdate} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
             {/* Batch Name */}
             <div>
@@ -286,20 +245,6 @@ export default function AdminBatchManagementPage() {
                 {eligibleCourses.map(c => (
                   <option key={c.id} value={c.id}>{c.title} ({c.mode || 'Online'})</option>
                 ))}
-              </select>
-            </div>
-
-            {/* Session Dropdown */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Session / Time *</label>
-              <select
-                value={formData.session}
-                onChange={(e) => setFormData({ ...formData, session: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none"
-              >
-                <option value="Morning">Morning</option>
-                <option value="Afternoon">Afternoon</option>
-                <option value="Evening">Evening</option>
               </select>
             </div>
 
@@ -350,38 +295,6 @@ export default function AdminBatchManagementPage() {
             )}
           </div>
 
-          {/* Multiple Days Selection (Requirement #1.1) */}
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
-            <label className="block text-xs font-extrabold text-slate-800">
-              Selected Days (Multi-Select Day Schedule) *
-            </label>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {ALL_DAYS.map((dayName) => {
-                const isSelected = (formData.selectedDays || []).includes(dayName);
-                return (
-                  <button
-                    key={dayName}
-                    type="button"
-                    onClick={() => handleToggleDay(dayName)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 ${
-                      isSelected
-                        ? 'bg-[#0F52BA] text-white shadow-xs scale-105'
-                        : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-400'
-                    }`}
-                  >
-                    <span>{dayName}</span>
-                    {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
-                  </button>
-                );
-              })}
-            </div>
-            {dayError && (
-              <p className="text-[11px] font-bold text-rose-600 mt-1 flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {dayError}
-              </p>
-            )}
-          </div>
-
           <div className="flex justify-end gap-2 pt-2">
             {editingBatch && (
               <button
@@ -408,7 +321,7 @@ export default function AdminBatchManagementPage() {
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="🔍 Search batches by name, course, trainer, days, or session..."
+            placeholder="🔍 Search batches by name, course, trainer, or status..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -424,8 +337,6 @@ export default function AdminBatchManagementPage() {
               <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider font-bold">
                 <th className="py-3 px-4">Batch Name</th>
                 <th className="py-3 px-4">Course</th>
-                <th className="py-3 px-4">Selected Days</th>
-                <th className="py-3 px-4">Session</th>
                 <th className="py-3 px-4">Assigned Trainers</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
@@ -435,22 +346,11 @@ export default function AdminBatchManagementPage() {
               {filteredBatches.length > 0 ? (
                 filteredBatches.map((batch) => {
                   const isActive = batch.status === 'Active';
-                  const daysList = Array.isArray(batch.days) ? batch.days : (batch.day ? batch.day.split(',').map(d => d.trim()) : []);
 
                   return (
                     <tr key={batch.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-4 px-4 font-black text-slate-900">{batch.name}</td>
                       <td className="py-4 px-4 text-blue-900 font-bold">{batch.courseName}</td>
-                      <td className="py-4 px-4 text-slate-600">
-                        <div className="flex flex-wrap gap-1 max-w-xs">
-                          {daysList.map((d, idx) => (
-                            <span key={idx} className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
-                              {d}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="py-4 px-4 text-slate-600">{batch.session}</td>
                       <td className="py-4 px-4 text-slate-800 font-bold">
                         {(() => {
                           const list = Array.isArray(batch.trainers) && batch.trainers.length > 0
@@ -511,7 +411,7 @@ export default function AdminBatchManagementPage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan="7" className="py-8 text-center text-slate-500 font-bold text-xs">
+                  <td colSpan="5" className="py-8 text-center text-slate-500 font-bold text-xs">
                     No batches found matching search criteria.
                   </td>
                 </tr>

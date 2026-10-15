@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Video, Layers, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Save, Video, Layers } from 'lucide-react';
 import { createCourse } from '../../api/courseApi';
 import { getTrainers } from '../../api/userApi';
 import FileUploader from '../common/FileUploader';
 import MoneyInput from '../common/MoneyInput';
 import { useDialog } from '../../context/DialogContext';
 import { normalizeGoogleMeetUrl, isValidGoogleMeetUrl } from '../../utils/scheduleSortUtil';
-
-const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function AddCoursePage({ setActiveScreen }) {
   const { showSuccess, showError } = useDialog();
@@ -22,9 +20,6 @@ export default function AddCoursePage({ setActiveScreen }) {
     trainerId: '',
     assignedTrainer: '',
     googleMeetUrl: '',
-    classDays: ['Monday', 'Wednesday', 'Friday'],
-    startTime: '05:00 PM',
-    endTime: '06:00 PM',
     youtubeUrl: '',
     overview: '',
     thumbnail: '/assets/course-placeholder.svg'
@@ -44,17 +39,6 @@ export default function AddCoursePage({ setActiveScreen }) {
     }
     fetchTrainers();
   }, []);
-
-  const handleToggleDay = (dayName) => {
-    const current = formData.classDays || [];
-    let updated;
-    if (current.includes(dayName)) {
-      updated = current.filter(d => d !== dayName);
-    } else {
-      updated = [...current, dayName];
-    }
-    setFormData({ ...formData, classDays: updated });
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -292,50 +276,6 @@ export default function AddCoursePage({ setActiveScreen }) {
                   onChange={(e) => setFormData({ ...formData, googleMeetUrl: e.target.value })}
                   className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900"
                 />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Start Time</label>
-                  <input
-                    type="text"
-                    value={formData.startTime}
-                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">End Time</label>
-                  <input
-                    type="text"
-                    value={formData.endTime}
-                    onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Class Schedule Days</label>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {ALL_DAYS.map((dayName) => {
-                    const isSel = (formData.classDays || []).includes(dayName);
-                    return (
-                      <button
-                        key={dayName}
-                        type="button"
-                        onClick={() => handleToggleDay(dayName)}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                          isSel ? 'bg-blue-600 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200'
-                        }`}
-                      >
-                        <span>{dayName}</span>
-                        {isSel && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
             </div>
           )}

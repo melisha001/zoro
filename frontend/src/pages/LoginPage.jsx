@@ -133,7 +133,7 @@ export default function LoginPage({ setActiveScreen, onLoginSuccess }) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Email / Username</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
               <input
                 type="email"
                 required

@@ -225,13 +225,19 @@ public class UserService {
             throw new IllegalArgumentException("Student email is required");
         }
         final String cleanEmail = dto.getEmail().trim().toLowerCase();
-        final String cleanUsername = dto.getUsername() != null && !dto.getUsername().isBlank()
-                ? dto.getUsername().trim()
-                : cleanEmail;
-
         final String userId = (dto.getId() != null && !dto.getId().isBlank()) 
                 ? dto.getId() 
                 : "std_" + UUID.randomUUID().toString();
+
+        User existingUser = (dto.getId() != null && !dto.getId().isBlank()) 
+                ? userRepository.findById(dto.getId()).orElse(null)
+                : null;
+
+        final String cleanUsername = dto.getUsername() != null && !dto.getUsername().isBlank()
+                ? dto.getUsername().trim()
+                : (existingUser != null && existingUser.getUsername() != null && !existingUser.getUsername().isBlank()
+                    ? existingUser.getUsername()
+                    : cleanEmail);
 
         // Prevent duplicate email with another account
         userRepository.findByEmailIgnoreCase(cleanEmail).ifPresent(existing -> {

@@ -649,6 +649,18 @@ export default function AssignmentPage({ setActiveScreen }) {
                           ) : (
                             <p className="text-[11px] text-emerald-300/80 italic">Corrected by {sub.correctedBy || item.assignedTrainer}</p>
                           )}
+                          {sub.correctedFileUrl && (
+                            <div className="flex items-center justify-between bg-emerald-950/60 p-2.5 rounded-xl border border-emerald-700/60 text-xs mt-2">
+                              <span className="font-bold text-emerald-200 truncate max-w-[200px]">📄 Corrected Assignment</span>
+                              <button
+                                type="button"
+                                onClick={() => openFileWithSignedLink(sub.correctedFileUrl, 'Corrected_Assignment')}
+                                className="text-emerald-300 hover:text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5" /> Download
+                              </button>
+                            </div>
+                          )}
                           <div className="text-[10px] font-mono text-emerald-400 text-right">
                             Reviewed on {sub.correctedAt}
                           </div>

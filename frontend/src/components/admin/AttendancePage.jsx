@@ -513,7 +513,7 @@ export default function AdminAttendancePage({ setActiveScreen }) {
                                       <tr key={std.id || sIdx} className="hover:bg-slate-50 transition-colors">
                                         <td className="py-3.5 px-4 font-black text-slate-900">
                                           {sName}
-                                          <div className="text-[10px] text-slate-400 font-mono font-normal">@{std.username || 'student'}</div>
+                                          {std.email && <div className="text-[10px] text-slate-400 font-normal">{std.email}</div>}
                                         </td>
                                         <td className="py-3.5 px-4 font-extrabold text-slate-800 font-mono">
                                           {presentSessions} / {totalSessions}

@@ -1038,7 +1038,7 @@ export default function AdminSchedulePage() {
                   >
                     {availableBatchesForSelectedCourse.length > 0 ? (
                       availableBatchesForSelectedCourse.map((b) => (
-                        <option key={b.id} value={b.name}>{b.name} ({b.session})</option>
+                        <option key={b.id} value={b.name}>{b.name}</option>
                       ))
                     ) : (
                       <option value="">No batches for this course</option>

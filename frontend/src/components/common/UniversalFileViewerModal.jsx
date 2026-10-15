@@ -1,17 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, FileText, Film, Music, Image as ImageIcon, FileSpreadsheet, Archive } from 'lucide-react';
+import { X, Download, FileText, Film, Music, Image as ImageIcon, FileSpreadsheet, Archive, AlertCircle } from 'lucide-react';
 import { resolveFileUrl, getFileLink, openFileWithSignedLink } from '../../api/fileApi';
 import SafeImage from './SafeImage';
 
 export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDownload = false }) {
   const [resolvedUrl, setResolvedUrl] = useState('');
+  const [resolvedInfo, setResolvedInfo] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     let active = true;
     if (!isOpen || !file) {
       setResolvedUrl('');
+      setResolvedInfo(null);
+      setErrorMsg('');
       return;
     }
+    setErrorMsg('');
     const raw = file.url || file.fileUrl || file.path || '';
     if (!raw) {
       setResolvedUrl('#');
@@ -21,10 +26,18 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
     if (match) {
       getFileLink(match[0])
         .then(res => {
-          if (active) setResolvedUrl(res?.url || resolveFileUrl(raw));
+          if (!active) return;
+          if (res) {
+            setResolvedInfo(res);
+            setResolvedUrl(res.url || resolveFileUrl(raw));
+          } else {
+            setResolvedUrl(resolveFileUrl(raw));
+          }
         })
-        .catch(() => {
-          if (active) setResolvedUrl(resolveFileUrl(raw));
+        .catch(err => {
+          if (!active) return;
+          setErrorMsg(err?.message || 'Access Denied: This file is locked or you do not have permission.');
+          setResolvedUrl(resolveFileUrl(raw));
         });
     } else {
       setResolvedUrl(resolveFileUrl(raw));
@@ -34,20 +47,20 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
 
   if (!isOpen || !file) return null;
 
-  const fileName = file.name || file.title || file.filename || 'Attachment File';
-  const fileUrl = resolvedUrl || resolveFileUrl(file.url || file.fileUrl || file.path) || '#';
-  const fileSize = file.size || file.fileSize || 'Standard';
+  const fileName = resolvedInfo?.name || file.name || file.title || file.filename || 'Attachment File';
+  const fileUrl = resolvedInfo?.url || resolvedUrl || resolveFileUrl(file.url || file.fileUrl || file.path) || '#';
+  const fileSize = resolvedInfo?.size ? `${Math.round(resolvedInfo.size / 1024)} KB` : (file.size || file.fileSize || 'Standard');
 
   // Extract Extension & MIME
   const ext = (fileName.split('.').pop() || '').toLowerCase();
-  const mimeType = (file.mimeType || file.type || '').toLowerCase();
+  const mimeType = (resolvedInfo?.contentType || file.contentType || file.mimeType || file.type || '').toLowerCase();
 
-  const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext) || mimeType.startsWith('image/');
-  const isVideo = ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext) || mimeType.startsWith('video/');
-  const isAudio = ['mp3', 'wav', 'm4a', 'aac', 'ogg'].includes(ext) || mimeType.startsWith('audio/');
-  const isPdf = ext === 'pdf' || mimeType === 'application/pdf';
-  const isSpreadsheet = ['xls', 'xlsx', 'csv'].includes(ext);
-  const isArchive = ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext);
+  const isImage = mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext);
+  const isVideo = mimeType.startsWith('video/') || ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext);
+  const isAudio = mimeType.startsWith('audio/') || ['mp3', 'wav', 'm4a', 'aac', 'ogg'].includes(ext);
+  const isPdf = mimeType === 'application/pdf' || ext === 'pdf';
+  const isSpreadsheet = ['xls', 'xlsx', 'csv'].includes(ext) || mimeType.includes('spreadsheet') || mimeType.includes('excel') || mimeType === 'text/csv';
+  const isArchive = ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext) || mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('tar');
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in">
@@ -88,86 +101,98 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
 
         {/* Modal Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex items-center justify-center bg-slate-100/50 min-h-[300px]">
-          {/* 1. IMAGE VIEWER */}
-          {isImage && (
-            <div className="max-h-full max-w-full flex items-center justify-center">
-              <SafeImage
-                src={fileUrl}
-                alt={fileName}
-                className="max-h-[70vh] w-auto max-w-full object-contain rounded-2xl shadow-lg border border-slate-200 bg-white"
-                fallbackSrc="/assets/course-placeholder.svg"
-              />
-            </div>
-          )}
-
-          {/* 2. VIDEO PLAYER */}
-          {isVideo && (
-            <div className="w-full max-w-3xl flex flex-col items-center">
-              <video
-                src={fileUrl}
-                controls
-                controlsList="nodownload"
-                className="w-full max-h-[70vh] rounded-2xl shadow-xl bg-black border border-slate-800"
-              >
-                Your browser does not support HTML5 video playback.
-              </video>
-            </div>
-          )}
-
-          {/* 3. AUDIO PLAYER */}
-          {isAudio && (
-            <div className="w-full max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-xl space-y-6 text-center">
-              <div className="w-20 h-20 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                <Music className="w-10 h-10" />
+          {errorMsg ? (
+            <div className="max-w-md w-full bg-red-50 border border-red-200 text-red-800 p-8 rounded-3xl text-center space-y-3 shadow-sm">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+                <AlertCircle className="w-8 h-8" />
               </div>
-              <div>
-                <h4 className="font-extrabold text-slate-900 text-base">{fileName}</h4>
-                <p className="text-xs font-semibold text-slate-400 mt-1">Audio File • Ready to Play</p>
-              </div>
-              <audio src={fileUrl} controls controlsList="nodownload" className="w-full">
-                Your browser does not support HTML5 audio playback.
-              </audio>
+              <h4 className="font-extrabold text-base text-red-900">Access Restricted</h4>
+              <p className="text-xs text-red-700 font-medium leading-relaxed">{errorMsg}</p>
             </div>
-          )}
-
-          {/* 4. PDF EMBED */}
-          {isPdf && (
-            <div className="w-full h-[70vh] bg-white rounded-2xl overflow-hidden shadow-lg border border-slate-200">
-              <iframe
-                src={fileUrl}
-                title={fileName}
-                className="w-full h-full"
-              />
-            </div>
-          )}
-
-          {/* 5. DOCUMENTS / OTHER FALLBACK */}
-          {!isImage && !isVideo && !isAudio && !isPdf && (
-            <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200 shadow-xl text-center space-y-5">
-              <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto border border-blue-100">
-                {isSpreadsheet ? <FileSpreadsheet className="w-10 h-10 text-emerald-600" /> : <FileText className="w-10 h-10 text-blue-600" />}
-              </div>
-              <div className="space-y-1">
-                <h4 className="font-extrabold text-slate-900 text-base">{fileName}</h4>
-                <p className="text-xs text-slate-500 font-medium">
-                  {ext ? `${ext.toUpperCase()} Document` : 'File Attachment'} • {fileSize}
-                </p>
-                <p className="text-xs text-slate-400 pt-2">
-                  Preview in viewer mode.
-                </p>
-              </div>
-
-              {!hideDownload && fileUrl && fileUrl !== '#' && (
-                <button
-                  type="button"
-                  onClick={() => openFileWithSignedLink(fileUrl, fileName)}
-                  className="inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl text-xs shadow-md transition-all w-full cursor-pointer"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download / Open File</span>
-                </button>
+          ) : (
+            <>
+              {/* 1. IMAGE VIEWER */}
+              {isImage && (
+                <div className="max-h-full max-w-full flex items-center justify-center">
+                  <SafeImage
+                    src={fileUrl}
+                    alt={fileName}
+                    className="max-h-[70vh] w-auto max-w-full object-contain rounded-2xl shadow-lg border border-slate-200 bg-white"
+                    fallbackSrc="/assets/course-placeholder.svg"
+                  />
+                </div>
               )}
-            </div>
+
+              {/* 2. VIDEO PLAYER */}
+              {isVideo && (
+                <div className="w-full max-w-3xl flex flex-col items-center">
+                  <video
+                    src={fileUrl}
+                    controls
+                    controlsList="nodownload"
+                    className="w-full max-h-[70vh] rounded-2xl shadow-xl bg-black border border-slate-800"
+                  >
+                    Your browser does not support HTML5 video playback.
+                  </video>
+                </div>
+              )}
+
+              {/* 3. AUDIO PLAYER */}
+              {isAudio && (
+                <div className="w-full max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-xl space-y-6 text-center">
+                  <div className="w-20 h-20 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                    <Music className="w-10 h-10" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-900 text-base">{fileName}</h4>
+                    <p className="text-xs font-semibold text-slate-400 mt-1">Audio File • Ready to Play</p>
+                  </div>
+                  <audio src={fileUrl} controls controlsList="nodownload" className="w-full">
+                    Your browser does not support HTML5 audio playback.
+                  </audio>
+                </div>
+              )}
+
+              {/* 4. PDF EMBED */}
+              {isPdf && (
+                <div className="w-full h-[70vh] bg-white rounded-2xl overflow-hidden shadow-lg border border-slate-200">
+                  <iframe
+                    src={fileUrl}
+                    title={fileName}
+                    className="w-full h-full"
+                  />
+                </div>
+              )}
+
+              {/* 5. DOCUMENTS / OTHER FALLBACK */}
+              {!isImage && !isVideo && !isAudio && !isPdf && (
+                <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200 shadow-xl text-center space-y-5">
+                  <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto border border-blue-100">
+                    {isSpreadsheet ? <FileSpreadsheet className="w-10 h-10 text-emerald-600" /> : <FileText className="w-10 h-10 text-blue-600" />}
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-extrabold text-slate-900 text-base">{fileName}</h4>
+                    <p className="text-xs text-slate-500 font-medium">
+                      {ext ? `${ext.toUpperCase()} Document` : 'File Attachment'} • {fileSize}
+                    </p>
+                    <p className="text-xs text-slate-400 pt-2">
+                      Preview in viewer mode.
+                    </p>
+                  </div>
+
+                  {!hideDownload && fileUrl && fileUrl !== '#' && (
+                    <button
+                      type="button"
+                      onClick={() => openFileWithSignedLink(fileUrl, fileName)}
+                      className="inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl text-xs shadow-md transition-all w-full cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download / Open File</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
 

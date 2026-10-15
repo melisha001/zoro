@@ -237,7 +237,7 @@ export default function AdminFeesPage() {
             className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-md flex items-center space-x-2 text-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Add Fee</span>
+            <span>Add Fee</span>
           </button>
           <button
             onClick={handleExportFeesExcel}

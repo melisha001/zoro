@@ -1,23 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Award, Layers, Clock, Video, FileText, CheckCircle2, UserCheck, Search, Send, AlertCircle, Plus, Check, Download, ExternalLink, ChevronDown, ChevronUp, Image as ImageIcon, GraduationCap, Briefcase } from 'lucide-react';
+import { BookOpen, Layers, Clock, CheckCircle2, UserCheck, Search, Send, Check, Download, ChevronDown, ChevronUp, Image as ImageIcon } from 'lucide-react';
 import { getCourses, getTrainerCourseRequests, createTrainerCourseRequest } from '../../api/courseApi';
 import { resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
 import { useAuth } from '../../context/AuthContext';
-import CourseLearningPage from '../student/CourseLearningPage';
 import SafeImage from '../common/SafeImage';
-
-function matchesTrainer(course, user) {
-  if (!course || !user) return false;
-  if (course.trainerId && user.id && course.trainerId === user.id) return true;
-  const assigned = course.assignedTrainer || course.trainerName || course.trainer;
-  if (!assigned || assigned === 'None (Self-Paced)' || assigned === 'Unassigned') return false;
-  const a = String(assigned).toLowerCase().trim();
-  const name = String(user.name || '').toLowerCase().trim();
-  const email = String(user.email || '').toLowerCase().trim();
-  if (name && (a === name || a.includes(name) || name.includes(a))) return true;
-  if (email && a === email) return true;
-  return false;
-}
 
 function formatModulesDuration(modules) {
   if (!modules || modules.length === 0) return '';
@@ -60,7 +46,6 @@ export default function TrainerCoursesPage() {
   const trainerName = user?.name || '';
   const trainerEmail = user?.email || '';
 
-  const [mainTab, setMainTab] = useState('learning'); // 'learning' | 'teaching'
   const [activeSubTab, setActiveSubTab] = useState('enrolled'); // 'enrolled' | 'available'
   const [courses, setCourses] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -74,7 +59,7 @@ export default function TrainerCoursesPage() {
     try {
       const [cRes, rRes] = await Promise.all([
         getCourses(),
-        getTrainerCourseRequests()
+        getTrainerCourseRequests(trainerId)
       ]);
 
       if (cRes.success && Array.isArray(cRes.data)) {
@@ -92,10 +77,10 @@ export default function TrainerCoursesPage() {
 
   useEffect(() => {
     loadTrainerCourses();
-  }, [trainerEmail]);
+  }, [trainerId, trainerEmail]);
 
   const handleRequestCourse = async (course) => {
-    const existingReq = getRequestForCourse(course.id, course.title);
+    const existingReq = getRequestForCourse(course.id);
     if (existingReq && existingReq.status === 'Pending') {
       setToastMsg(`Your access request for "${course.title}" is currently pending Admin approval.`);
       setTimeout(() => setToastMsg(''), 4000);
@@ -115,22 +100,23 @@ export default function TrainerCoursesPage() {
     }
   };
 
-  const getRequestForCourse = (courseId, courseTitle) => {
+  const getRequestForCourse = (courseId) => {
     return requests.find(r => 
       ((trainerId && r.trainerId === trainerId) ||
-       (trainerEmail && r.trainerEmail === trainerEmail) || 
-       (trainerName && r.trainerName === trainerName)) && 
-      (r.courseId === courseId || r.courseTitle === courseTitle)
+       (trainerEmail && r.trainerEmail && r.trainerEmail.toLowerCase().trim() === trainerEmail.toLowerCase().trim())) && 
+      r.courseId === courseId
     );
   };
 
-  // Requirement 2.1: ONLY display courses where course.audience === 'trainer'. No fallback to student courses!
+  // ONLY display courses where course.audience === 'trainer'
   const legitimateCourses = courses.filter(c => c.audience === 'trainer');
 
-  // Requirement 2.2: Distinguish Enrolled / Active vs Available courses for trainer
+  // Distinguish Enrolled / Active vs Available courses for trainer:
+  // ONLY IF: (a) course.trainerId === user.id (exact), OR (b) Approved request for this trainer
   const enrolledCourses = legitimateCourses.filter(c => {
-    const req = getRequestForCourse(c.id, c.title);
-    return matchesTrainer(c, user) || (req && req.status === 'Approved');
+    const req = getRequestForCourse(c.id);
+    const isExactTrainer = Boolean(user?.id && c.trainerId && c.trainerId === user.id);
+    return isExactTrainer || (req && req.status === 'Approved');
   });
 
   const availableCourses = legitimateCourses.filter(c => {
@@ -159,40 +145,8 @@ export default function TrainerCoursesPage() {
         </div>
       )}
 
-      {/* Main Tab Navigation: Learning vs Teaching */}
-      <div className="flex bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs gap-2">
-        <button
-          type="button"
-          onClick={() => setMainTab('learning')}
-          className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
-            mainTab === 'learning'
-              ? 'bg-purple-700 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span>My Learning (Trainer Programs)</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMainTab('teaching')}
-          className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
-            mainTab === 'teaching'
-              ? 'bg-purple-700 text-white shadow-md'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Briefcase className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span>Teaching Portfolio</span>
-        </button>
-      </div>
-
-      {mainTab === 'learning' ? (
-        <CourseLearningPage isTrainerLearning={true} />
-      ) : (
-        <>
-          {/* Header Banner */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+      {/* Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
         <div className="space-y-1">
           <div className="inline-flex items-center space-x-2 bg-purple-100 text-purple-800 font-extrabold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider">
             <UserCheck className="w-3.5 h-3.5" />
@@ -260,8 +214,8 @@ export default function TrainerCoursesPage() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filteredCourses.map((course) => {
-            const req = getRequestForCourse(course.id, course.title);
-            const isAssignedToMe = matchesTrainer(course, user);
+            const req = getRequestForCourse(course.id);
+            const isAssignedToMe = Boolean(user?.id && course.trainerId && course.trainerId === user.id);
 
             return (
               <div key={course.id} className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden flex flex-col justify-between group hover:shadow-lg transition-shadow">
@@ -521,8 +475,6 @@ export default function TrainerCoursesPage() {
             );
           })}
         </div>
-      )}
-        </>
       )}
 
     </div>

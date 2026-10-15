@@ -111,23 +111,54 @@ export async function openFileWithSignedLink(fileUrlOrId, fileName = '') {
   if (!fileUrlOrId) return;
   try {
     const linkData = await getFileLink(fileUrlOrId);
-    const targetUrl = linkData?.url || resolveFileUrl(fileUrlOrId);
-    if (!targetUrl) return;
+    let targetUrl = linkData?.url || resolveFileUrl(fileUrlOrId);
+    if (!targetUrl) throw new Error('Could not resolve file URL');
 
-    const link = document.createElement('a');
-    link.href = targetUrl;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    if (fileName) {
-      link.download = fileName;
+    const downloadFileName = fileName || linkData?.name || 'download';
+
+    // If pointing to backend files API, append download=true so Content-Disposition: attachment is returned
+    if (targetUrl.includes('/api/files/')) {
+      const sep = targetUrl.includes('?') ? '&' : '?';
+      if (!targetUrl.includes('download=')) {
+        targetUrl = `${targetUrl}${sep}download=true`;
+      }
     }
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    // Try blob download in browser environment to bypass popup blockers and cross-origin download restrictions
+    if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+      try {
+        const resp = await fetch(targetUrl);
+        if (resp && resp.ok && typeof resp.blob === 'function') {
+          const blob = await resp.blob();
+          if (blob && typeof window.URL?.createObjectURL === 'function') {
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = downloadFileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => window.URL.revokeObjectURL(blobUrl), 10000);
+            return;
+          }
+        }
+      } catch (blobErr) {
+        console.warn('Direct blob fetch failed, falling back to anchor click:', blobErr);
+      }
+    }
+
+    const a = document.createElement('a');
+    a.href = targetUrl;
+    a.download = downloadFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   } catch (err) {
-    console.warn('Signed link retrieval failed, falling back to direct URL:', err);
-    const fallbackUrl = resolveFileUrl(fileUrlOrId);
-    window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+    console.error('File download/access failed:', err);
+    const msg = err?.message || 'Access Denied: File is locked or unavailable.';
+    if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+      window.alert(msg.replace(/^Error:\s*/, ''));
+    }
   }
 }
 

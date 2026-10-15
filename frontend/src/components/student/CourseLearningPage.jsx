@@ -14,18 +14,6 @@ import { useDialog } from '../../context/DialogContext';
 import { evaluateScheduleLocks, getScheduleJoinState, syncServerTime } from '../../utils/scheduleSortUtil';
 import { usePolling } from '../../hooks/usePolling';
 
-function matchesTrainer(course, user) {
-  if (!course || !user) return false;
-  if (course.trainerId && user.id && course.trainerId === user.id) return true;
-  const assigned = course.assignedTrainer || course.trainerName || course.trainer;
-  if (!assigned || assigned === 'None (Self-Paced)' || assigned === 'Unassigned') return false;
-  const a = String(assigned).toLowerCase().trim();
-  const name = String(user.name || '').toLowerCase().trim();
-  const email = String(user.email || '').toLowerCase().trim();
-  if (name && (a === name || a.includes(name) || name.includes(a))) return true;
-  if (email && a === email) return true;
-  return false;
-}
 
 export default function CourseLearningPage({ courseId: initialCourseId, _setActiveScreen, isTrainerLearning = false }) {
   const { user } = useAuth();
@@ -111,7 +99,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
       if (isTrainer) {
         let requests = [];
         try {
-          const reqRes = await getTrainerCourseRequests();
+          const reqRes = await getTrainerCourseRequests(user?.id);
           if (reqRes?.data) requests = reqRes.data;
         } catch {
           // ignore
@@ -122,13 +110,13 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
         const enrolled = trainerCourses.filter(c => {
           const req = requests.find(r => 
             ((user?.id && r.trainerId === user.id) ||
-             (user?.email && r.trainerEmail === user.email) || 
-             (user?.name && r.trainerName === user.name)) && 
-            (r.courseId === c.id || r.courseTitle === c.title)
+             (user?.email && r.trainerEmail && r.trainerEmail.toLowerCase().trim() === user.email.toLowerCase().trim())) && 
+            r.courseId === c.id
           );
-          return matchesTrainer(c, user) || (req && req.status === 'Approved');
+          const isExactTrainer = Boolean(user?.id && c.trainerId && c.trainerId === user.id);
+          return isExactTrainer || (req && req.status === 'Approved');
         });
-        setEnrolledCourses(enrolled.length > 0 ? enrolled : trainerCourses);
+        setEnrolledCourses(enrolled);
       } else {
         const studentCourses = allCourses.filter(c => !c.audience || c.audience === 'student');
         setAvailableCourses(studentCourses);
@@ -1350,7 +1338,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
         isOpen={Boolean(viewerFile)}
         onClose={() => setViewerFile(null)}
         file={viewerFile}
-        hideDownload={true}
+        hideDownload={false}
       />
     </div>
   );

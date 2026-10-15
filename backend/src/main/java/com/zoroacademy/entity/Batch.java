@@ -37,12 +37,6 @@ public class Batch {
     @Transient
     private java.util.List<java.util.Map<String, String>> trainers = new java.util.ArrayList<>();
 
-    @Column(columnDefinition = "TEXT")
-    private String days;
-
-    @Column(length = 100)
-    private String session;
-
     @Column(length = 50)
     private String status = "Active";
 
@@ -56,15 +50,13 @@ public class Batch {
 
     public Batch() {}
 
-    public Batch(String id, String name, String courseName, String courseId, String trainerName, String trainerId, String days, String session, String status, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public Batch(String id, String name, String courseName, String courseId, String trainerName, String trainerId, String status, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.name = name;
         this.courseName = courseName;
         this.courseId = courseId;
         this.trainerName = trainerName;
         this.trainerId = trainerId;
-        this.days = days;
-        this.session = session;
         this.status = status;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -134,35 +126,6 @@ public class Batch {
         this.trainers = trainers != null ? trainers : new java.util.ArrayList<>();
     }
 
-    public String getDays() {
-        return days;
-    }
-
-    public void setDays(String days) {
-        this.days = days;
-    }
-
-    @com.fasterxml.jackson.annotation.JsonSetter("days")
-    public void setDaysJson(com.fasterxml.jackson.databind.JsonNode node) {
-        if (node == null || node.isNull()) {
-            this.days = null;
-        } else if (node.isArray()) {
-            java.util.List<String> list = new java.util.ArrayList<>();
-            node.forEach(item -> list.add(item.asText()));
-            this.days = String.join(", ", list);
-        } else {
-            this.days = node.asText();
-        }
-    }
-
-    public String getSession() {
-        return session;
-    }
-
-    public void setSession(String session) {
-        this.session = session;
-    }
-
     public String getStatus() {
         return status;
     }
@@ -198,8 +161,6 @@ public class Batch {
         private String courseId;
         private String trainerName;
         private String trainerId;
-        private String days;
-        private String session;
         private String status = "Active";
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
@@ -228,14 +189,6 @@ public class Batch {
             this.trainerId = trainerId;
             return this;
         }
-        public Builder days(String days) {
-            this.days = days;
-            return this;
-        }
-        public Builder session(String session) {
-            this.session = session;
-            return this;
-        }
         public Builder status(String status) {
             this.status = status;
             return this;
@@ -250,7 +203,7 @@ public class Batch {
         }
 
         public Batch build() {
-            return new Batch(id, name, courseName, courseId, trainerName, trainerId, days, session, status, createdAt, updatedAt);
+            return new Batch(id, name, courseName, courseId, trainerName, trainerId, status, createdAt, updatedAt);
         }
     }
 

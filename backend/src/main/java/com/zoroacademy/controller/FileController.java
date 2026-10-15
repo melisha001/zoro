@@ -131,12 +131,14 @@ public class FileController {
                     if (!isTrainer) {
                         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("Forbidden: You do not have permission to access this file link"));
                     }
-                } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("assessment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module")) {
+                } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("assessment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module") || cat.contains("document") || cat.contains("course") || cat.contains("material") || cat.contains("correction") || cat.contains("solution") || cat.isBlank()) {
                     if (!isStudent && !isTrainer) {
                         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("Forbidden: You do not have permission to access this file link"));
                     }
                 } else {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("Forbidden: You do not have permission to access this file link"));
+                    if (!isStudent && !isTrainer) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("Forbidden: You do not have permission to access this file link"));
+                    }
                 }
             }
         }
@@ -146,10 +148,12 @@ public class FileController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Resource> getFile(
+    public ResponseEntity<?> getFile(
             @PathVariable String id,
             @RequestParam(value = "token", required = false) String token,
             @RequestParam(value = "expires", required = false) Long expires,
+            @RequestParam(value = "download", required = false, defaultValue = "false") boolean download,
+            @RequestHeader HttpHeaders headers,
             @AuthenticationPrincipal UserPrincipal currentUser
     ) {
         StoredFile storedFile = fileStorageService.getFileMetadata(id);
@@ -200,23 +204,54 @@ public class FileController {
                         if (!isTrainer) {
                             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
                         }
-                    } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("assessment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module")) {
+                    } else if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("assessment") || cat.contains("resource") || cat.contains("attachment") || cat.contains("module") || cat.contains("document") || cat.contains("course") || cat.contains("material") || cat.contains("correction") || cat.contains("solution") || cat.isBlank()) {
                         if (!isStudent && !isTrainer) {
                             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
                         }
                     } else {
-                        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                        if (!isStudent && !isTrainer) {
+                            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                        }
                     }
                 }
             }
         }
 
         Resource resource = fileStorageService.loadFileAsResource(storedFile);
-        String mediaType = storedFile.getContentType() != null ? storedFile.getContentType() : MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        String mediaType = storedFile.getContentType();
+        if (mediaType == null || mediaType.isBlank() || mediaType.equals(MediaType.APPLICATION_OCTET_STREAM_VALUE)) {
+            mediaType = org.springframework.http.MediaTypeFactory
+                    .getMediaType(storedFile.getOriginalName())
+                    .map(MediaType::toString)
+                    .orElse(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+        }
+
+        String disposition = download ? "attachment" : "inline";
+
+        // Check for Range header for streaming (especially video and audio)
+        List<org.springframework.http.HttpRange> ranges = headers.getRange();
+        if (!ranges.isEmpty() && !download) {
+            try {
+                long contentLength = resource.contentLength();
+                org.springframework.http.HttpRange range = ranges.get(0);
+                long start = range.getRangeStart(contentLength);
+                long end = range.getRangeEnd(contentLength);
+                long rangeLength = Math.min(1024 * 1024 * 2, end - start + 1);
+                org.springframework.core.io.support.ResourceRegion region = new org.springframework.core.io.support.ResourceRegion(resource, start, rangeLength);
+                return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                        .header(HttpHeaders.CONTENT_TYPE, mediaType)
+                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + storedFile.getOriginalName() + "\"")
+                        .body(region);
+            } catch (Exception e) {
+                // Fallback to full resource if range parsing fails
+            }
+        }
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, mediaType)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + storedFile.getOriginalName() + "\"")
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition + "; filename=\"" + storedFile.getOriginalName() + "\"")
                 .body(resource);
     }
 

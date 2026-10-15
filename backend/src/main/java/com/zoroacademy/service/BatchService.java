@@ -207,8 +207,6 @@ public class BatchService {
         String oldName = targetBatch.getName();
 
         if (updated.getName() != null) targetBatch.setName(updated.getName());
-        if (updated.getDays() != null) targetBatch.setDays(updated.getDays());
-        if (updated.getSession() != null) targetBatch.setSession(updated.getSession());
         if (updated.getStatus() != null) targetBatch.setStatus(updated.getStatus());
 
         // Update Course
