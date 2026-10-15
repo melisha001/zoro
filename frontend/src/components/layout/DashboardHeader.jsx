@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Calendar as CalendarIcon, Menu, X, AlertTriangle, Clock, CheckCircle2, Info, User } from 'lucide-react';
-import { getTrainers } from '../../api/userApi';
-import { getSchedules } from '../../api/scheduleApi';
 import { getMyNotifications } from '../../api/notificationApi';
 import { resolveFileUrl } from '../../api/fileApi';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
@@ -36,63 +34,17 @@ export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScr
 
   const loadNotifications = async () => {
     try {
-      const roleStr = String(user?.role || '').toUpperCase();
       const items = [];
-      const today = new Date();
-      const currentDay = today.getDate();
-
-      if (roleStr === 'ADMIN') {
-        const [trainersRes, schedulesRes] = await Promise.all([
-          getTrainers(),
-          getSchedules()
-        ]);
-
-        // 1. Check salary due today or overdue
-        (trainersRes.data || []).forEach(trn => {
-          const creditDay = parseInt(trn.salaryCreditDate || 25, 10);
-          if (currentDay === creditDay) {
-            items.push({
-              id: `sal_due_${trn.id}`,
-              title: 'Salary Due Today',
-              desc: `${trn.name}'s salary of ₹${parseFloat(trn.salaryAmount || 25000).toLocaleString()} is due today (${creditDay}th).`,
-              time: 'Today',
-              type: 'warning'
-            });
-          } else if (currentDay > creditDay) {
-            items.push({
-              id: `sal_overdue_${trn.id}`,
-              title: 'Salary Payment Overdue',
-              desc: `${trn.name}'s salary is overdue (Due on ${creditDay}th of month).`,
-              time: 'Action Required',
-              type: 'danger'
-            });
-          }
+      const notifRes = await getMyNotifications();
+      (notifRes.data || []).slice(0, 10).forEach(n => {
+        items.push({
+          id: `notif_${n.id}`,
+          title: n.title || 'Notification',
+          desc: n.desc || n.message || '',
+          time: n.time || (n.createdAt ? new Date(n.createdAt).toLocaleDateString() : 'Today'),
+          type: n.type === 'danger' ? 'danger' : n.type === 'warning' ? 'warning' : 'info'
         });
-
-        // 2. Check upcoming sessions
-        (schedulesRes.data || []).filter(s => s.status === 'Upcoming').slice(0, 3).forEach(sch => {
-          items.push({
-            id: `sch_${sch.id}`,
-            title: `Upcoming: ${sch.title}`,
-            desc: `${sch.course} (${sch.time}) by ${sch.trainer}`,
-            time: sch.time || 'Today',
-            type: 'info'
-          });
-        });
-      } else {
-        // STUDENT or TRAINER: strictly role-scoped notifications
-        const notifRes = await getMyNotifications();
-        (notifRes.data || []).slice(0, 5).forEach(n => {
-          items.push({
-            id: `notif_${n.id}`,
-            title: n.title || 'Notification',
-            desc: n.desc || n.message || '',
-            time: n.time || 'Today',
-            type: n.type === 'danger' ? 'danger' : n.type === 'warning' ? 'warning' : 'info'
-          });
-        });
-      }
-
+      });
       setNotifList(items);
     } catch (err) {
       console.error('Failed to load notifications:', err);

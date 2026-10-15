@@ -52,3 +52,6 @@ cors:
 schedule:
   resources-unlock-minutes: 60
 
+notifications:
+  retention-days: 30
+

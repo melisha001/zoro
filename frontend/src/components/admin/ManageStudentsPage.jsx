@@ -271,6 +271,12 @@ export default function ManageStudentsPage() {
       setEmailError(eErr);
       return;
     }
+    const trimmedEmail = (formData.email || '').trim().toLowerCase();
+    const isDuplicateEmail = students.some(s => s.email && s.email.trim().toLowerCase() === trimmedEmail);
+    if (isDuplicateEmail) {
+      setEmailError('A student with this email already exists');
+      return;
+    }
     setEmailError('');
 
     if (formData.phone && !validatePhone(formData.phone)) {
@@ -362,6 +368,12 @@ export default function ManageStudentsPage() {
     const eErr = validateEmail(formData.email);
     if (eErr) {
       setEmailError(eErr);
+      return;
+    }
+    const trimmedEmail = (formData.email || '').trim().toLowerCase();
+    const isDuplicateEmail = students.some(s => s.id !== editingStudent.id && s.email && s.email.trim().toLowerCase() === trimmedEmail);
+    if (isDuplicateEmail) {
+      setEmailError('A student with this email already exists');
       return;
     }
     setEmailError('');
@@ -1025,7 +1037,7 @@ export default function ManageStudentsPage() {
                 <div>
                   <h2 className="text-lg font-black text-slate-900">Recorded Courses Management</h2>
                   <p className="text-xs text-slate-500 font-medium">
-                    Self-paced students enrolled in on-demand recorded courses with module completion tracking.
+                    Students enrolled in on-demand recorded courses with module completion tracking.
                   </p>
                 </div>
               </div>
@@ -1077,7 +1089,7 @@ export default function ManageStudentsPage() {
                   </div>
                   <div className="bg-indigo-50 px-3.5 py-2 rounded-xl border border-indigo-200 text-xs">
                     <span className="text-indigo-600 font-bold block text-[10px] uppercase">Mode</span>
-                    <span className="text-indigo-900 font-black">Recorded (Self-Paced)</span>
+                    <span className="text-indigo-900 font-black">Recorded</span>
                   </div>
                 </div>
               )}
@@ -1351,7 +1363,7 @@ export default function ManageStudentsPage() {
                               {((crs.mode || '').toLowerCase() === 'recorded') ? (
                                 <div className="flex items-center space-x-2 text-[11px] font-bold text-indigo-700 bg-indigo-50/80 px-2.5 py-1.5 rounded-lg border border-indigo-100 w-fit">
                                   <Video className="w-3.5 h-3.5 text-indigo-600" />
-                                  <span>Recorded Course (Self-paced, no batch required)</span>
+                                  <span>Recorded Course (No batch required)</span>
                                 </div>
                               ) : (
                                 <>

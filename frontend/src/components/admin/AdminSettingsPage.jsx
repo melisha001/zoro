@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Building, Check, Save, Globe, Info, Loader2, HardDrive, Trash2, RefreshCw, ShieldAlert } from 'lucide-react';
-import { getWebsiteSettings, saveWebsiteSettings } from '../../api/websiteSettingsApi';
+import { Building, Check, Save, Globe, Info, Loader2, HardDrive, Trash2, RefreshCw, ShieldAlert, Image as ImageIcon, ArrowUp, ArrowDown, UploadCloud, Eye } from 'lucide-react';
+import { getWebsiteSettings, saveWebsiteSettings, getAllHeroImages, createHeroImage, updateHeroImageOrder, updateHeroImage, deleteHeroImage } from '../../api/websiteSettingsApi';
 import { getStorageMetrics, triggerStorageCleanup, updateStorageSettings } from '../../api/storageApi';
+import { uploadFile } from '../../api/fileApi';
+import { compressHeroImage } from '../../utils/imageCompressor';
+import HeroCarousel from '../public/HeroCarousel';
 import { useDialog } from '../../context/DialogContext';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
@@ -173,6 +176,144 @@ export default function AdminSettingsPage() {
     }
   };
 
+  // Hero Background Images State (Phase 4)
+  const [heroImagesList, setHeroImagesList] = useState([]);
+  const [isLoadingHero, setIsLoadingHero] = useState(false);
+  const [isUploadingHero, setIsUploadingHero] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+
+  const loadHeroImages = async () => {
+    setIsLoadingHero(true);
+    try {
+      const res = await getAllHeroImages();
+      if (res && res.success && Array.isArray(res.data)) {
+        setHeroImagesList(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load hero images:', err);
+    } finally {
+      setIsLoadingHero(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'hero_images') {
+      loadHeroImages();
+    }
+  }, [activeTab]);
+
+  const handleHeroUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    if (heroImagesList.length + files.length > 10) {
+      await showError(`Maximum 10 hero background images allowed. You currently have ${heroImagesList.length}.`, 'Upload Limit Exceeded');
+      e.target.value = '';
+      return;
+    }
+
+    setIsUploadingHero(true);
+    let successCount = 0;
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setUploadProgress(`Compressing & uploading ${i + 1} of ${files.length}...`);
+
+        const compressed = await compressHeroImage(file, {
+          maxDimension: 1920,
+          quality: 0.8,
+          maxSizeBytes: 1024 * 1024
+        });
+
+        const uploaded = await uploadFile(compressed, 'hero');
+
+        const altText = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        const createRes = await createHeroImage({
+          url: uploaded.url,
+          storageKey: uploaded.id,
+          altText,
+          sortOrder: heroImagesList.length + successCount,
+          active: true
+        });
+
+        if (createRes && createRes.success) {
+          successCount++;
+        }
+      }
+
+      await loadHeroImages();
+      await showSuccess(`Successfully uploaded and configured ${successCount} hero image(s).`, 'Images Uploaded');
+    } catch (err) {
+      console.error('Hero upload error:', err);
+      await showError(err.message || 'Failed to upload hero image(s)', 'Upload Failed');
+    } finally {
+      setIsUploadingHero(false);
+      setUploadProgress('');
+      e.target.value = '';
+    }
+  };
+
+  const handleMoveHero = async (index, direction) => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= heroImagesList.length) return;
+
+    const newList = [...heroImagesList];
+    const [moved] = newList.splice(index, 1);
+    newList.splice(targetIndex, 0, moved);
+
+    const updatedWithOrder = newList.map((img, idx) => ({ ...img, sortOrder: idx }));
+    setHeroImagesList(updatedWithOrder);
+
+    const ordersPayload = updatedWithOrder.map((img) => ({ id: img.id, sortOrder: img.sortOrder }));
+    try {
+      await updateHeroImageOrder(ordersPayload);
+    } catch (err) {
+      console.error('Failed to update hero image order:', err);
+      await loadHeroImages();
+    }
+  };
+
+  const handleToggleActiveHero = async (image) => {
+    const newActive = !image.active;
+    setHeroImagesList((prev) => prev.map((img) => (img.id === image.id ? { ...img, active: newActive } : img)));
+    try {
+      const res = await updateHeroImage(image.id, { active: newActive });
+      if (!res || !res.success) {
+        await loadHeroImages();
+      }
+    } catch (err) {
+      console.error('Failed to toggle hero active status:', err);
+      await loadHeroImages();
+    }
+  };
+
+  const handleAltTextBlur = async (id, newAltText) => {
+    try {
+      await updateHeroImage(id, { altText: newAltText });
+      setHeroImagesList((prev) => prev.map((img) => (img.id === id ? { ...img, altText: newAltText } : img)));
+    } catch (err) {
+      console.error('Failed to update alt text:', err);
+    }
+  };
+
+  const handleDeleteHero = async (image) => {
+    if (!window.confirm('Delete this hero background image? This removes the database record and permanently purges the file from Bunny Storage.')) {
+      return;
+    }
+    try {
+      const res = await deleteHeroImage(image.id);
+      if (res && res.success) {
+        setHeroImagesList((prev) => prev.filter((img) => img.id !== image.id));
+        await showSuccess('Hero image and storage file deleted successfully.', 'Image Deleted');
+      } else {
+        await showError(res?.message || 'Failed to delete hero image', 'Delete Failed');
+      }
+    } catch (err) {
+      await showError(err.message || 'Failed to delete hero image', 'Delete Failed');
+    }
+  };
+
   return (
     <div className="space-y-6 text-xs">
       {/* Header */}
@@ -225,6 +366,16 @@ export default function AdminSettingsPage() {
         >
           <HardDrive className="w-4 h-4" />
           Storage & Cost Control
+        </button>
+
+        <button
+          onClick={() => setActiveTab('hero_images')}
+          className={`pb-3 transition-colors border-b-2 flex items-center gap-1.5 cursor-pointer ${
+            activeTab === 'hero_images' ? 'border-[#0F52BA] text-[#0F52BA] font-extrabold' : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <ImageIcon className="w-4 h-4" />
+          Hero Background Images
         </button>
       </div>
 
@@ -753,6 +904,199 @@ export default function AdminSettingsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. HERO BACKGROUND IMAGES TAB */}
+      {activeTab === 'hero_images' && (
+        <div className="space-y-6">
+          {/* Header & Upload Box */}
+          <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-[#0F52BA]" />
+                  <span>Landing Page Hero Carousel Images</span>
+                </h3>
+                <p className="text-slate-500 text-xs mt-1">
+                  Upload academy achievement photos for the public landing page hero carousel. Images rotate every 5 seconds.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="px-3 py-1 bg-slate-100 text-slate-700 font-bold rounded-lg text-xs">
+                  {heroImagesList.length} / 10 images
+                </span>
+                <label className={`bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-4 py-2 rounded-xl shadow-xs inline-flex items-center gap-2 cursor-pointer text-xs ${isUploadingHero || heroImagesList.length >= 10 ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {isUploadingHero ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                  <span>{isUploadingHero ? 'Uploading...' : 'Upload Images'}</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleHeroUpload}
+                    disabled={isUploadingHero || heroImagesList.length >= 10}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {isUploadingHero && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-800 flex items-center gap-2 font-semibold">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-600 shrink-0" />
+                <span>{uploadProgress || 'Compressing in browser and uploading to Bunny Storage...'}</span>
+              </div>
+            )}
+
+            <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-slate-600 text-[11px] leading-relaxed">
+              <strong>Upload Guidelines:</strong> Images are automatically downscaled to max 1920px and compressed in the browser to WebP/JPEG (~80% quality, max 1 MB each). Stored securely in Bunny Storage under category <code className="text-blue-700 font-mono">hero</code>.
+            </div>
+          </div>
+
+          {/* Live Preview Section */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 uppercase tracking-wider text-slate-500">
+                <Eye className="w-3.5 h-3.5 text-blue-600" />
+                <span>Live Hero Preview ({heroImagesList.filter(i => i.active).length} Active)</span>
+              </h4>
+              <span className="text-[11px] text-slate-400">
+                {heroImagesList.filter(i => i.active).length === 0 ? 'Shows Brand Gradient' : heroImagesList.filter(i => i.active).length === 1 ? 'Static Cover' : '5s Auto Carousel'}
+              </span>
+            </div>
+
+            <div className="rounded-xl overflow-hidden border border-slate-200 shadow-inner">
+              <HeroCarousel images={heroImagesList}>
+                <div className="p-6 sm:p-8 max-w-xl space-y-3">
+                  <span className="bg-blue-600/30 text-blue-200 text-[10px] font-bold px-2.5 py-1 rounded-full border border-blue-400/40">
+                    {landingPageContent.heroBadge}
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">
+                    {landingPageContent.heroHeading}
+                  </h2>
+                  <p className="text-slate-200 text-xs line-clamp-2">
+                    {landingPageContent.heroDescription}
+                  </p>
+                </div>
+              </HeroCarousel>
+            </div>
+          </div>
+
+          {/* Image Management List */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="font-extrabold text-slate-800 text-sm">Configured Hero Background Images</h4>
+              <button
+                type="button"
+                onClick={loadHeroImages}
+                disabled={isLoadingHero}
+                className="text-slate-500 hover:text-slate-800 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingHero ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {isLoadingHero ? (
+              <div className="p-8 text-center text-slate-500 flex flex-col items-center gap-2">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                <span>Loading hero images...</span>
+              </div>
+            ) : heroImagesList.length === 0 ? (
+              <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl space-y-2">
+                <ImageIcon className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="font-bold text-slate-700 text-xs">No hero images uploaded yet</p>
+                <p className="text-slate-400 text-[11px]">
+                  When no hero images are configured, the public landing page renders a clean neutral brand gradient.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {heroImagesList.map((img, index) => (
+                  <div key={img.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    {/* Left: Thumbnail & Reorder */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveHero(index, 'up')}
+                          disabled={index === 0}
+                          className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:pointer-events-none text-slate-600 cursor-pointer"
+                          title="Move Up"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveHero(index, 'down')}
+                          disabled={index === heroImagesList.length - 1}
+                          className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:pointer-events-none text-slate-600 cursor-pointer"
+                          title="Move Down"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="relative w-24 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
+                        <img
+                          src={img.url}
+                          alt={img.altText || 'Hero thumbnail'}
+                          className="w-full h-full object-cover"
+                        />
+                        <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] font-bold px-1 rounded">
+                          #{index + 1}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            defaultValue={img.altText || ''}
+                            placeholder="Optional Alt / Achievement description"
+                            onBlur={(e) => handleAltTextBlur(img.id, e.target.value)}
+                            className="p-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 w-64 focus:border-blue-500 focus:outline-hidden"
+                          />
+                        </div>
+                        <div className="text-[11px] text-slate-400 flex items-center gap-2 truncate max-w-xs">
+                          <span>Order: {index + 1}</span>
+                          <span>•</span>
+                          <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate">
+                            Open CDN URL
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Active Toggle & Delete */}
+                    <div className="flex items-center gap-3 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleActiveHero(img)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                          img.active
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}
+                      >
+                        {img.active ? 'Active' : 'Hidden'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteHero(img)}
+                        className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                        title="Delete hero image and storage object"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

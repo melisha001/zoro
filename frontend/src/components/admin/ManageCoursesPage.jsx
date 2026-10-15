@@ -181,7 +181,7 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
 
                   <div className="p-6 space-y-3">
                     <div className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider">
-                      {course.duration || formatModulesDuration(course.modules) || 'Self-Paced'}
+                      {course.duration || formatModulesDuration(course.modules) || 'Flexible Duration'}
                     </div>
                     <h3 className="text-xl font-black text-slate-900">{course.title}</h3>
                     <p className="text-slate-500 text-xs line-clamp-2">{course.description}</p>
@@ -199,9 +199,11 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
                       )}
                       <span className="bg-[#0F52BA]/10 text-[#0F52BA] px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
                         <User className="w-3 h-3" />
-                        Trainer: {course.assignedTrainer && course.assignedTrainer !== 'None (Self-Paced)' && course.assignedTrainer !== 'Unassigned'
-                          ? course.assignedTrainer 
-                          : (course.mode === 'Recorded' ? 'None (Self-Paced)' : 'Unassigned')}
+                        Trainer: {course.audience === 'trainer'
+                          ? 'Admin'
+                          : (course.mode === 'Recorded'
+                              ? (course.assignedTrainer && course.assignedTrainer !== 'None (Self-Paced)' ? course.assignedTrainer : 'Instructor-Led')
+                              : 'Assigned per batch')}
                       </span>
                     </div>
                   </div>

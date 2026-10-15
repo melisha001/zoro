@@ -62,7 +62,7 @@ export function resolveFileUrl(urlOrPath) {
  * @param {string} fileIdOrUrl 
  * @returns {Promise<{ id: string, url: string, expiresAt: number, isPublic: boolean }>}
  */
-export async function getFileLink(fileIdOrUrl) {
+export async function getFileLink(fileIdOrUrl, download = false) {
   if (!fileIdOrUrl) return null;
   const str = String(fileIdOrUrl).trim();
   if (!str) return null;
@@ -82,12 +82,25 @@ export async function getFileLink(fileIdOrUrl) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(fileId)}/link`, {
+  const downloadQuery = download ? '?download=true' : '';
+  const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(fileId)}/link${downloadQuery}`, {
     headers
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to retrieve file link: HTTP ${response.status}`);
+    let errJson = null;
+    try {
+      errJson = await response.json();
+    } catch {
+      // ignore
+    }
+    const code = errJson?.code || errJson?.errorCode || `HTTP_${response.status}`;
+    const message = errJson?.message || (response.status === 403 ? 'Access denied: You do not have permission to access this file' : `Error accessing file (Status ${response.status})`);
+    const error = new Error(message);
+    error.code = code;
+    error.status = response.status;
+    error.unlockAt = errJson?.data?.unlockAt || errJson?.unlockAt;
+    throw error;
   }
 
   const data = await response.json();
@@ -97,7 +110,9 @@ export async function getFileLink(fileIdOrUrl) {
       url: resolveFileUrl(data.data.url)
     };
   }
-  throw new Error(data?.message || 'Failed to retrieve file link');
+  const error = new Error(data?.message || 'Failed to retrieve file link');
+  error.code = data?.code || 'UNKNOWN_ERROR';
+  throw error;
 }
 
 /**
@@ -110,7 +125,7 @@ export async function getFileLink(fileIdOrUrl) {
 export async function openFileWithSignedLink(fileUrlOrId, fileName = '') {
   if (!fileUrlOrId) return;
   try {
-    const linkData = await getFileLink(fileUrlOrId);
+    const linkData = await getFileLink(fileUrlOrId, true);
     let targetUrl = linkData?.url || resolveFileUrl(fileUrlOrId);
     if (!targetUrl) throw new Error('Could not resolve file URL');
 
@@ -155,7 +170,14 @@ export async function openFileWithSignedLink(fileUrlOrId, fileName = '') {
     document.body.removeChild(a);
   } catch (err) {
     console.error('File download/access failed:', err);
-    const msg = err?.message || 'Access Denied: File is locked or unavailable.';
+    let msg = err?.message || 'Access Denied: File is locked or unavailable.';
+    if (err?.code === 'LOCKED_SCHEDULE') {
+      msg = err.unlockAt ? `Schedule resources are locked. Unlocks at ${err.unlockAt}` : 'Schedule resources are locked until 60 minutes before session.';
+    } else if (err?.code === 'LOCKED_MODULE') {
+      msg = err.message || 'Complete previous module to unlock this resource.';
+    } else if (err?.code === 'NOT_ENROLLED') {
+      msg = 'You are not enrolled in this course.';
+    }
     if (typeof window !== 'undefined' && typeof window.alert === 'function') {
       window.alert(msg.replace(/^Error:\s*/, ''));
     }

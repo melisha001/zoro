@@ -205,7 +205,7 @@ public class Video {
     public static class Builder {
         private String id;
         private String bunnyVideoId;
-        private Integer libraryId = 770045;
+        private Integer libraryId;
         private String title;
         private String courseId;
         private String moduleId;

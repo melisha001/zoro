@@ -10,4 +10,7 @@ import java.util.List;
 public interface CourseResourceRepository extends JpaRepository<CourseResource, String> {
     List<CourseResource> findByCourseId(String courseId);
     List<CourseResource> findByCourseIdAndTargetAudienceIgnoreCase(String courseId, String targetAudience);
+
+    @org.springframework.data.jpa.repository.Query("SELECT cr FROM CourseResource cr WHERE cr.fileUrl LIKE %:fileId%")
+    List<CourseResource> findByFileUrlContaining(@org.springframework.data.repository.query.Param("fileId") String fileId);
 }

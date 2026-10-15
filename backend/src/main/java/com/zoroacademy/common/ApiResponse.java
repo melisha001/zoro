@@ -75,8 +75,28 @@ public class ApiResponse<T> {
         return new ApiResponse<>(true, data, message);
     }
 
+    public String getCode() {
+        return errorCode;
+    }
+
+    public void setCode(String code) {
+        this.errorCode = code;
+    }
+
     public static <T> ApiResponse<T> error(String message) {
         return new ApiResponse<>(false, null, message);
+    }
+
+    public static <T> ApiResponse<T> error(String errorCode, String message) {
+        ApiResponse<T> resp = new ApiResponse<>(false, null, message);
+        resp.setErrorCode(errorCode);
+        return resp;
+    }
+
+    public static <T> ApiResponse<T> error(String errorCode, String message, T data) {
+        ApiResponse<T> resp = new ApiResponse<>(false, data, message);
+        resp.setErrorCode(errorCode);
+        return resp;
     }
 
     public static <T> ApiResponse<T> error(String message, String errorCode, String correlationId) {

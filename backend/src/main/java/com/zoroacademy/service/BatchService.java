@@ -143,6 +143,24 @@ public class BatchService {
         return dto;
     }
 
+    private void validateCourseForBatch(Course course, String identifier) {
+        if (course == null) {
+            throw new BadRequestException("Course not found: " + (identifier != null ? identifier : "unspecified"));
+        }
+        String status = course.getStatus() != null ? course.getStatus().trim() : "";
+        if (!"Active".equalsIgnoreCase(status) && !"Published".equalsIgnoreCase(status)) {
+            throw new BadRequestException("Batches can only be created for Published courses. Current course status: " + course.getStatus());
+        }
+        String audience = course.getAudience() != null ? course.getAudience().trim().toLowerCase() : "";
+        if (!audience.isEmpty() && !"student".equals(audience)) {
+            throw new BadRequestException("Batches can only be created for Student courses. Trainer courses cannot have batches.");
+        }
+        String mode = course.getMode() != null ? course.getMode().trim() : "";
+        if (!"Online".equalsIgnoreCase(mode) && !"Hybrid".equalsIgnoreCase(mode)) {
+            throw new BadRequestException("Batches cannot be created for Recorded courses. Batches are only supported for Online and Hybrid courses.");
+        }
+    }
+
     @Transactional
     public Batch createBatch(Batch batch) {
         if (batch.getId() == null || batch.getId().isBlank()) {
@@ -159,9 +177,7 @@ public class BatchService {
             if (course != null) batch.setCourseId(course.getId());
         }
 
-        if (course != null && "Recorded".equalsIgnoreCase(course.getMode())) {
-            throw new BadRequestException("Batches cannot be created for Recorded courses. Batches are only supported for Online and Hybrid courses.");
-        }
+        validateCourseForBatch(course, batch.getCourseId() != null ? batch.getCourseId() : batch.getCourseName());
 
         // Resolve Trainers (Multi-Trainer Support)
         if (batch.getTrainerIds() != null && !batch.getTrainerIds().isEmpty()) {
@@ -223,8 +239,8 @@ public class BatchService {
             course = courseRepository.findById(targetBatch.getCourseId()).orElse(null);
         }
 
-        if (course != null && "Recorded".equalsIgnoreCase(course.getMode())) {
-            throw new BadRequestException("Batches cannot be assigned to Recorded courses. Batches are only supported for Online and Hybrid courses.");
+        if (course != null) {
+            validateCourseForBatch(course, targetBatch.getCourseId() != null ? targetBatch.getCourseId() : targetBatch.getCourseName());
         }
 
         // Update Trainers (Multi-Trainer Support)

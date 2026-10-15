@@ -69,7 +69,7 @@ export default function SecureVideoPlayer({
   } else if (parsedRef && typeof parsedRef === 'object') {
     embedUrl = parsedRef.embedUrl || null;
     if (!embedUrl && parsedRef.videoId && parsedRef.token) {
-      const libId = parsedRef.libraryId || '770045';
+      const libId = parsedRef.libraryId || '';
       const expParam = parsedRef.expiresAt ? `&expires=${parsedRef.expiresAt}` : '';
       embedUrl = `https://iframe.mediadelivery.net/embed/${libId}/${parsedRef.videoId}?token=${parsedRef.token}${expParam}`;
     }

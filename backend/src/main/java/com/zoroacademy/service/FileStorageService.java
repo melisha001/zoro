@@ -44,11 +44,11 @@ public class FileStorageService {
     private static final long MAX_DOC_SIZE = 50 * 1024 * 1024; // 50 MB
 
     private static final Set<String> IMAGE_CATEGORIES = Set.of(
-            "image", "images", "avatar", "thumbnail", "banner", "profile"
+            "image", "images", "avatar", "thumbnail", "banner", "profile", "hero"
     );
 
     private static final Set<String> PUBLIC_CATEGORIES = Set.of(
-            "avatar", "thumbnail", "banner", "profile", "public", "image", "images", "public-document"
+            "avatar", "thumbnail", "banner", "profile", "public", "image", "images", "public-document", "hero"
     );
 
     @Autowired

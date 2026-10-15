@@ -1,4 +1,4 @@
-import { apiGet, apiPut, apiResponse } from './client';
+import { apiGet, apiPost, apiPut, apiDelete, apiResponse } from './client';
 
 export const DEFAULT_WEBSITE_SETTINGS = {
   landingPageContent: {
@@ -140,3 +140,53 @@ export const saveWebsiteSettings = async (newSettingsData) => {
   }
   return apiResponse(null, false, res?.message || 'Failed to save website settings');
 };
+
+/**
+ * Public: Get active hero images ordered by sort order
+ */
+export const getHeroImages = async () => {
+  const res = await apiGet('/website-settings/hero-images');
+  return res;
+};
+
+/**
+ * Admin: Get all hero images (active & inactive)
+ */
+export const getAllHeroImages = async () => {
+  const res = await apiGet('/admin/website-settings/hero-images');
+  return res;
+};
+
+/**
+ * Admin: Create a new hero image
+ */
+export const createHeroImage = async (data) => {
+  const res = await apiPost('/admin/website-settings/hero-images', data);
+  return res;
+};
+
+/**
+ * Admin: Update sort orders for hero images
+ * @param {Array<{ id: string, sortOrder: number }>} orders
+ */
+export const updateHeroImageOrder = async (orders) => {
+  const res = await apiPut('/admin/website-settings/hero-images/order', orders);
+  return res;
+};
+
+/**
+ * Admin: Update a single hero image
+ */
+export const updateHeroImage = async (id, data) => {
+  const res = await apiPut(`/admin/website-settings/hero-images/${encodeURIComponent(id)}`, data);
+  return res;
+};
+
+/**
+ * Admin: Delete hero image and purge storage
+ */
+export const deleteHeroImage = async (id) => {
+  const res = await apiDelete(`/admin/website-settings/hero-images/${encodeURIComponent(id)}`);
+  return res;
+};
+

@@ -124,6 +124,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/website-settings/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/competitions/{id}/registrations").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/competitions", "/api/competitions/", "/api/competitions/{id}", "/api/competitions/{id}/modules").permitAll()
+                        .requestMatchers("/api/payments/razorpay/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/webhooks/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
 
@@ -138,7 +139,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/enquiries/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/enquiries/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/enquiries/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/website-settings/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/website-settings/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/website-settings/**").hasRole("ADMIN")
                         .requestMatchers("/api/enrollments/requests/**").hasRole("ADMIN")
                         .requestMatchers("/api/trainers/{id}/replace").hasRole("ADMIN")
                         .requestMatchers("/api/trainers/**").hasRole("ADMIN")

@@ -242,7 +242,7 @@ public class UserService {
         // Prevent duplicate email with another account
         userRepository.findByEmailIgnoreCase(cleanEmail).ifPresent(existing -> {
             if (existing.getId() == null || !existing.getId().equals(userId)) {
-                throw new com.zoroacademy.exception.ConflictException("Email is already registered: " + cleanEmail);
+                throw new com.zoroacademy.exception.ConflictException("A student with this email already exists");
             }
         });
 

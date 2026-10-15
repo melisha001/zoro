@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Trophy, CheckCircle2, AlertCircle, CreditCard, ShieldCheck, User, Mail, Phone, Building2, MapPin } from 'lucide-react';
-import { createCompetitionRegistration, checkDuplicateRegistration } from '../../api/competitionRegistrationApi';
+import { createRazorpayOrder, verifyRazorpayPayment } from '../../api/paymentApi';
 import { initiateRazorpayPayment } from '../../utils/razorpay';
 import { createNotification } from '../../api/notificationApi';
 import { formatDate } from '../../utils/dateFormatter';
@@ -72,72 +72,82 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
     setLoading(true);
 
     try {
-      // 1. Check duplicate registration by phone, email, or studentId
-      const isDup = await checkDuplicateRegistration(
-        formData.studentEmail,
-        competition.id,
-        formData.studentPhone,
-        formData.studentId
-      );
-      if (isDup) {
-        setErrorMsg('Already registered for this competition.');
-        setLoading(false);
-        return;
-      }
-
-      let paymentResult = null;
-
-      // 2. Razorpay Online Payment Flow if fee > 0
-      if (regFee > 0) {
-        try {
-          paymentResult = await initiateRazorpayPayment({
-            amount: regFee,
-            competitionName: competition.name,
-            participantName: formData.studentName,
-            participantEmail: formData.studentEmail,
-            participantPhone: formData.studentPhone,
-            description: `Registration fee for ${competition.name}`
-          });
-        } catch (payErr) {
-          setErrorMsg(payErr.message || 'Payment cancelled or failed. Registration not completed.');
-          setLoading(false);
-          return;
-        }
-        if (regFee > 0 && !paymentResult?.razorpayPaymentId) {
-          setErrorMsg('Payment verification failed. Payment was not completed.');
-          setLoading(false);
-          return;
-        }
-      }
-
-      // 3. Create Registration Record
-      const regPayload = {
+      // 1. Server-driven order creation / registration check
+      const orderPayload = {
         competitionId: competition.id,
-        competitionName: competition.name,
+        studentName: formData.studentName.trim(),
+        studentEmail: formData.studentEmail.trim(),
+        studentPhone: formData.studentPhone.trim(),
         studentId: formData.studentId || null,
-        studentName: formData.studentName,
-        studentEmail: formData.studentEmail,
-        studentPhone: formData.studentPhone,
         age: formData.age ? Number(formData.age) : null,
-        school: formData.school || null,
-        city: formData.city || null,
-        registrationFee: regFee,
-        paymentStatus: regFee > 0 ? (paymentResult?.razorpayPaymentId ? 'Paid' : 'Failed') : 'Pending',
-        registrationStatus: 'Registered',
-        razorpayPaymentId: paymentResult?.razorpayPaymentId || null,
-        razorpayOrderId: paymentResult?.razorpayOrderId || null,
-        paymentDate: paymentResult?.paymentDate || new Date().toLocaleString('en-GB')
+        school: formData.school ? formData.school.trim() : null,
+        city: formData.city ? formData.city.trim() : null
       };
 
-      const res = await createCompetitionRegistration(regPayload);
-
-      if (!res.success) {
-        setErrorMsg(res.message || 'Failed to complete competition registration.');
+      const orderRes = await createRazorpayOrder(orderPayload);
+      if (!orderRes.success || !orderRes.data) {
+        setErrorMsg(orderRes.message || 'Failed to initialize competition registration.');
         setLoading(false);
         return;
       }
 
-      // 4. Send In-App Notification if user is registered student
+      const orderData = orderRes.data;
+
+      // Free competition -> Confirmed directly by server
+      if (orderData.free) {
+        if (formData.studentEmail) {
+          await createNotification({
+            trainerName: '',
+            title: `Registration Confirmed: ${competition.name || competition.title}`,
+            desc: `Your registration for ${competition.name || competition.title} is confirmed.${(competition.startDate || competition.date) ? ` Date: ${formatDate(competition.startDate || competition.date)}.` : ''}${competition.venue ? ` Venue: ${competition.venue}` : ''}`,
+            studentEmail: formData.studentEmail,
+            type: 'competition_reg'
+          });
+        }
+
+        setSuccessMsg(`Registration Confirmed for ${competition.name || competition.title}!`);
+        setTimeout(() => {
+          if (onSuccess) onSuccess({ id: orderData.registrationId });
+          onClose();
+          setSuccessMsg('');
+        }, 1500);
+        return;
+      }
+
+      // Paid competition -> Open Razorpay checkout with server-returned orderId and keyId
+      let paymentResult = null;
+      try {
+        paymentResult = await initiateRazorpayPayment({
+          keyId: orderData.keyId,
+          orderId: orderData.orderId,
+          amount: orderData.amount,
+          currency: orderData.currency,
+          competitionName: competition.name || competition.title,
+          participantName: formData.studentName,
+          participantEmail: formData.studentEmail,
+          participantPhone: formData.studentPhone,
+          description: `Registration fee for ${competition.name || competition.title}`
+        });
+      } catch (payErr) {
+        setErrorMsg(payErr.message || 'Payment cancelled or failed. Your registration remains pending.');
+        setLoading(false);
+        return;
+      }
+
+      // Verify payment with server
+      const verifyRes = await verifyRazorpayPayment({
+        orderId: paymentResult.razorpayOrderId,
+        paymentId: paymentResult.razorpayPaymentId,
+        signature: paymentResult.razorpaySignature
+      });
+
+      if (!verifyRes.success) {
+        setErrorMsg(verifyRes.message || 'Payment verification failed on the server. Please contact support.');
+        setLoading(false);
+        return;
+      }
+
+      // Send In-App Notification if user is registered student
       if (formData.studentEmail) {
         await createNotification({
           trainerName: '',
@@ -150,14 +160,14 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
 
       setSuccessMsg(`Registration Confirmed for ${competition.name || competition.title}!`);
       setTimeout(() => {
-        if (onSuccess) onSuccess(res.data);
+        if (onSuccess) onSuccess(verifyRes.data);
         onClose();
         setSuccessMsg('');
       }, 1500);
 
     } catch (err) {
       console.error('Registration submission error:', err);
-      setErrorMsg('An unexpected error occurred during registration.');
+      setErrorMsg(err.message || 'An unexpected error occurred during registration.');
     } finally {
       setLoading(false);
     }

@@ -72,6 +72,18 @@ export const getMyCourses = async () => {
   return apiResponse([], false, res?.message || 'Failed to fetch enrolled courses');
 };
 
+export const getMyTrainerCourses = async () => {
+  const res = await apiGet('/me/trainer-courses');
+  if (res.success && res.data) {
+    return apiResponse({
+      enrolled: Array.isArray(res.data.enrolled) ? res.data.enrolled.map(normalizeCourse) : [],
+      pending: Array.isArray(res.data.pending) ? res.data.pending.map(normalizeCourse) : [],
+      available: Array.isArray(res.data.available) ? res.data.available.map(normalizeCourse) : []
+    });
+  }
+  return apiResponse({ enrolled: [], pending: [], available: [] }, false, res?.message || 'Failed to fetch trainer courses');
+};
+
 export const getCourseById = async (id) => {
   if (!id) {
     return apiResponse(null, false, 'Course ID is required');

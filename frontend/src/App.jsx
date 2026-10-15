@@ -39,6 +39,7 @@ const AdminTrainerAssignmentsPage = lazy(() => import('./components/admin/AdminT
 const AdminDoubtsPage = lazy(() => import('./components/admin/AdminDoubtsPage'));
 const AdminEnquiryPage = lazy(() => import('./components/admin/AdminEnquiryPage'));
 const AdminReportsPage = lazy(() => import('./components/admin/AdminReportsPage'));
+const AdminNotificationsPage = lazy(() => import('./components/admin/AdminNotificationsPage'));
 const AdminSettingsPage = lazy(() => import('./components/admin/AdminSettingsPage'));
 
 const TrainerDashboard = lazy(() => import('./components/trainer/TrainerDashboard'));
@@ -101,6 +102,7 @@ function getActiveScreenFromPath(path) {
   if (path.includes('/admin/competitions/') && path.includes('/modules')) return 'admin-competition-modules';
   if (path === '/admin/competitions/registrations') return 'admin-competition-registrations';
   if (path === '/admin/reports') return 'admin-reports';
+  if (path === '/admin/notifications') return 'admin-notifications';
   if (path === '/admin/settings') return 'admin-settings';
 
   if (path === '/trainer' || path === '/trainer/') return 'trainer-dash';
@@ -157,6 +159,7 @@ function screenToPath(screen, params = {}) {
     case 'admin-competition-modules': return params.competitionId ? `/admin/competitions/${params.competitionId}/modules` : '/admin/competitions';
     case 'admin-competition-registrations': return '/admin/competitions/registrations';
     case 'admin-reports': return '/admin/reports';
+    case 'admin-notifications': return '/admin/notifications';
     case 'admin-settings': return '/admin/settings';
 
     // Trainer
@@ -493,6 +496,7 @@ function AppRoutes() {
           <Route path="competitions/:competitionId/modules" element={<CompetitionModulesWrapper />} />
           <Route path="competitions/registrations" element={<AdminCompetitionRegistrationsPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="reports" element={<AdminReportsPage />} />
+          <Route path="notifications" element={<AdminNotificationsPage />} />
           <Route path="settings" element={<AdminSettingsPage />} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Route>

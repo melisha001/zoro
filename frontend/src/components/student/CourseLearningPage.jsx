@@ -760,7 +760,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                 <div className="pt-2 border-t border-slate-200/60">
                                   <div className="px-3 py-2 bg-white/80 border border-slate-200 rounded-xl flex items-center gap-2 text-[11px] text-slate-500 font-semibold">
                                     <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                    <span>Classroom documents unlock 30 minutes before class</span>
+                                    <span>Classroom documents unlock 60 minutes before class</span>
                                   </div>
                                 </div>
                               ) : (

@@ -30,6 +30,7 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
       { id: 'admin-competition', label: 'Competitions', icon: Trophy },
       { id: 'admin-competition-registrations', label: 'Competition Registrations', icon: CheckSquare },
       { id: 'admin-reports', label: 'Reports', icon: BarChart3 },
+      { id: 'admin-notifications', label: 'Notifications', icon: Bell },
       { id: 'admin-settings', label: 'Settings', icon: Settings },
     ];
 

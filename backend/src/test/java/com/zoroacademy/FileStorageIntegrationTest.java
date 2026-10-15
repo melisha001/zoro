@@ -81,7 +81,7 @@ public class FileStorageIntegrationTest {
         String fileUrl = (String) data.get("url");
 
         // Unauthenticated GET on private file must return 401 Unauthorized
-        mockMvc.perform(get(fileUrl))
+        mockMvc.perform(get(fileUrl).with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous()))
                 .andExpect(status().isUnauthorized());
     }
 

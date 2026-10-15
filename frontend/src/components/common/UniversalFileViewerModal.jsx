@@ -36,8 +36,18 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
         })
         .catch(err => {
           if (!active) return;
-          setErrorMsg(err?.message || 'Access Denied: This file is locked or you do not have permission.');
-          setResolvedUrl(resolveFileUrl(raw));
+          let displayMsg = err?.message || 'Access Denied: This file is locked or you do not have permission.';
+          if (err?.code === 'LOCKED_SCHEDULE') {
+            displayMsg = err.unlockAt ? `Schedule resources are locked. Unlocks at ${err.unlockAt}` : 'Schedule resources are locked until 60 minutes before session.';
+          } else if (err?.code === 'LOCKED_MODULE') {
+            displayMsg = err.message || 'Complete previous module to unlock this resource.';
+          } else if (err?.code === 'NOT_ENROLLED') {
+            displayMsg = 'You are not enrolled in this course.';
+          } else if (displayMsg.includes('403') || displayMsg.includes('HTTP 403')) {
+            displayMsg = 'Access Denied: You do not have permission to access this file.';
+          }
+          setErrorMsg(displayMsg);
+          setResolvedUrl('');
         });
     } else {
       setResolvedUrl(resolveFileUrl(raw));
@@ -60,6 +70,11 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
   const isAudio = mimeType.startsWith('audio/') || ['mp3', 'wav', 'm4a', 'aac', 'ogg'].includes(ext);
   const isPdf = mimeType === 'application/pdf' || ext === 'pdf';
   const isSpreadsheet = ['xls', 'xlsx', 'csv'].includes(ext) || mimeType.includes('spreadsheet') || mimeType.includes('excel') || mimeType === 'text/csv';
+  const isOffice = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext) ||
+                   mimeType.includes('officedocument') ||
+                   mimeType.includes('msword') ||
+                   mimeType.includes('ms-excel') ||
+                   mimeType.includes('ms-powerpoint');
   const isArchive = ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext) || mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('tar');
 
   return (
@@ -164,8 +179,8 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
                 </div>
               )}
 
-              {/* 5. DOCUMENTS / OTHER FALLBACK */}
-              {!isImage && !isVideo && !isAudio && !isPdf && (
+              {/* 5. OFFICE FILES (DOCX / XLSX / PPTX) */}
+              {isOffice && (
                 <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200 shadow-xl text-center space-y-5">
                   <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto border border-blue-100">
                     {isSpreadsheet ? <FileSpreadsheet className="w-10 h-10 text-emerald-600" /> : <FileText className="w-10 h-10 text-blue-600" />}
@@ -173,10 +188,10 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
                   <div className="space-y-1">
                     <h4 className="font-extrabold text-slate-900 text-base">{fileName}</h4>
                     <p className="text-xs text-slate-500 font-medium">
-                      {ext ? `${ext.toUpperCase()} Document` : 'File Attachment'} • {fileSize}
+                      {ext ? `${ext.toUpperCase()} File` : 'Office Document'} • {fileSize}
                     </p>
                     <p className="text-xs text-slate-400 pt-2">
-                      Preview in viewer mode.
+                      Office files cannot be previewed in the browser. Please download to view.
                     </p>
                   </div>
 
@@ -187,7 +202,36 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
                       className="inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl text-xs shadow-md transition-all w-full cursor-pointer"
                     >
                       <Download className="w-4 h-4" />
-                      <span>Download / Open File</span>
+                      <span>Download File</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* 6. OTHER FALLBACK */}
+              {!isImage && !isVideo && !isAudio && !isPdf && !isOffice && (
+                <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200 shadow-xl text-center space-y-5">
+                  <div className="w-20 h-20 bg-slate-50 text-slate-600 rounded-2xl flex items-center justify-center mx-auto border border-slate-200">
+                    {isArchive ? <Archive className="w-10 h-10 text-purple-600" /> : <FileText className="w-10 h-10 text-slate-600" />}
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-extrabold text-slate-900 text-base">{fileName}</h4>
+                    <p className="text-xs text-slate-500 font-medium">
+                      {ext ? `${ext.toUpperCase()} File` : 'Attachment'} • {fileSize}
+                    </p>
+                    <p className="text-xs text-slate-400 pt-2">
+                      File is ready for download.
+                    </p>
+                  </div>
+
+                  {!hideDownload && fileUrl && fileUrl !== '#' && (
+                    <button
+                      type="button"
+                      onClick={() => openFileWithSignedLink(fileUrl, fileName)}
+                      className="inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl text-xs shadow-md transition-all w-full cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download File</span>
                     </button>
                   )}
                 </div>
@@ -202,7 +246,7 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
             Zoro Universal File Viewer
           </div>
           <div className="flex items-center space-x-3">
-            {!hideDownload && fileUrl && fileUrl !== '#' && (
+            {!hideDownload && !errorMsg && fileUrl && fileUrl !== '#' && (
               <button
                 type="button"
                 onClick={() => openFileWithSignedLink(fileUrl, fileName)}

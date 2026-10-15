@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, Plus, X, Trash2 } from 'lucide-react';
-import { getFeeRecords, recordStudentPayment, createFeeRecord, deleteFeeRecord } from '../../api/feesApi';
-import { getStudents } from '../../api/userApi';
-import { getCourses } from '../../api/courseApi';
+import { Search, Download, X, Trash2 } from 'lucide-react';
+import { getFeeRecords, recordStudentPayment, deleteFeeRecord } from '../../api/feesApi';
 import { logActivity } from '../../api/activityLogApi';
 import { exportToExcel } from '../../utils/excelExporter';
 import ConfirmModal from '../common/ConfirmModal';
@@ -14,18 +12,11 @@ export default function AdminFeesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showAddFeeModal, setShowAddFeeModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [deleteFeeData, setDeleteFeeData] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [feeRecords, setFeeRecords] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const [studentsList, setStudentsList] = useState([]);
-  const [coursesList, setCoursesList] = useState([]);
-  const [addFeeStudentId, setAddFeeStudentId] = useState('');
-  const [selectedFeeCourses, setSelectedFeeCourses] = useState({});
-  const [initialPayment, setInitialPayment] = useState('');
 
   useEffect(() => {
     loadFees();
@@ -33,110 +24,13 @@ export default function AdminFeesPage() {
 
   const loadFees = async () => {
     setLoading(true);
-    const [fRes, sRes, cRes] = await Promise.all([
-      getFeeRecords(),
-      getStudents(),
-      getCourses()
-    ]);
-    setFeeRecords(fRes.data || []);
-    setStudentsList(sRes.data || []);
-    setCoursesList(cRes.data || []);
-    setLoading(false);
-  };
-
-  const handleSelectStudentForFee = (sId) => {
-    setAddFeeStudentId(sId);
-    const targetStudent = studentsList.find(s => s.id === sId || s.email === sId);
-    if (!targetStudent) {
-      setSelectedFeeCourses({});
-      return;
-    }
-
-    const cBatches = targetStudent.courseBatches || (targetStudent.course ? [{ course: targetStudent.course, batch: targetStudent.batch || 'Unassigned' }] : []);
-    const initialMap = {};
-
-    cBatches.forEach(cb => {
-      const cTitle = typeof cb === 'string' ? cb : cb.course;
-      const matchedCourse = coursesList.find(c => c.title?.toLowerCase().trim() === cTitle?.toLowerCase().trim() || c.id === cTitle);
-      const feeVal = matchedCourse && matchedCourse.price != null && Number(matchedCourse.price) > 0 ? Number(matchedCourse.price) : 0;
-      initialMap[cTitle] = feeVal;
-    });
-
-    setSelectedFeeCourses(initialMap);
-  };
-
-  const handleToggleFeeCourse = (cTitle, defaultFee = null) => {
-    setSelectedFeeCourses(prev => {
-      const updated = { ...prev };
-      if (updated[cTitle] !== undefined) {
-        delete updated[cTitle];
-      } else {
-        const matchedCourse = coursesList.find(c => c.title?.toLowerCase().trim() === cTitle?.toLowerCase().trim() || c.id === cTitle);
-        const resolvedFee = defaultFee !== null ? defaultFee : (matchedCourse?.price != null ? Number(matchedCourse.price) : 0);
-        updated[cTitle] = resolvedFee;
-      }
-      return updated;
-    });
-  };
-
-  const handleFeeCourseAmountChange = (cTitle, amount) => {
-    const val = parseFloat(amount) || 0;
-    setSelectedFeeCourses(prev => ({
-      ...prev,
-      [cTitle]: val
-    }));
-  };
-
-  const calculateAddFeeTotals = () => {
-    const totalFee = Object.values(selectedFeeCourses).reduce((sum, f) => sum + (parseFloat(f) || 0), 0);
-    const paid = Math.min(totalFee, Math.max(0, parseFloat(initialPayment) || 0));
-    const due = Math.max(0, totalFee - paid);
-    const status = due === 0 ? 'Paid' : 'Pending';
-    return { totalFee, paid, due, status };
-  };
-
-  const handleAddFeeSubmit = async (e) => {
-    e.preventDefault();
-    const targetStudent = studentsList.find(s => s.id === addFeeStudentId || s.email === addFeeStudentId);
-    if (!targetStudent) return;
-    if (Object.keys(selectedFeeCourses).length === 0) return;
-
-    const { totalFee, paid, due, status } = calculateAddFeeTotals();
-    if (initialPayment && parseFloat(initialPayment) > totalFee) {
-      await showWarning(`Initial payment cannot exceed total fee of ₹${totalFee.toLocaleString()}`, 'Invalid Payment Amount');
-      return;
-    }
-
-    const courseSummary = Object.keys(selectedFeeCourses).join(', ');
-    const batchSummary = targetStudent.courseBatches?.[0]?.batch || targetStudent.batch || 'Unassigned';
-
     try {
-      const res = await createFeeRecord({
-        studentId: targetStudent.id,
-        student: targetStudent.name,
-        course: courseSummary,
-        batch: batchSummary,
-        courses: Object.entries(selectedFeeCourses).map(([cName, cFee]) => ({ course: cName, fee: cFee })),
-        totalFee,
-        paidAmount: paid,
-        dueAmount: due,
-        status,
-        date: new Date().toISOString().split('T')[0]
-      });
-
-      if (res && res.success) {
-        await logActivity('Student Fees', 'Fee Record Created', `Created fee record of ₹${totalFee.toLocaleString()} for student "${targetStudent.name}" (${courseSummary})`);
-        setShowAddFeeModal(false);
-        setAddFeeStudentId('');
-        setSelectedFeeCourses({});
-        setInitialPayment('');
-        await showSuccess(res.message || `Fee record of ₹${totalFee.toLocaleString()} created successfully.`, 'Fee Record Created');
-        loadFees();
-      } else {
-        await showError(res?.message || 'Failed to create fee record', 'Creation Failed');
-      }
+      const fRes = await getFeeRecords();
+      setFeeRecords(fRes.data || []);
     } catch (err) {
-      await showError(err?.message || 'Failed to create fee record', 'Creation Failed');
+      console.error('Failed to load fee records:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -232,13 +126,6 @@ export default function AdminFeesPage() {
         </div>
 
         <div className="flex items-center space-x-3 self-start sm:self-auto">
-          <button
-            onClick={() => setShowAddFeeModal(true)}
-            className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-md flex items-center space-x-2 text-xs cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Fee</span>
-          </button>
           <button
             onClick={handleExportFeesExcel}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-md flex items-center space-x-2 text-xs cursor-pointer"
@@ -436,153 +323,7 @@ export default function AdminFeesPage() {
         </div>
       )}
 
-      {/* Add Student Fee Modal */}
-      {showAddFeeModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 text-xs">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => {
-                setShowAddFeeModal(false);
-                setAddFeeStudentId('');
-                setSelectedFeeCourses({});
-                setInitialPayment('');
-              }}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
 
-            <h3 className="text-lg font-black text-slate-900">Add Student Fee</h3>
-
-            <form onSubmit={handleAddFeeSubmit} className="space-y-4">
-              {/* 1. Student Selection */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Select Student *</label>
-                <select
-                  required
-                  value={addFeeStudentId}
-                  onChange={(e) => handleSelectStudentForFee(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none cursor-pointer"
-                >
-                  <option value="">-- Choose Student --</option>
-                  {studentsList.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.email})</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 2. Course Selection (Only courses allocated to student) */}
-              {addFeeStudentId && (
-                <div className="space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                  <div className="text-xs font-black text-slate-800 border-b border-slate-200 pb-2 flex justify-between">
-                    <span>Allocated Courses & Course-Specific Fees</span>
-                    <span className="text-blue-600">{Object.keys(selectedFeeCourses).length} Selected</span>
-                  </div>
-
-                  {(() => {
-                    const targetStudent = studentsList.find(s => s.id === addFeeStudentId);
-                    const cBatches = targetStudent?.courseBatches || (targetStudent?.course ? [{ course: targetStudent.course }] : []);
-                    
-                    if (cBatches.length === 0) {
-                      return <div className="text-xs text-slate-400 font-semibold italic">No courses allocated to this student.</div>;
-                    }
-
-                    return cBatches.map((cb, idx) => {
-                      const cTitle = typeof cb === 'string' ? cb : cb.course;
-                      const isSelected = selectedFeeCourses[cTitle] !== undefined;
-
-                      return (
-                        <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-white rounded-xl border border-slate-200">
-                          <label className="flex items-center space-x-2 text-xs font-bold text-slate-800 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleFeeCourse(cTitle)}
-                              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                            />
-                            <span>{cTitle}</span>
-                          </label>
-
-                          {isSelected && (
-                            <div className="flex items-center space-x-1.5 self-end sm:self-auto">
-                              <span className="text-[11px] font-bold text-slate-500">Fee (₹):</span>
-                              <MoneyInput
-                                required
-                                placeholder="Fee"
-                                value={selectedFeeCourses[cTitle] || ''}
-                                onChange={(e) => handleFeeCourseAmountChange(cTitle, e.target.value)}
-                                className="w-28 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black text-slate-900 focus:bg-white"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              )}
-
-              {/* 3. Automatic Calculation Summary */}
-              {Object.keys(selectedFeeCourses).length > 0 && (() => {
-                const { totalFee, paid, due, status } = calculateAddFeeTotals();
-                return (
-                  <div className="bg-slate-900 text-white p-4 rounded-2xl space-y-2 text-xs">
-                    <div className="flex justify-between border-b border-slate-800 pb-1.5">
-                      <span className="font-semibold text-slate-400">Number of Selected Courses:</span>
-                      <span className="font-bold">{Object.keys(selectedFeeCourses).length}</span>
-                    </div>
-
-                    <div className="flex justify-between border-b border-slate-800 pb-1.5">
-                      <span className="font-semibold text-slate-400">Total Course Fee:</span>
-                      <span className="font-black text-emerald-400 text-sm">₹{totalFee.toLocaleString()}</span>
-                    </div>
-
-                    {/* Initial Payment Field */}
-                    <div className="space-y-1 pt-1">
-                      <label className="block text-[11px] font-bold text-slate-300">Initial Payment Amount (₹)</label>
-                      <MoneyInput
-                        placeholder="Enter upfront payment (e.g. 3000)"
-                        value={initialPayment}
-                        onChange={(e) => setInitialPayment(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-
-                    <div className="flex justify-between items-center pt-2 border-t border-slate-800">
-                      <div>
-                        <div className="text-[10px] text-slate-400 uppercase font-bold">Paid Amount</div>
-                        <div className="font-black text-emerald-400">₹{paid.toLocaleString()}</div>
-                      </div>
-
-                      <div>
-                        <div className="text-[10px] text-slate-400 uppercase font-bold">Due Amount</div>
-                        <div className="font-black text-rose-400">₹{due.toLocaleString()}</div>
-                      </div>
-
-                      <div>
-                        <div className="text-[10px] text-slate-400 uppercase font-bold">Status</div>
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
-                          status === 'Paid' ? 'bg-emerald-500 text-slate-950' : 'bg-amber-500 text-slate-950'
-                        }`}>
-                          {status}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <button
-                type="submit"
-                disabled={!addFeeStudentId || Object.keys(selectedFeeCourses).length === 0}
-                className="w-full bg-[#0F52BA] hover:bg-blue-700 disabled:opacity-50 text-white font-black py-3 rounded-xl shadow-md text-xs cursor-pointer"
-              >
-                Create Fee Record
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Delete Fee Record Confirmation Modal */}
       <ConfirmModal

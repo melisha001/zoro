@@ -1,600 +1,701 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Filter, Users, XCircle, TrendingUp, RefreshCw, X, BookOpen, Layers, User, MessageSquare, Save, Trophy } from 'lucide-react';
-import { getAttendanceRecords, getAttendanceRemarks, saveAttendanceRemark } from '../../api/attendanceApi';
-import { getStudents } from '../../api/userApi';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ArrowLeft, Users, UserCheck, Calendar, Download, BookOpen, Layers, User, Check, X as XIcon, Clock } from 'lucide-react';
+import { getAttendanceRecords, recordAttendance, recordBatchAttendance } from '../../api/attendanceApi';
+import { getStudents, getTrainers } from '../../api/userApi';
 import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
-import { getCompetitionRegistrations, getCompetitionAttendance, saveCompetitionAttendance } from '../../api/competitionRegistrationApi';
+import { getSchedules } from '../../api/scheduleApi';
+import { exportToExcel } from '../../utils/excelExporter';
+import { useDialog } from '../../context/DialogContext';
 
 export default function AdminAttendancePage({ setActiveScreen }) {
+  const { showSuccess, showError } = useDialog();
+  const [activeTab, setActiveTab] = useState('students'); // 'students' | 'trainers'
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedCourse, setSelectedCourse] = useState('');
+  const [selectedBatch, setSelectedBatch] = useState('');
+
   const [allRecords, setAllRecords] = useState([]);
-  const [filteredRecords, setFilteredRecords] = useState([]);
-  const [allStudents, setAllStudents] = useState([]);
-  const [allCourses, setAllCourses] = useState([]);
-  const [allBatches, setAllBatches] = useState([]);
-  const [allRemarks, setAllRemarks] = useState([]);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-
-  const [compRegistrations, setCompRegistrations] = useState([]);
-  const [compAttStatus, setCompAttStatus] = useState({}); // { [regId]: 'Present' | 'Absent' | 'Late' }
-
-  const [remarksState, setRemarksState] = useState({}); // { `${studentName}_${course}_${batch}`: string }
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
-
-  const [modeTab, setModeTab] = useState('Online'); // 'Online' | 'Recorded' | 'Hybrid' | 'Competitions'
-  const [filters, setFilters] = useState({
-    date: '',
-    course: ''
-  });
+  const [students, setStudents] = useState([]);
+  const [trainers, setTrainers] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [batches, setBatches] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
+    setLoading(true);
     try {
-      const attRes = await getAttendanceRecords();
-      const recordsData = attRes.data || [];
-      setAllRecords(recordsData);
-      setFilteredRecords(recordsData);
+      const [attRes, stdRes, trnRes, crsRes, bRes, schRes] = await Promise.all([
+        getAttendanceRecords(),
+        getStudents(),
+        getTrainers(),
+        getCourses(),
+        getBatches(),
+        getSchedules()
+      ]);
 
-      const stdRes = await getStudents();
-      const loadedStudents = stdRes.data || [];
-      setAllStudents(loadedStudents);
-
-      const crsRes = await getCourses();
-      setAllCourses(crsRes.data || []);
-
-      const bRes = await getBatches();
-      setAllBatches(bRes.data || []);
-
-      const remRes = await getAttendanceRemarks();
-      const loadedRemarks = remRes.data || [];
-      setAllRemarks(loadedRemarks);
-
-      const compRegRes = await getCompetitionRegistrations();
-      setCompRegistrations(compRegRes.data || []);
-
-      const compAttRes = await getCompetitionAttendance();
-      const attMap = {};
-      (compAttRes.data || []).forEach(r => {
-        attMap[r.registrationId || r.studentId] = r.status;
-      });
-      setCompAttStatus(attMap);
-
-      const rState = {};
-      loadedRemarks.forEach(rem => {
-        const key = `${(rem.studentName || '').toLowerCase().trim()}_${rem.course}_${rem.batch}`;
-        rState[key] = rem.remark;
-      });
-      setRemarksState(rState);
-
+      setAllRecords(attRes.data || []);
+      setStudents(stdRes.data || []);
+      setTrainers(trnRes.data || []);
+      setCourses(crsRes.data || []);
+      setBatches(bRes.data || []);
+      setSchedules(schRes.data || []);
     } catch (err) {
       console.error('Failed to load attendance data:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleApplyFilters = () => {
-    let result = [...allRecords];
+  // Batches filtered by selected course
+  const availableBatches = useMemo(() => {
+    if (!selectedCourse) return batches;
+    return batches.filter(b => b.courseName === selectedCourse || b.courseId === selectedCourse);
+  }, [batches, selectedCourse]);
 
-    if (filters.date) {
-      result = result.filter(r => r.date === filters.date);
-    }
-    if (filters.course) {
-      result = result.filter(r => r.course?.toLowerCase().includes(filters.course.toLowerCase()));
-    }
+  // Filter students based on course and batch
+  const filteredStudents = useMemo(() => {
+    return students.filter(s => {
+      if (selectedCourse) {
+        let inCourse = false;
+        if (s.courseBatches && Array.isArray(s.courseBatches)) {
+          inCourse = s.courseBatches.some(cb => cb.course === selectedCourse || cb.courseId === selectedCourse);
+        } else if (s.course) {
+          inCourse = s.course.toLowerCase().includes(selectedCourse.toLowerCase());
+        }
+        if (!inCourse) return false;
+      }
 
-    setFilteredRecords(result);
+      if (selectedBatch) {
+        let inBatch = false;
+        if (s.courseBatches && Array.isArray(s.courseBatches)) {
+          inBatch = s.courseBatches.some(cb => cb.batch === selectedBatch || cb.batchId === selectedBatch);
+        } else if (s.batch) {
+          inBatch = s.batch === selectedBatch;
+        }
+        if (!inBatch) return false;
+      }
+
+      return true;
+    });
+  }, [students, selectedCourse, selectedBatch]);
+
+  // Map student attendance for selected date
+  const studentAttendanceMap = useMemo(() => {
+    const map = {};
+    allRecords.forEach(r => {
+      if (r.date === selectedDate) {
+        if (r.studentId) map[r.studentId] = r.status;
+        if (r.studentName) map[r.studentName.toLowerCase().trim()] = r.status;
+      }
+    });
+    return map;
+  }, [allRecords, selectedDate]);
+
+  // Handler for student attendance toggle
+  const handleSetStudentAttendance = async (student, newStatus) => {
+    const record = {
+      studentId: student.id,
+      studentName: student.name,
+      courseId: student.courseBatches?.[0]?.courseId || student.course || selectedCourse || null,
+      batchId: student.courseBatches?.[0]?.batchId || student.batch || selectedBatch || null,
+      date: selectedDate,
+      status: newStatus,
+      recordedBy: 'Admin'
+    };
+
+    try {
+      const res = await recordAttendance(record);
+      if (res.success) {
+        setAllRecords(prev => {
+          const filtered = prev.filter(r => !(r.date === selectedDate && (r.studentId === student.id || (r.studentName && r.studentName.toLowerCase().trim() === student.name.toLowerCase().trim()))));
+          return [...filtered, res.data || { ...record, id: `att_${Date.now()}` }];
+        });
+      }
+    } catch (err) {
+      console.error('Failed to update student attendance:', err);
+    }
   };
 
-  const handleResetFilters = () => {
-    setFilters({ date: '', course: '' });
-    setFilteredRecords(allRecords);
-  };
-
-  const handleRemarkChange = (key, text) => {
-    setRemarksState(prev => ({
-      ...prev,
-      [key]: text
+  // Bulk actions for students
+  const handleBulkStudentAttendance = async (status) => {
+    if (filteredStudents.length === 0) return;
+    setSaving(true);
+    const records = filteredStudents.map(s => ({
+      studentId: s.id,
+      studentName: s.name,
+      courseId: s.courseBatches?.[0]?.courseId || s.course || selectedCourse || null,
+      batchId: s.courseBatches?.[0]?.batchId || s.batch || selectedBatch || null,
+      date: selectedDate,
+      status,
+      recordedBy: 'Admin'
     }));
-  };
 
-  const handleSaveAdminRemark = async (studentName, courseTitle, batchName, _trainerName) => {
-    const key = `${(studentName || '').toLowerCase().trim()}_${courseTitle}_${batchName}`;
-    const remarkText = remarksState[key] || '';
-
-    await saveAttendanceRemark(studentName, courseTitle, batchName, remarkText, 'Admin', 'admin', 'Admin');
-    setSaveSuccessMsg(`Attendance remark updated for ${studentName}!`);
-    setTimeout(() => setSaveSuccessMsg(''), 3000);
-    const remRes = await getAttendanceRemarks();
-    setAllRemarks(remRes.data || []);
-  };
-
-  const handleToggleCompAttendance = async (regId, compId, studentId, batchName, status) => {
-    setCompAttStatus(prev => ({ ...prev, [regId]: status }));
-    await saveCompetitionAttendance([{
-      registrationId: regId,
-      competitionId: compId,
-      studentId: studentId,
-      batchName: batchName,
-      status: status,
-      date: new Date().toISOString().split('T')[0]
-    }]);
-    setSaveSuccessMsg(`Competition attendance marked as ${status}!`);
-    setTimeout(() => setSaveSuccessMsg(''), 2500);
-  };
-
-  const totalStudentsCount = allStudents.length || filteredRecords.length || 1;
-  const presentCount = filteredRecords.filter(r => r.status?.toUpperCase() === 'PRESENT').length;
-  const absentCount = filteredRecords.filter(r => r.status?.toUpperCase() === 'ABSENT').length;
-  const attendanceRate = totalStudentsCount > 0 ? Math.round((presentCount / totalStudentsCount) * 100) : 0;
-
-  const availableCourseNames = Array.from(new Set([
-    ...allCourses.map(c => c.title),
-    ...allRecords.map(r => r.course).filter(Boolean)
-  ]));
-
-  const activeCourseBlocks = availableCourseNames.filter(courseTitle => {
-    const courseObj = allCourses.find(c => c.title === courseTitle);
-    const courseMode = courseObj?.mode || 'Online';
-
-    const isOnlineOrHybrid = courseMode === 'Online' || courseMode === 'Hybrid';
-    if ((modeTab === 'Online' || modeTab === 'Hybrid') && !isOnlineOrHybrid) return false;
-    if (modeTab === 'Recorded' && isOnlineOrHybrid) return false;
-
-    if (filters.course && !courseTitle.toLowerCase().includes(filters.course.toLowerCase())) {
-      return false;
+    try {
+      const res = await recordBatchAttendance(records);
+      if (res.success) {
+        await showSuccess(`Marked all ${filteredStudents.length} students as ${status}`, 'Attendance Updated');
+        const updated = await getAttendanceRecords();
+        setAllRecords(updated.data || []);
+      } else {
+        await showError(res?.message || 'Failed to update attendance', 'Update Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to update attendance', 'Update Failed');
+    } finally {
+      setSaving(false);
     }
-    return true;
-  });
+  };
 
-  // Group Competition Registrations by Competition Name
-  const groupedCompRegs = compRegistrations.reduce((acc, reg) => {
-    if (reg.registrationStatus === 'Cancelled') return acc;
-    const compKey = reg.competitionName || 'General Competition';
+  // Export students attendance
+  const handleExportStudents = () => {
+    const headers = ['Date', 'Student Name', 'Email', 'Phone', 'Course & Batch', 'Attendance Status'];
+    const rows = filteredStudents.map(s => {
+      const status = studentAttendanceMap[s.id] || studentAttendanceMap[s.name?.toLowerCase().trim()] || 'Absent';
+      const cStr = s.courseBatches?.map(cb => `${cb.course} (${cb.batch})`).join('; ') || s.course || 'General';
+      return [selectedDate, s.name, s.email, s.phone || '', cStr, status];
+    });
+    exportToExcel(`Student_Attendance_${selectedDate}.xlsx`, 'Student Attendance', headers, rows);
+  };
 
-    if (!acc[compKey]) acc[compKey] = [];
-    acc[compKey].push(reg);
-    return acc;
-  }, {});
+  // --- TRAINERS VIEW ---
+  // Schedules on selected date
+  const daySchedules = useMemo(() => {
+    return schedules.filter(sch => sch.date === selectedDate);
+  }, [schedules, selectedDate]);
+
+  // Map trainer attendance by scheduleId or trainer
+  const trainerAttendanceMap = useMemo(() => {
+    const map = {};
+    allRecords.forEach(r => {
+      if (r.date === selectedDate) {
+        if (r.scheduleId) map[r.scheduleId] = r.status;
+        if (r.studentId) map[r.studentId] = r.status;
+        if (r.studentName) map[r.studentName.toLowerCase().trim()] = r.status;
+      }
+    });
+    return map;
+  }, [allRecords, selectedDate]);
+
+  // Handler for trainer attendance toggle
+  const handleSetTrainerAttendance = async (schedule, newStatus) => {
+    const trainerUser = trainers.find(t => t.id === schedule.trainerId || t.name === schedule.trainer);
+    const trainerId = schedule.trainerId || trainerUser?.id || schedule.trainer;
+    const trainerName = schedule.trainer || trainerUser?.name || 'Trainer';
+
+    const record = {
+      scheduleId: schedule.id,
+      studentId: trainerId,
+      studentName: trainerName,
+      courseId: schedule.courseId || schedule.course,
+      batchId: schedule.batchId || schedule.batch,
+      date: selectedDate,
+      status: newStatus,
+      recordedBy: 'Admin',
+      remarks: 'Trainer Class Attendance'
+    };
+
+    try {
+      const res = await recordAttendance(record);
+      if (res.success) {
+        setAllRecords(prev => {
+          const filtered = prev.filter(r => !(r.date === selectedDate && (r.scheduleId === schedule.id || r.studentId === trainerId)));
+          return [...filtered, res.data || { ...record, id: `att_trn_${Date.now()}` }];
+        });
+      }
+    } catch (err) {
+      console.error('Failed to update trainer attendance:', err);
+    }
+  };
+
+  // Bulk actions for trainers
+  const handleBulkTrainerAttendance = async (status) => {
+    if (daySchedules.length === 0) return;
+    setSaving(true);
+    const records = daySchedules.map(sch => {
+      const trainerUser = trainers.find(t => t.id === sch.trainerId || t.name === sch.trainer);
+      const trainerId = sch.trainerId || trainerUser?.id || sch.trainer;
+      const trainerName = sch.trainer || trainerUser?.name || 'Trainer';
+      return {
+        scheduleId: sch.id,
+        studentId: trainerId,
+        studentName: trainerName,
+        courseId: sch.courseId || sch.course,
+        batchId: sch.batchId || sch.batch,
+        date: selectedDate,
+        status,
+        recordedBy: 'Admin',
+        remarks: 'Trainer Class Attendance'
+      };
+    });
+
+    try {
+      const res = await recordBatchAttendance(records);
+      if (res.success) {
+        await showSuccess(`Marked all ${daySchedules.length} trainer sessions as ${status}`, 'Attendance Updated');
+        const updated = await getAttendanceRecords();
+        setAllRecords(updated.data || []);
+      } else {
+        await showError(res?.message || 'Failed to update trainer attendance', 'Update Failed');
+      }
+    } catch (err) {
+      await showError(err?.message || 'Failed to update trainer attendance', 'Update Failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Export trainer attendance
+  const handleExportTrainers = () => {
+    const headers = ['Date', 'Trainer Name', 'Course', 'Batch', 'Session Time', 'Topic', 'Attendance Status'];
+    const rows = daySchedules.map(sch => {
+      const status = trainerAttendanceMap[sch.id] || trainerAttendanceMap[sch.trainerId] || trainerAttendanceMap[sch.trainer?.toLowerCase().trim()] || 'Absent';
+      return [selectedDate, sch.trainer || 'Unassigned', sch.course || '', sch.batch || '', sch.time || '', sch.title || '', status];
+    });
+    exportToExcel(`Trainer_Attendance_${selectedDate}.xlsx`, 'Trainer Attendance', headers, rows);
+  };
+
+  // KPI Calculations
+  const studentPresentCount = filteredStudents.filter(s => (studentAttendanceMap[s.id] || studentAttendanceMap[s.name?.toLowerCase().trim()] || '').toUpperCase() === 'PRESENT').length;
+  const studentLateCount = filteredStudents.filter(s => (studentAttendanceMap[s.id] || studentAttendanceMap[s.name?.toLowerCase().trim()] || '').toUpperCase() === 'LATE').length;
+  const studentAbsentCount = filteredStudents.length - studentPresentCount - studentLateCount;
+  const studentRate = filteredStudents.length > 0 ? Math.round((studentPresentCount / filteredStudents.length) * 100) : 0;
+
+  const trainerPresentCount = daySchedules.filter(sch => (trainerAttendanceMap[sch.id] || trainerAttendanceMap[sch.trainerId] || trainerAttendanceMap[sch.trainer?.toLowerCase().trim()] || '').toUpperCase() === 'PRESENT').length;
+  const trainerAbsentCount = daySchedules.length - trainerPresentCount;
+  const trainerRate = daySchedules.length > 0 ? Math.round((trainerPresentCount / daySchedules.length) * 100) : 0;
 
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
-      <button 
-        onClick={() => setActiveScreen('admin-dash')}
-        className="inline-flex items-center space-x-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Back to Admin Dashboard</span>
-      </button>
-
-      {saveSuccessMsg && (
-        <div className="p-4 bg-emerald-600 text-white rounded-2xl text-xs font-bold shadow-md flex items-center justify-between">
-          <span>{saveSuccessMsg}</span>
-          <button onClick={() => setSaveSuccessMsg('')} className="p-1 hover:bg-emerald-700 rounded-lg">✕</button>
-        </div>
-      )}
-
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Organization Attendance Reports</h1>
-          <p className="text-xs text-slate-500 font-medium">Subject → Batch → Student hierarchy across Online, Recorded, Hybrid modes, and Competitions.</p>
-        </div>
-
-        <div className="flex items-center space-x-3">
           <button 
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
-              isFilterOpen ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-            }`}
+            onClick={() => setActiveScreen ? setActiveScreen('admin-dash') : null}
+            className="inline-flex items-center space-x-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer mb-2"
           >
-            <Filter className="w-3.5 h-3.5" />
-            <span>Filter (Date & Course)</span>
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Admin Dashboard</span>
           </button>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Organization Attendance Management</h1>
+          <p className="text-xs text-slate-500 font-medium">Daily attendance tracking for Students and Trainers.</p>
+        </div>
+
+        {/* Export Button */}
+        <div className="flex items-center space-x-3">
+          {activeTab === 'students' ? (
+            <button
+              onClick={handleExportStudents}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2.5 rounded-xl shadow-xs flex items-center space-x-2 text-xs cursor-pointer transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export Students (.xlsx)</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleExportTrainers}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2.5 rounded-xl shadow-xs flex items-center space-x-2 text-xs cursor-pointer transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export Trainers (.xlsx)</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* TOP FOUR SWITCHING HEADINGS/TABS: Online, Recorded, Hybrid, Competitions */}
-      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap gap-2">
-        {['Online', 'Recorded', 'Hybrid', 'Competitions'].map((tab) => {
-          const isActive = modeTab === tab;
-          return (
-            <button
-              key={tab}
-              onClick={() => setModeTab(tab)}
-              className={`flex-1 min-w-[120px] py-3 px-5 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 cursor-pointer ${
-                isActive
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <span>{tab} Attendance</span>
-            </button>
-          );
-        })}
+      {/* TOP SWITCH: [Students | Trainers] */}
+      <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs flex max-w-md">
+        <button
+          onClick={() => setActiveTab('students')}
+          className={`flex-1 py-3 px-6 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 cursor-pointer ${
+            activeTab === 'students'
+              ? 'bg-[#0F52BA] text-white shadow-md'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Students Attendance</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('trainers')}
+          className={`flex-1 py-3 px-6 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 cursor-pointer ${
+            activeTab === 'trainers'
+              ? 'bg-[#0F52BA] text-white shadow-md'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <UserCheck className="w-4 h-4" />
+          <span>Trainers Attendance</span>
+        </button>
       </div>
 
-      {/* COMPETITIONS ATTENDANCE MODE TAB VIEW */}
-      {modeTab === 'Competitions' ? (
-        <div className="space-y-8">
-          {Object.keys(groupedCompRegs).length === 0 ? (
-            <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-2">
-              <Trophy className="w-10 h-10 text-slate-300 mx-auto" />
-              <h3 className="text-base font-bold text-slate-700">No competition attendance records available</h3>
-              <p className="text-xs text-slate-400">Participants registered for active competitions will appear here grouped by competition.</p>
+      {/* ===================== STUDENTS VIEW ===================== */}
+      {activeTab === 'students' && (
+        <div className="space-y-6">
+          {/* Filters Bar */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div>
+              <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                <span>Attendance Date</span>
+              </label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
+              />
             </div>
-          ) : (
-            Object.entries(groupedCompRegs).map(([compName, studentList]) => (
-              <div key={compName} className="bg-white rounded-3xl border border-slate-200 shadow-md overflow-hidden space-y-4 p-6 sm:p-8">
-                
-                {/* Competition Header */}
-                <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-xs">
-                      <Trophy className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-                        COMPETITION EVENT
-                      </span>
-                      <h2 className="text-xl font-black text-slate-900 tracking-tight mt-0.5">{compName}</h2>
-                    </div>
-                  </div>
-                  <div className="text-xs font-bold text-slate-600">
-                    Registered Participants: <strong className="text-blue-900">{studentList.length}</strong>
-                  </div>
-                </div>
 
-                {/* Registered Participants Competition Attendance Table */}
-                <div className="overflow-x-auto bg-white rounded-xl border border-slate-200/80 shadow-2xs">
-                  <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider">
-                        <th className="py-3 px-4">Participant Name</th>
-                        <th className="py-3 px-4">Email / Phone</th>
-                        <th className="py-3 px-4">Payment Status</th>
-                        <th className="py-3 px-4 text-right">Attendance Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                      {studentList.map((reg) => {
-                        const currAtt = compAttStatus[reg.id] || 'Present';
+            <div>
+              <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                <span>Filter by Course</span>
+              </label>
+              <select
+                value={selectedCourse}
+                onChange={(e) => {
+                  setSelectedCourse(e.target.value);
+                  setSelectedBatch('');
+                }}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
+              >
+                <option value="">All Courses</option>
+                {courses.map(c => (
+                  <option key={c.id} value={c.title}>{c.title}</option>
+                ))}
+              </select>
+            </div>
 
-                        return (
-                          <tr key={reg.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-3.5 px-4 font-black text-slate-900">
-                              {reg.studentName}
-                            </td>
-                            <td className="py-3.5 px-4 font-semibold text-slate-700">
-                              {reg.studentEmail} {reg.studentPhone ? `(${reg.studentPhone})` : ''}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
-                                reg.paymentStatus === 'Paid'
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                  : 'bg-blue-100 text-blue-800 border border-blue-200'
-                              }`}>
-                                {reg.paymentStatus}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 text-right space-x-2">
-                              {['Present', 'Absent', 'Late'].map((st) => (
+            <div>
+              <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-blue-600" />
+                <span>Filter by Batch</span>
+              </label>
+              <select
+                value={selectedBatch}
+                onChange={(e) => setSelectedBatch(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
+              >
+                <option value="">All Batches</option>
+                {availableBatches.map(b => (
+                  <option key={b.id} value={b.name}>{b.name} ({b.courseName})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* KPI Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-blue-600">
+              <div className="text-xs font-bold text-slate-500">Total Filtered Students</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">{filteredStudents.length}</div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-emerald-600">
+              <div className="text-xs font-bold text-slate-500">Present Today</div>
+              <div className="text-2xl font-black text-emerald-700 mt-1">{studentPresentCount}</div>
+              <div className="text-[10px] text-emerald-600 font-bold mt-0.5">{studentRate}% Attendance Rate</div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-amber-500">
+              <div className="text-xs font-bold text-slate-500">Late / Partial</div>
+              <div className="text-2xl font-black text-amber-700 mt-1">{studentLateCount}</div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-rose-500">
+              <div className="text-xs font-bold text-slate-500">Absent</div>
+              <div className="text-2xl font-black text-rose-700 mt-1">{studentAbsentCount}</div>
+            </div>
+          </div>
+
+          {/* Bulk Actions Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div className="text-xs font-bold text-slate-700">
+              Showing <strong className="text-blue-900">{filteredStudents.length}</strong> students for <strong>{selectedDate}</strong>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                disabled={saving || filteredStudents.length === 0}
+                onClick={() => handleBulkStudentAttendance('Present')}
+                className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1 cursor-pointer transition-colors"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Mark All Present</span>
+              </button>
+
+              <button
+                disabled={saving || filteredStudents.length === 0}
+                onClick={() => handleBulkStudentAttendance('Absent')}
+                className="bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-800 font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1 cursor-pointer transition-colors"
+              >
+                <XIcon className="w-3.5 h-3.5" />
+                <span>Mark All Absent</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Students Table */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden">
+            {loading ? (
+              <div className="p-12 text-center text-xs font-bold text-slate-400">Loading attendance records...</div>
+            ) : filteredStudents.length === 0 ? (
+              <div className="p-12 text-center text-xs font-bold text-slate-400">No students match the selected course / batch filters.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider">
+                      <th className="py-3 px-4">Student</th>
+                      <th className="py-3 px-4">Contact</th>
+                      <th className="py-3 px-4">Course & Batch</th>
+                      <th className="py-3 px-4">Current Status</th>
+                      <th className="py-3 px-4 text-right">Attendance Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {filteredStudents.map(student => {
+                      const rawStatus = studentAttendanceMap[student.id] || studentAttendanceMap[student.name?.toLowerCase().trim()] || 'Absent';
+                      const currentStatus = rawStatus.toUpperCase();
+
+                      return (
+                        <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3.5 px-4 font-black text-slate-900">
+                            {student.name}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-600 font-semibold">
+                            {student.email}
+                            {student.phone && <div className="text-[10px] text-slate-400">{student.phone}</div>}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {student.courseBatches?.length > 0 ? (
+                              <div className="space-y-0.5">
+                                {student.courseBatches.map((cb, i) => (
+                                  <span key={i} className="inline-block bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold mr-1">
+                                    {cb.course} ({cb.batch || 'Unassigned'})
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 italic">{student.course || 'No course assigned'}</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                              currentStatus === 'PRESENT'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : currentStatus === 'LATE'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : 'bg-rose-100 text-rose-800 border border-rose-200'
+                            }`}>
+                              {currentStatus === 'PRESENT' ? 'Present' : currentStatus === 'LATE' ? 'Late' : 'Absent'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right space-x-1.5">
+                            {['Present', 'Absent', 'Late'].map(statusOption => {
+                              const isSelected = currentStatus === statusOption.toUpperCase();
+                              return (
                                 <button
-                                  key={st}
-                                  onClick={() => handleToggleCompAttendance(reg.id, reg.competitionId, reg.studentId, 'Public', st)}
+                                  key={statusOption}
+                                  onClick={() => handleSetStudentAttendance(student, statusOption)}
                                   className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                    currAtt === st
-                                      ? st === 'Present' ? 'bg-emerald-600 text-white shadow-xs' : st === 'Absent' ? 'bg-rose-600 text-white shadow-xs' : 'bg-amber-600 text-white shadow-xs'
+                                    isSelected
+                                      ? statusOption === 'Present'
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : statusOption === 'Absent'
+                                        ? 'bg-rose-600 text-white shadow-xs'
+                                        : 'bg-amber-600 text-white shadow-xs'
                                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
                                   }`}
                                 >
-                                  {st}
+                                  {statusOption}
                                 </button>
-                              ))}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-              </div>
-            ))
-          )}
-        </div>
-      ) : (
-        <>
-          {/* FILTER DRAWER */}
-          {isFilterOpen && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-blue-600" />
-                  Filter Attendance Reports
-                </h3>
-                <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 hover:text-slate-700">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-slate-600 font-bold mb-1">Select Date</label>
-                  <input
-                    type="date"
-                    value={filters.date}
-                    onChange={(e) => setFilters({ ...filters, date: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-600 font-bold mb-1">Select Course Name</label>
-                  <select
-                    value={filters.course}
-                    onChange={(e) => setFilters({ ...filters, course: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600 font-medium"
-                  >
-                    <option value="">All Courses</option>
-                    {availableCourseNames.map((c, i) => (
-                      <option key={i} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  onClick={handleResetFilters}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Reset Filter</span>
-                </button>
-                <button
-                  onClick={handleApplyFilters}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs cursor-pointer"
-                >
-                  Apply Filter
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Top Overall Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-blue-600">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs font-bold text-slate-500">Present Count</p>
-                  <p className="text-xl font-black text-slate-900 mt-1">{presentCount} / {totalStudentsCount} <span className="text-xs font-bold text-slate-500">Students</span></p>
-                  <p className="text-[10px] text-blue-600 font-bold mt-1">Verified Session Ratio</p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
-                  <Users className="w-5 h-5" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-600">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs font-bold text-slate-500">Attendance Rate</p>
-                  <p className="text-2xl font-black text-emerald-700 mt-1">{attendanceRate}%</p>
-                  <p className="text-[10px] text-emerald-600 font-bold mt-1">({presentCount} / {totalStudentsCount} Present)</p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
-                  <TrendingUp className="w-5 h-5" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-teal-500">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs font-bold text-slate-500">Active Courses</p>
-                  <p className="text-2xl font-black text-teal-700 mt-1">{availableCourseNames.length}</p>
-                  <p className="text-[10px] text-teal-600 font-bold mt-1">Course Programs</p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-teal-50 text-teal-600">
-                  <BookOpen className="w-5 h-5" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-rose-500">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs font-bold text-slate-500">Absent Count</p>
-                  <p className="text-2xl font-black text-rose-700 mt-1">{absentCount}</p>
-                  <p className="text-[10px] text-rose-600 font-bold mt-1">Absentees to Follow Up</p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600">
-                  <XCircle className="w-5 h-5" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ATTENDANCE HIERARCHY: SUBJECT / COURSE -> BATCH -> STUDENTS */}
-          <div className="space-y-8">
-            {activeCourseBlocks.length === 0 ? (
-              <div className="bg-white p-8 text-center rounded-3xl border border-slate-200 text-xs font-bold text-slate-400">
-                No course attendance records found.
-              </div>
-            ) : (
-              activeCourseBlocks.map((courseTitle) => {
-                const courseBatches = allBatches.filter(b => b.courseName === courseTitle && b.status === 'Active');
-
-                return (
-                  <div key={courseTitle} className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden space-y-6 p-6 sm:p-8">
-                    
-                    {/* 1. SUBJECT / COURSE LEVEL HEADER */}
-                    <div className="flex items-center space-x-3 border-b border-slate-200 pb-4">
-                      <div className="p-3 bg-[#0F52BA] text-white rounded-2xl shadow-xs">
-                        <BookOpen className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-                          SUBJECT / COURSE
-                        </span>
-                        <h2 className="text-xl font-black text-slate-900 tracking-tight mt-0.5">{courseTitle}</h2>
-                      </div>
-                    </div>
-
-                    {/* 2. BATCHES UNDER THIS SUBJECT */}
-                    <div className="space-y-6 pl-2 sm:pl-4 border-l-2 border-slate-200">
-                      {courseBatches.length === 0 ? (
-                        <div className="p-4 text-center text-xs font-bold text-slate-400 italic bg-slate-50/50 rounded-2xl border border-slate-200/60">
-                          No active batches created for this course yet.
-                        </div>
-                      ) : courseBatches.map((batchObj) => {
-                          const batchName = batchObj.name;
-                          const trainerName = batchObj.trainerName || 'Unassigned';
-
-                          const batchStudents = allStudents.filter(s => {
-                            if (s.courseBatches && Array.isArray(s.courseBatches)) {
-                              return s.courseBatches.some(cb => Boolean(cb.batchId && batchObj.id && cb.batchId === batchObj.id));
-                            }
-                            return false;
-                          });
-
-                          return (
-                            <div key={batchName || batchObj.id} className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 space-y-4 shadow-xs">
-                              
-                              {/* BATCH HEADER */}
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
-                                <div className="flex items-center space-x-2.5">
-                                  <Layers className="w-4 h-4 text-blue-600" />
-                                  <h3 className="text-sm font-extrabold text-slate-900">Batch: {batchName}</h3>
-                                  <span className="text-xs text-slate-500 font-semibold inline-flex items-center gap-1">
-                                    • <User className="w-3.5 h-3.5 text-slate-400" /> Trainer: <strong className="text-slate-800">{trainerName}</strong>
-                                  </span>
-                                </div>
-
-                                <div className="text-xs font-bold text-slate-600">
-                                  Total Batch Students: <strong className="text-blue-900">{batchStudents.length}</strong>
-                                </div>
-                              </div>
-
-                              {/* 3. STUDENTS TABLE UNDER THIS BATCH */}
-                              {batchStudents.length === 0 ? (
-                                <div className="p-4 text-center text-xs font-bold text-slate-400 italic bg-white rounded-xl border border-slate-200/80">
-                                  No students enrolled in this batch yet.
-                                </div>
-                              ) : (
-                                <div className="overflow-x-auto bg-white rounded-xl border border-slate-200/80 shadow-2xs">
-                                  <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-                                    <thead>
-                                      <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider">
-                                        <th className="py-3 px-4">Student Name</th>
-                                        <th className="py-3 px-4">Present / Total</th>
-                                        <th className="py-3 px-4">Attendance %</th>
-                                        <th className="py-3 px-4">Status</th>
-                                        <th className="py-3 px-4">Attendance Remarks (Trainer / Admin Shared)</th>
-                                        <th className="py-3 px-4 text-right">Save Remark</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                                      {batchStudents.map((std, sIdx) => {
-                                    const sName = std.name || 'Student';
-                                    const key = `${sName.toLowerCase().trim()}_${courseTitle}_${batchName}`;
-                                    const currentRemark = remarksState[key] || '';
-                                    const studentRecords = (allRecords || []).filter(r => 
-                                      (r.studentId === std.id || (r.studentName && sName && r.studentName.toLowerCase().trim() === sName.toLowerCase().trim())) &&
-                                      (!r.batch || r.batch === batchName || r.batchId === batchObj.id)
-                                    );
-                                    const presentSessions = studentRecords.filter(r => r.status?.toUpperCase() === 'PRESENT').length;
-                                    const totalSessions = studentRecords.length;
-                                    const pct = totalSessions > 0 ? Math.round((presentSessions / totalSessions) * 100) : 0;
-
-                                    return (
-                                      <tr key={std.id || sIdx} className="hover:bg-slate-50 transition-colors">
-                                        <td className="py-3.5 px-4 font-black text-slate-900">
-                                          {sName}
-                                          {std.email && <div className="text-[10px] text-slate-400 font-normal">{std.email}</div>}
-                                        </td>
-                                        <td className="py-3.5 px-4 font-extrabold text-slate-800 font-mono">
-                                          {presentSessions} / {totalSessions}
-                                        </td>
-                                        <td className="py-3.5 px-4">
-                                          <span className={`font-black text-xs ${pct >= 80 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                            {pct}%
-                                          </span>
-                                        </td>
-                                        <td className="py-3.5 px-4">
-                                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                            Active
-                                          </span>
-                                        </td>
-                                        <td className="py-3.5 px-4">
-                                          <div className="flex flex-col space-y-1">
-                                            <div className="flex items-center space-x-2">
-                                              <MessageSquare className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                                              <input
-                                                type="text"
-                                                placeholder="Add trainer/admin remark..."
-                                                value={currentRemark}
-                                                onChange={(e) => handleRemarkChange(key, e.target.value)}
-                                                className="w-80 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-600"
-                                              />
-                                            </div>
-                                            {(() => {
-                                              const foundRem = allRemarks.find(r => 
-                                                (r.studentName || '').toLowerCase().trim() === (sName || '').toLowerCase().trim() &&
-                                                r.course === courseTitle &&
-                                                r.batch === batchName
-                                              );
-                                              if (!foundRem || !foundRem.remark) return null;
-
-                                              const isAdmin = foundRem.addedByRole === 'admin' || (foundRem.trainer && foundRem.trainer.toLowerCase().includes('admin'));
-                                              const authorLabel = isAdmin 
-                                                ? `Added by Admin – ${foundRem.addedByName || 'Admin'}` 
-                                                : `Added by Trainer – ${foundRem.addedByName || foundRem.trainer || 'Trainer'}`;
-
-                                              return (
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md inline-block self-start border ${
-                                                  isAdmin 
-                                                    ? 'bg-blue-50 text-blue-700 border-blue-200' 
-                                                    : 'bg-purple-50 text-purple-700 border-purple-200'
-                                                }`}>
-                                                  {authorLabel}
-                                                </span>
-                                              );
-                                            })()}
-                                          </div>
-                                        </td>
-                                        <td className="py-3.5 px-4 text-right">
-                                          <button
-                                            onClick={() => handleSaveAdminRemark(sName, courseTitle, batchName, trainerName)}
-                                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-[11px] cursor-pointer inline-flex items-center gap-1"
-                                          >
-                                            <Save className="w-3 h-3" />
-                                            <span>Save</span>
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
+                              );
+                            })}
+                          </td>
+                        </tr>
                       );
                     })}
-                  </div>
-
-                  </div>
-                );
-              })
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
-        </>
+        </div>
+      )}
+
+      {/* ===================== TRAINERS VIEW ===================== */}
+      {activeTab === 'trainers' && (
+        <div className="space-y-6">
+          {/* Date Filter Bar */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+            <div className="flex-1 max-w-xs">
+              <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                <span>Scheduled Class Date</span>
+              </label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
+              />
+            </div>
+
+            {/* Bulk actions for trainers */}
+            <div className="flex items-center space-x-2 self-start sm:self-end">
+              <button
+                disabled={saving || daySchedules.length === 0}
+                onClick={() => handleBulkTrainerAttendance('Present')}
+                className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1 cursor-pointer transition-colors"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Mark All Trainers Present</span>
+              </button>
+
+              <button
+                disabled={saving || daySchedules.length === 0}
+                onClick={() => handleBulkTrainerAttendance('Absent')}
+                className="bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-800 font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1 cursor-pointer transition-colors"
+              >
+                <XIcon className="w-3.5 h-3.5" />
+                <span>Mark All Trainers Absent</span>
+              </button>
+            </div>
+          </div>
+
+          {/* KPI Summary Cards for Trainers */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-blue-600">
+              <div className="text-xs font-bold text-slate-500">Scheduled Sessions Today</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">{daySchedules.length}</div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-emerald-600">
+              <div className="text-xs font-bold text-slate-500">Trainers Present</div>
+              <div className="text-2xl font-black text-emerald-700 mt-1">{trainerPresentCount}</div>
+              <div className="text-[10px] text-emerald-600 font-bold mt-0.5">{trainerRate}% Coverage Rate</div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-rose-500">
+              <div className="text-xs font-bold text-slate-500">Trainers Absent</div>
+              <div className="text-2xl font-black text-rose-700 mt-1">{trainerAbsentCount}</div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-purple-500">
+              <div className="text-xs font-bold text-slate-500">Active Academy Trainers</div>
+              <div className="text-2xl font-black text-purple-700 mt-1">{trainers.length}</div>
+            </div>
+          </div>
+
+          {/* Trainers Schedules Table */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden">
+            {loading ? (
+              <div className="p-12 text-center text-xs font-bold text-slate-400">Loading trainer schedule attendance...</div>
+            ) : daySchedules.length === 0 ? (
+              <div className="p-12 text-center text-xs font-bold text-slate-400 space-y-2">
+                <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
+                <h3 className="text-base font-bold text-slate-700">No trainer sessions scheduled for {selectedDate}</h3>
+                <p className="text-xs text-slate-400">Trainers who have live classes scheduled in Schedule Management will appear here.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider">
+                      <th className="py-3 px-4">Trainer</th>
+                      <th className="py-3 px-4">Course</th>
+                      <th className="py-3 px-4">Batch</th>
+                      <th className="py-3 px-4">Scheduled Time</th>
+                      <th className="py-3 px-4">Session Topic</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Attendance Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {daySchedules.map(sch => {
+                      const trainerUser = trainers.find(t => t.id === sch.trainerId || t.name === sch.trainer);
+                      const trainerName = sch.trainer || trainerUser?.name || 'Assigned Trainer';
+                      const rawStatus = trainerAttendanceMap[sch.id] || trainerAttendanceMap[sch.trainerId] || trainerAttendanceMap[trainerName.toLowerCase().trim()] || 'Absent';
+                      const currentStatus = rawStatus.toUpperCase();
+
+                      return (
+                        <tr key={sch.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3.5 px-4 font-black text-slate-900">
+                            <div className="flex items-center space-x-2">
+                              <User className="w-4 h-4 text-blue-600" />
+                              <span>{trainerName}</span>
+                            </div>
+                            {trainerUser?.email && <div className="text-[10px] text-slate-400 font-normal pl-6">{trainerUser.email}</div>}
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-slate-800">
+                            {sch.course || 'Course'}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                              {sch.batch || 'All'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
+                            <span className="inline-flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              {sch.time || '10:00 AM'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-600 font-medium">
+                            {sch.title || 'Live Session'}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                              currentStatus === 'PRESENT'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : 'bg-rose-100 text-rose-800 border border-rose-200'
+                            }`}>
+                              {currentStatus === 'PRESENT' ? 'Present' : 'Absent'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right space-x-2">
+                            <button
+                              onClick={() => handleSetTrainerAttendance(sch, 'Present')}
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                currentStatus === 'PRESENT'
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                              }`}
+                            >
+                              Present
+                            </button>
+
+                            <button
+                              onClick={() => handleSetTrainerAttendance(sch, 'Absent')}
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                currentStatus !== 'PRESENT'
+                                  ? 'bg-rose-600 text-white shadow-xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                              }`}
+                            >
+                              Absent
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
     </div>
   );
 }
-

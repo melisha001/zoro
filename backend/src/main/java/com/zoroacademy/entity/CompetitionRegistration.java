@@ -45,6 +45,21 @@ public class CompetitionRegistration {
     @Column(name = "payment_status", length = 50)
     private String paymentStatus = "Pending";
 
+    @Column(name = "razorpay_order_id", length = 128)
+    private String razorpayOrderId;
+
+    @Column(name = "razorpay_payment_id", length = 128)
+    private String razorpayPaymentId;
+
+    @Column(name = "razorpay_signature", length = 255)
+    private String razorpaySignature;
+
+    @Column(name = "paid_at")
+    private LocalDateTime paidAt;
+
+    @Column(name = "amount_paise")
+    private Long amountPaise;
+
     @Column(precision = 6, scale = 2)
     private BigDecimal score;
 
@@ -187,6 +202,46 @@ public class CompetitionRegistration {
         this.createdAt = createdAt;
     }
 
+    public String getRazorpayOrderId() {
+        return razorpayOrderId;
+    }
+
+    public void setRazorpayOrderId(String razorpayOrderId) {
+        this.razorpayOrderId = razorpayOrderId;
+    }
+
+    public String getRazorpayPaymentId() {
+        return razorpayPaymentId;
+    }
+
+    public void setRazorpayPaymentId(String razorpayPaymentId) {
+        this.razorpayPaymentId = razorpayPaymentId;
+    }
+
+    public String getRazorpaySignature() {
+        return razorpaySignature;
+    }
+
+    public void setRazorpaySignature(String razorpaySignature) {
+        this.razorpaySignature = razorpaySignature;
+    }
+
+    public LocalDateTime getPaidAt() {
+        return paidAt;
+    }
+
+    public void setPaidAt(LocalDateTime paidAt) {
+        this.paidAt = paidAt;
+    }
+
+    public Long getAmountPaise() {
+        return amountPaise;
+    }
+
+    public void setAmountPaise(Long amountPaise) {
+        this.amountPaise = amountPaise;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -202,6 +257,11 @@ public class CompetitionRegistration {
         private String school;
         private String city;
         private String paymentStatus = "Pending";
+        private String razorpayOrderId;
+        private String razorpayPaymentId;
+        private String razorpaySignature;
+        private LocalDateTime paidAt;
+        private Long amountPaise;
         private BigDecimal score;
         private Integer rank;
         private String certificateUrl;
@@ -247,6 +307,26 @@ public class CompetitionRegistration {
             this.paymentStatus = paymentStatus;
             return this;
         }
+        public Builder razorpayOrderId(String razorpayOrderId) {
+            this.razorpayOrderId = razorpayOrderId;
+            return this;
+        }
+        public Builder razorpayPaymentId(String razorpayPaymentId) {
+            this.razorpayPaymentId = razorpayPaymentId;
+            return this;
+        }
+        public Builder razorpaySignature(String razorpaySignature) {
+            this.razorpaySignature = razorpaySignature;
+            return this;
+        }
+        public Builder paidAt(LocalDateTime paidAt) {
+            this.paidAt = paidAt;
+            return this;
+        }
+        public Builder amountPaise(Long amountPaise) {
+            this.amountPaise = amountPaise;
+            return this;
+        }
         public Builder score(BigDecimal score) {
             this.score = score;
             return this;
@@ -265,7 +345,13 @@ public class CompetitionRegistration {
         }
 
         public CompetitionRegistration build() {
-            return new CompetitionRegistration(id, competition, studentId, studentName, studentEmail, studentPhone, age, school, city, paymentStatus, score, rank, certificateUrl, createdAt);
+            CompetitionRegistration reg = new CompetitionRegistration(id, competition, studentId, studentName, studentEmail, studentPhone, age, school, city, paymentStatus, score, rank, certificateUrl, createdAt);
+            reg.setRazorpayOrderId(razorpayOrderId);
+            reg.setRazorpayPaymentId(razorpayPaymentId);
+            reg.setRazorpaySignature(razorpaySignature);
+            reg.setPaidAt(paidAt);
+            reg.setAmountPaise(amountPaise);
+            return reg;
         }
     }
 

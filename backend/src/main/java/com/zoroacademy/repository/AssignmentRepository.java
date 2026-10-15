@@ -17,4 +17,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, String> 
     List<Assignment> findByTrainerIdOrTrainerIgnoreCase(String trainerId, String trainer);
     List<Assignment> findByCourseIdOrCourseIgnoreCase(String courseId, String course);
     List<Assignment> findByBatchIdOrBatchIgnoreCase(String batchId, String batch);
+
+    @org.springframework.data.jpa.repository.Query("SELECT a FROM Assignment a WHERE a.attachment LIKE %:fileId%")
+    List<Assignment> findByAnyFileUrlContaining(@org.springframework.data.repository.query.Param("fileId") String fileId);
 }

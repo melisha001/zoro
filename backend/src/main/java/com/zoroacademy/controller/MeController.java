@@ -118,6 +118,59 @@ public class MeController {
         return ApiResponse.ok(enrolledCourses);
     }
 
+    @GetMapping("/trainer-courses")
+    public ApiResponse<Map<String, Object>> getMyTrainerCourses() {
+        User user = getCurrentUser();
+        String trainerId = user.getId();
+        String trainerEmail = user.getEmail();
+
+        List<Course> trainerAudienceCourses = courseRepository.findByAudienceIgnoreCase("trainer");
+
+        // Find all requests for this trainer by trainerId and trainerEmail
+        List<TrainerCourseRequest> requests = new ArrayList<>(trainerCourseRequestRepository.findByTrainerId(trainerId));
+        if (trainerEmail != null && !trainerEmail.isBlank()) {
+            for (TrainerCourseRequest req : trainerCourseRequestRepository.findByTrainerEmailIgnoreCase(trainerEmail)) {
+                if (requests.stream().noneMatch(r -> r.getId().equals(req.getId()))) {
+                    requests.add(req);
+                }
+            }
+        }
+
+        Set<String> approvedCourseIds = requests.stream()
+                .filter(r -> "Approved".equalsIgnoreCase(r.getStatus()))
+                .map(TrainerCourseRequest::getCourseId)
+                .collect(Collectors.toSet());
+
+        Set<String> pendingCourseIds = requests.stream()
+                .filter(r -> "Pending".equalsIgnoreCase(r.getStatus()))
+                .map(TrainerCourseRequest::getCourseId)
+                .collect(Collectors.toSet());
+
+        List<Course> enrolled = new ArrayList<>();
+        List<Course> pending = new ArrayList<>();
+        List<Course> available = new ArrayList<>();
+
+        for (Course c : trainerAudienceCourses) {
+            if (approvedCourseIds.contains(c.getId())) {
+                if (c.getModules() != null) {
+                    c.getModules().forEach(m -> m.setLocked(false));
+                }
+                enrolled.add(c);
+            } else if (pendingCourseIds.contains(c.getId())) {
+                pending.add(c);
+            } else {
+                available.add(c);
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("enrolled", enrolled);
+        result.put("pending", pending);
+        result.put("available", available);
+
+        return ApiResponse.ok(result);
+    }
+
     @GetMapping("/batches")
     public ApiResponse<List<Batch>> getMyBatches() {
         User user = getCurrentUser();

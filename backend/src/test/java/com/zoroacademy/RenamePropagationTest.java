@@ -76,6 +76,8 @@ class RenamePropagationTest {
                 .id("crs-101")
                 .title("Old Course Title")
                 .slug("old-course-title")
+                .mode("Online")
+                .googleMeetUrl("https://meet.google.com/abc-defg-hij")
                 .price(new BigDecimal("1500.00"))
                 .build();
 
@@ -97,6 +99,8 @@ class RenamePropagationTest {
 
         Course updateReq = Course.builder()
                 .title("New Advanced Grammar")
+                .mode("Online")
+                .googleMeetUrl("https://meet.google.com/abc-defg-hij")
                 .price(new BigDecimal("2000.00"))
                 .build();
 

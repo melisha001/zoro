@@ -77,9 +77,28 @@ Flyway automatically applies all schema migrations (V1 through V19) on applicati
 | `JWT_EXPIRATION_MS` | Spring | JWT access token validity duration in milliseconds (default: 3600000 = 1 hour) |
 | `REFRESH_TOKEN_EXPIRATION_DAYS` | Spring | Refresh token validity in days (default: 7 days) |
 | `CORS_ORIGINS` | Spring | Comma-separated list of allowed CORS origins |
-| `RAZORPAY_KEY_ID` | Razorpay | Razorpay payment gateway API Key ID |
+| `RAZORPAY_KEY_ID` | Razorpay | Razorpay payment gateway API Key ID (`rzp_test_...` in dev, `rzp_live_...` in prod) |
 | `RAZORPAY_KEY_SECRET` | Razorpay | Razorpay payment gateway API Key Secret |
+| `RAZORPAY_WEBHOOK_SECRET` | Razorpay | Secret for validating X-Razorpay-Signature on incoming webhooks |
 | `ADMIN_PASSWORD_KEY` | Spring | Secret encryption key for AES-256-GCM reversible passwords (PBKDF2-derived, configured via `admin.password-key` / `ADMIN_PASSWORD_KEY`, min 16 chars) |
+
+### Razorpay Configuration Guide
+
+Online competition registration fees use a server-driven Razorpay flow. Credentials must be configured in the backend environment (`backend/.env` or `run-local.ps1`):
+
+1. **Dashboard Access**: Log into [Razorpay Dashboard](https://dashboard.razorpay.com/).
+2. **Environment Mode**: Ensure **Test Mode** is active in the top navbar during development (`rzp_test_...`). Use **Live Mode** (`rzp_live_...`) only in production.
+3. **API Keys**:
+   - Go to **Account & Settings** -> **API Keys** -> **Generate Key**.
+   - Copy `Key Id` into `RAZORPAY_KEY_ID`.
+   - Copy `Key Secret` into `RAZORPAY_KEY_SECRET`.
+4. **Webhooks**:
+   - Go to **Account & Settings** -> **Webhooks** -> **Add New Webhook**.
+   - Set Webhook URL to `https://<your-domain>/api/payments/razorpay/webhook`.
+   - Set Secret to your chosen webhook secret and paste into `RAZORPAY_WEBHOOK_SECRET`.
+   - Enable events: `payment.captured` and `payment.failed`.
+   - *Note*: Webhooks require a public URL; in local development, `POST /api/payments/razorpay/verify` is the primary verification path executed by the frontend checkout callback.
+5. **Frontend**: The React client requires **no** `VITE_RAZORPAY_KEY_ID`; the public `keyId` is securely supplied per-order from the backend `/api/payments/razorpay/order` response.
 
 ---
 

@@ -205,8 +205,9 @@ Configure the following environment variables in production before starting the 
 | `BUNNY_TOKEN_AUTH_KEY`| Bunny.net Stream Token authentication key | *(Bunny CDN Token key)* |
 | `BUNNY_WEBHOOK_SECRET` | Bunny webhook verification shared secret | *(Secret string)* |
 | `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `http://localhost:5173,http://localhost:3000` |
-| `RAZORPAY_KEY_ID` | Razorpay API Key ID | `rzp_live_...` |
-| `RAZORPAY_KEY_SECRET` | Razorpay API Secret | *(Razorpay secret)* |
+| `RAZORPAY_KEY_ID` | Razorpay API Key ID | `your_razorpay_key_id` |
+| `RAZORPAY_KEY_SECRET` | Razorpay API Secret | `your_razorpay_key_secret` |
+| `RAZORPAY_WEBHOOK_SECRET` | Razorpay Webhook Secret | `your_razorpay_webhook_secret` |
 | `ADMIN_PASSWORD_KEY` | Secret encryption key for AES-256-GCM passwords | *(Derived 256-bit key, min 16 chars)* |
 
 ---

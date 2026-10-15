@@ -67,4 +67,33 @@ psql -U $User -h $DbHost -p $Port -d $Database -f $scriptPath
 Write-Host "`n[3] Candidate Counts After Cleanup:" -ForegroundColor Green
 psql -U $User -h $DbHost -p $Port -d $Database -c $countQuery
 
+Write-Host "`n[4] Bunny Storage Test Object Cleanup:" -ForegroundColor Cyan
+$bHost = $env:BUNNY_STORAGE_HOST
+$bZone = $env:BUNNY_STORAGE_ZONE
+$bPass = $env:BUNNY_STORAGE_PASSWORD
+
+if ($bHost -and $bZone -and $bPass -and $bPass -ne "REPLACE_ME") {
+    try {
+        $headers = @{ AccessKey = $bPass }
+        $listUri = "https://$bHost/$bZone/test/"
+        $res = Invoke-RestMethod -Uri $listUri -Method Get -Headers $headers -ErrorAction Stop
+        $items = @($res)
+        Write-Host "Found $($items.Count) test objects in Bunny Storage ($bZone/test/)"
+        foreach ($item in $items) {
+            $objName = $item.ObjectName
+            if ($DryRun) {
+                Write-Host " [DryRun] Would delete Bunny object: /test/$objName"
+            } else {
+                $delUri = "https://$bHost/$bZone/test/$objName"
+                Invoke-RestMethod -Uri $delUri -Method Delete -Headers $headers -ErrorAction SilentlyContinue
+                Write-Host " Deleted Bunny object: /test/$objName" -ForegroundColor Yellow
+            }
+        }
+    } catch {
+        Write-Host " Note: Bunny Storage /test/ check returned: $($_.Exception.Message)" -ForegroundColor DarkGray
+    }
+} else {
+    Write-Host " Bunny Storage credentials not configured in environment; skipped remote file cleanup." -ForegroundColor DarkGray
+}
+
 Write-Host "`n[Cleanup Complete]" -ForegroundColor Green

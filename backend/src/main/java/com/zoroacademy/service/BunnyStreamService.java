@@ -90,7 +90,7 @@ public class BunnyStreamService {
                 ? request.getTitle()
                 : "Lesson Video " + System.currentTimeMillis();
 
-        int libraryId = properties.getLibraryId() != null ? Integer.parseInt(properties.getLibraryId()) : 770045;
+        int libraryId = (properties.getLibraryId() != null && !properties.getLibraryId().isBlank()) ? Integer.parseInt(properties.getLibraryId()) : 0;
         String videoId;
         try {
             String url = String.format("https://video.bunnycdn.com/library/%d/videos", libraryId);

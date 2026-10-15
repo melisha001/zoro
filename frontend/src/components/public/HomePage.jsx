@@ -2,42 +2,52 @@ import React, { useState, useEffect } from 'react';
 import { Award, Users, Globe, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
 import { getCompetitions } from '../../api/competitionApi';
-import { getWebsiteSettings } from '../../api/websiteSettingsApi';
+import { getWebsiteSettings, getHeroImages } from '../../api/websiteSettingsApi';
 import { resolveFileUrl } from '../../api/fileApi';
 import { formatDate } from '../../utils/dateFormatter';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 import SafeImage from '../common/SafeImage';
+import HeroCarousel from './HeroCarousel';
 
 export default function HomePage({ setActiveScreen, onOpenEnquire }) {
   const { settings: globalSettings } = useWebsiteSettings();
   const [courses, setCourses] = useState([]);
   const [featuredComp, setFeaturedComp] = useState(null);
   const [siteSettings, setSiteSettings] = useState(null);
+  const [heroImages, setHeroImages] = useState([]);
 
   useEffect(() => {
     async function loadHomeData() {
       try {
-        const sRes = await getWebsiteSettings();
-        if (sRes.success && sRes.data) {
-          setSiteSettings(sRes.data);
+        const [sRes, cRes, compRes, heroRes] = await Promise.allSettled([
+          getWebsiteSettings(),
+          getCourses(),
+          getCompetitions(),
+          getHeroImages()
+        ]);
+
+        if (sRes.status === 'fulfilled' && sRes.value?.success && sRes.value?.data) {
+          setSiteSettings(sRes.value.data);
         }
 
-        const cRes = await getCourses();
-        if (cRes.success && Array.isArray(cRes.data)) {
+        if (cRes.status === 'fulfilled' && cRes.value?.success && Array.isArray(cRes.value?.data)) {
           // Filter ONLY Student courses for Public Landing Page
-          const studentCourses = cRes.data.filter(c => (c.audience || 'student') === 'student');
+          const studentCourses = cRes.value.data.filter(c => (c.audience || 'student') === 'student');
           setCourses(studentCourses);
         }
 
-        const compRes = await getCompetitions();
-        if (compRes.success && Array.isArray(compRes.data)) {
+        if (compRes.status === 'fulfilled' && compRes.value?.success && Array.isArray(compRes.value?.data)) {
           // Filter ONLY Active competitions for Public Landing Page (Requirement #7 & #8)
-          const activeComps = compRes.data.filter(c => (c.status || '').toLowerCase() === 'active');
+          const activeComps = compRes.value.data.filter(c => (c.status || '').toLowerCase() === 'active');
           if (activeComps.length > 0) {
             setFeaturedComp(activeComps[0]); // Dynamically select FIRST active competition
           } else {
             setFeaturedComp(null);
           }
+        }
+
+        if (heroRes.status === 'fulfilled' && heroRes.value?.success && Array.isArray(heroRes.value?.data)) {
+          setHeroImages(heroRes.value.data);
         }
       } catch (err) {
         console.error('Failed to load homepage data:', err);
@@ -73,12 +83,7 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
   return (
     <div className="bg-slate-50 min-h-screen">
       {/* HERO SECTION */}
-      <section 
-        className="relative text-white overflow-hidden py-16 md:py-24 bg-cover bg-right sm:bg-center bg-no-repeat min-h-[500px] flex items-center"
-        style={{ backgroundImage: "url('/assets/hero-bg.jpg')" }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/75 to-slate-950/10"></div>
-
+      <HeroCarousel images={heroImages}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             
@@ -116,7 +121,7 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
 
           </div>
         </div>
-      </section>
+      </HeroCarousel>
 
       {/* HIGHLIGHT FEATURES GRID */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-20">

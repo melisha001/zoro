@@ -71,8 +71,17 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
       assignedTrainer = null;
     } else {
       // Recorded
-      trainerId = formData.trainerId || null;
-      assignedTrainer = formData.assignedTrainer || 'None (Self-Paced)';
+      if (formData.audience === 'trainer') {
+        trainerId = 'admin';
+        assignedTrainer = 'Admin';
+      } else {
+        if (!formData.trainerId) {
+          await showError('Trainer is required for Student Recorded courses.', 'Validation Error');
+          return;
+        }
+        trainerId = formData.trainerId;
+        assignedTrainer = formData.assignedTrainer;
+      }
     }
 
     setSaving(true);
@@ -198,11 +207,12 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
                 value={formData.mode || 'Online'}
                 onChange={(e) => {
                   const newMode = e.target.value;
+                  const isTrainer = formData.audience === 'trainer';
                   setFormData({ 
                     ...formData, 
                     mode: newMode,
-                    trainerId: newMode === 'Recorded' ? '' : formData.trainerId,
-                    assignedTrainer: newMode === 'Recorded' ? 'None (Self-Paced)' : (formData.assignedTrainer === 'None (Self-Paced)' ? '' : formData.assignedTrainer)
+                    trainerId: newMode === 'Recorded' ? (isTrainer ? 'admin' : '') : '',
+                    assignedTrainer: newMode === 'Recorded' ? (isTrainer ? 'Admin' : '') : ''
                   });
                 }}
                 className="w-full px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs font-black text-blue-900 focus:bg-white focus:border-blue-600"
@@ -219,7 +229,15 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
               <select
                 required
                 value={formData.audience || 'student'}
-                onChange={(e) => setFormData({ ...formData, audience: e.target.value })}
+                onChange={(e) => {
+                  const newAudience = e.target.value;
+                  setFormData({
+                    ...formData,
+                    audience: newAudience,
+                    trainerId: formData.mode === 'Recorded' && newAudience === 'trainer' ? 'admin' : (formData.mode === 'Recorded' ? '' : formData.trainerId),
+                    assignedTrainer: formData.mode === 'Recorded' && newAudience === 'trainer' ? 'Admin' : (formData.mode === 'Recorded' ? '' : formData.assignedTrainer)
+                  });
+                }}
                 className="w-full px-4 py-2.5 bg-purple-50 border border-purple-200 rounded-xl text-xs font-black text-purple-900 focus:bg-white focus:border-purple-600"
               >
                 <option value="student">Student (Public & LMS)</option>
@@ -232,12 +250,20 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
                 <span className="text-blue-600 font-bold">ℹ️</span>
                 <span>Trainers are assigned per batch in <strong>Batch Management</strong>. Online & Hybrid courses do not have a course-level trainer.</span>
               </div>
+            ) : formData.audience === 'trainer' ? (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Assigned Trainer</label>
+                <div className="px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
+                  Admin (Fixed for Trainer Courses)
+                </div>
+              </div>
             ) : (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Assign Trainer (Optional - For Student Doubts)
+                  Assign Trainer * (For Student Doubts & Reviews)
                 </label>
                 <select
+                  required
                   value={formData.trainerId || ''}
                   onChange={(e) => {
                     const selId = e.target.value;
@@ -245,12 +271,12 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
                     setFormData({
                       ...formData,
                       trainerId: selId,
-                      assignedTrainer: matched ? matched.name : 'None (Self-Paced)'
+                      assignedTrainer: matched ? matched.name : ''
                     });
                   }}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white"
                 >
-                  <option value="">None (Self-Paced)</option>
+                  <option value="" disabled>Select Trainer...</option>
                   {trainersList.map(t => (
                     <option key={t.id} value={t.id}>
                       {t.name} {t.specialty ? `(${t.specialty})` : ''}

@@ -438,24 +438,40 @@ public class CourseService {
             course.setAssignedTrainerId(null);
         } else {
             course.setGoogleMeetUrl(null);
-            // Recorded courses STILL have an optional trainer (for student doubts)
-            if (course.getAssignedTrainerId() != null && !course.getAssignedTrainerId().isBlank()) {
-                userRepository.findById(course.getAssignedTrainerId()).ifPresent(u -> {
-                    course.setAssignedTrainer(u.getName());
-                    if (course.getTrainerId() == null) course.setTrainerId(u.getId());
-                });
-            } else if (course.getTrainerId() != null && !course.getTrainerId().isBlank()) {
-                userRepository.findById(course.getTrainerId()).ifPresent(u -> course.setAssignedTrainer(u.getName()));
-            } else if (course.getAssignedTrainer() != null && !course.getAssignedTrainer().isBlank()
-                    && !"None (Self-Paced)".equalsIgnoreCase(course.getAssignedTrainer())
-                    && !"Unassigned".equalsIgnoreCase(course.getAssignedTrainer())) {
-                userRepository.findByNameIgnoreCase(course.getAssignedTrainer()).stream()
-                        .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
-                        .findFirst()
-                        .ifPresent(u -> course.setTrainerId(u.getId()));
+            String audience = course.getAudience() != null ? course.getAudience().trim().toLowerCase() : "student";
+            if ("trainer".equals(audience)) {
+                // Trainer-audience recorded courses: trainer is fixed to "Admin"
+                String adminId = userRepository.findByRoleIgnoreCase("ADMIN").stream().findFirst().map(User::getId).orElse("usr_admin_001");
+                course.setTrainerId(adminId);
+                course.setAssignedTrainer("Admin");
+                course.setAssignedTrainerId(adminId);
             } else {
-                course.setTrainerId(null);
-                course.setAssignedTrainer("None (Self-Paced)");
+                // Student-audience recorded courses: trainer is REQUIRED
+                String tId = course.getTrainerId() != null && !course.getTrainerId().isBlank() 
+                        ? course.getTrainerId() 
+                        : (course.getAssignedTrainerId() != null && !course.getAssignedTrainerId().isBlank() ? course.getAssignedTrainerId() : null);
+                String tName = course.getAssignedTrainer() != null && !course.getAssignedTrainer().isBlank() && !"None (Self-Paced)".equalsIgnoreCase(course.getAssignedTrainer()) && !"Unassigned".equalsIgnoreCase(course.getAssignedTrainer())
+                        ? course.getAssignedTrainer()
+                        : null;
+
+                if (tId == null && tName == null) {
+                    throw new IllegalArgumentException("Trainer is required for Student Recorded courses (Instructor-Led).");
+                }
+
+                if (tId != null) {
+                    course.setTrainerId(tId);
+                    course.setAssignedTrainerId(tId);
+                    userRepository.findById(tId).ifPresent(u -> course.setAssignedTrainer(u.getName()));
+                } else {
+                    course.setAssignedTrainer(tName);
+                    userRepository.findByNameIgnoreCase(tName).stream()
+                            .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
+                            .findFirst()
+                            .ifPresent(u -> {
+                                course.setTrainerId(u.getId());
+                                course.setAssignedTrainerId(u.getId());
+                            });
+                }
             }
         }
 
@@ -530,32 +546,41 @@ public class CourseService {
             targetCourse.setAssignedTrainer(null);
             targetCourse.setAssignedTrainerId(null);
         } else {
-            if (updated.getAssignedTrainerId() != null) {
-                targetCourse.setAssignedTrainerId(updated.getAssignedTrainerId());
-                if (!updated.getAssignedTrainerId().isBlank()) {
-                    userRepository.findById(updated.getAssignedTrainerId()).ifPresent(u -> {
-                        targetCourse.setAssignedTrainer(u.getName());
-                        targetCourse.setTrainerId(u.getId());
-                    });
-                }
-            }
+            String audience = targetCourse.getAudience() != null ? targetCourse.getAudience().trim().toLowerCase() : "student";
+            if ("trainer".equals(audience)) {
+                String adminId = userRepository.findByRoleIgnoreCase("ADMIN").stream().findFirst().map(User::getId).orElse("usr_admin_001");
+                targetCourse.setTrainerId(adminId);
+                targetCourse.setAssignedTrainer("Admin");
+                targetCourse.setAssignedTrainerId(adminId);
+            } else {
+                // Student-audience recorded course: trainer is REQUIRED
+                String tId = updated.getTrainerId() != null && !updated.getTrainerId().isBlank()
+                        ? updated.getTrainerId()
+                        : (updated.getAssignedTrainerId() != null && !updated.getAssignedTrainerId().isBlank() 
+                            ? updated.getAssignedTrainerId() 
+                            : targetCourse.getTrainerId());
+                String tName = updated.getAssignedTrainer() != null && !updated.getAssignedTrainer().isBlank() && !"None (Self-Paced)".equalsIgnoreCase(updated.getAssignedTrainer()) && !"Unassigned".equalsIgnoreCase(updated.getAssignedTrainer())
+                        ? updated.getAssignedTrainer()
+                        : (targetCourse.getAssignedTrainer() != null && !"None (Self-Paced)".equalsIgnoreCase(targetCourse.getAssignedTrainer()) && !"Unassigned".equalsIgnoreCase(targetCourse.getAssignedTrainer()) ? targetCourse.getAssignedTrainer() : null);
 
-            if (updated.getTrainerId() != null && !updated.getTrainerId().isBlank()) {
-                targetCourse.setTrainerId(updated.getTrainerId());
-                userRepository.findById(updated.getTrainerId()).ifPresent(u -> targetCourse.setAssignedTrainer(u.getName()));
-            } else if (updated.getAssignedTrainer() != null) {
-                targetCourse.setAssignedTrainer(updated.getAssignedTrainer());
-                if ("None (Self-Paced)".equalsIgnoreCase(updated.getAssignedTrainer()) || "Unassigned".equalsIgnoreCase(updated.getAssignedTrainer()) || updated.getAssignedTrainer().isBlank()) {
-                    targetCourse.setTrainerId(null);
-                    targetCourse.setAssignedTrainer("None (Self-Paced)");
+                if (tId == null && tName == null) {
+                    throw new IllegalArgumentException("Trainer is required for Student Recorded courses (Instructor-Led).");
+                }
+
+                if (tId != null) {
+                    targetCourse.setTrainerId(tId);
+                    targetCourse.setAssignedTrainerId(tId);
+                    userRepository.findById(tId).ifPresent(u -> targetCourse.setAssignedTrainer(u.getName()));
                 } else {
-                    userRepository.findByNameIgnoreCase(updated.getAssignedTrainer()).stream()
+                    targetCourse.setAssignedTrainer(tName);
+                    userRepository.findByNameIgnoreCase(tName).stream()
                             .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
                             .findFirst()
-                            .ifPresent(u -> targetCourse.setTrainerId(u.getId()));
+                            .ifPresent(u -> {
+                                targetCourse.setTrainerId(u.getId());
+                                targetCourse.setAssignedTrainerId(u.getId());
+                            });
                 }
-            } else if (targetCourse.getTrainerId() == null || targetCourse.getTrainerId().isBlank()) {
-                targetCourse.setAssignedTrainer("None (Self-Paced)");
             }
         }
 

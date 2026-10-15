@@ -61,9 +61,15 @@ export default function AdminCompetitionRegistrationsPage() {
     return matchesSearch && matchesComp && matchesStatus;
   });
 
-  // Calculate Revenue Stats
-  const paidRegistrations = registrations.filter(r => r.paymentStatus === 'Paid' && r.registrationStatus !== 'Cancelled');
-  const totalRevenue = paidRegistrations.reduce((sum, r) => sum + Number(r.registrationFee || 0), 0);
+  // Calculate Revenue Stats - Count only PAID registrations
+  const paidRegistrations = registrations.filter(r => 
+    (r.paymentStatus === 'Paid' || r.paymentStatus === 'PAID') && 
+    r.registrationStatus !== 'Cancelled'
+  );
+  const totalRevenue = paidRegistrations.reduce((sum, r) => {
+    const amt = r.amountPaise != null ? Number(r.amountPaise) / 100 : Number(r.registrationFee || 0);
+    return sum + amt;
+  }, 0);
   const totalRegCount = registrations.filter(r => r.registrationStatus !== 'Cancelled').length;
 
   // Group by Competition Name -> Array of Participants
@@ -196,9 +202,10 @@ export default function AdminCompetitionRegistrationsPage() {
                         <th className="py-3 px-4">Email & Phone</th>
                         <th className="py-3 px-4">Age / School / City</th>
                         <th className="py-3 px-4">Reg Date</th>
-                        <th className="py-3 px-4">Fee (₹)</th>
+                        <th className="py-3 px-4">Amount (₹)</th>
                         <th className="py-3 px-4">Payment Status</th>
-                        <th className="py-3 px-4">Razorpay Txn ID</th>
+                        <th className="py-3 px-4">Razorpay Order ID</th>
+                        <th className="py-3 px-4">Razorpay Payment ID</th>
                         <th className="py-3 px-4">Reg Status</th>
                         <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
@@ -228,12 +235,16 @@ export default function AdminCompetitionRegistrationsPage() {
                             {student.registrationDate}
                           </td>
                           <td className="py-3.5 px-4 font-extrabold text-slate-900">
-                            ₹{student.registrationFee}
+                            ₹{student.amountPaise != null ? (student.amountPaise / 100).toFixed(2) : (student.registrationFee ?? '0')}
                           </td>
                           <td className="py-3.5 px-4">
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black ${
-                              student.paymentStatus === 'Paid'
+                              student.paymentStatus === 'Paid' || student.paymentStatus === 'PAID'
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : student.paymentStatus === 'PENDING_PAYMENT' || student.paymentStatus === 'Pending'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : student.paymentStatus === 'EXPIRED'
+                                ? 'bg-slate-100 text-slate-700 border border-slate-200'
                                 : student.paymentStatus === 'Not Required'
                                 ? 'bg-blue-100 text-blue-800 border border-blue-200'
                                 : 'bg-rose-100 text-rose-800 border border-rose-200'
@@ -242,7 +253,10 @@ export default function AdminCompetitionRegistrationsPage() {
                             </span>
                           </td>
                           <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600 font-bold">
-                            {student.razorpayPaymentId || 'N/A'}
+                            {student.razorpayOrderId || '—'}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600 font-bold">
+                            {student.razorpayPaymentId || '—'}
                           </td>
                           <td className="py-3.5 px-4">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -304,10 +318,11 @@ export default function AdminCompetitionRegistrationsPage() {
               <div><strong>Competition:</strong> {viewingReg.competitionName}</div>
               <div><strong>Batch:</strong> {viewingReg.batchName}</div>
               <div><strong>Registration Date:</strong> {viewingReg.registrationDate}</div>
-              <div><strong>Registration Fee:</strong> ₹{viewingReg.registrationFee}</div>
+              <div><strong>Amount:</strong> ₹{viewingReg.amountPaise != null ? (viewingReg.amountPaise / 100).toFixed(2) : (viewingReg.registrationFee || 0)}</div>
               <div><strong>Payment Status:</strong> <span className="font-bold text-emerald-700">{viewingReg.paymentStatus}</span></div>
+              <div><strong>Razorpay Order ID:</strong> <span className="font-mono text-xs">{viewingReg.razorpayOrderId || 'None'}</span></div>
               <div><strong>Razorpay Payment ID:</strong> <span className="font-mono text-xs">{viewingReg.razorpayPaymentId || 'None'}</span></div>
-              <div><strong>Payment Date/Time:</strong> {viewingReg.paymentDate || 'N/A'}</div>
+              <div><strong>Payment Date/Time:</strong> {viewingReg.paidAt || viewingReg.paymentDate || 'N/A'}</div>
             </div>
           </div>
         </div>

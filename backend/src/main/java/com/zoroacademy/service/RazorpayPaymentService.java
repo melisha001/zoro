@@ -1,0 +1,376 @@
+package com.zoroacademy.service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zoroacademy.dto.CompetitionOrderRequest;
+import com.zoroacademy.dto.RazorpayOrderResponse;
+import com.zoroacademy.dto.RazorpayVerifyRequest;
+import com.zoroacademy.entity.Competition;
+import com.zoroacademy.entity.CompetitionRegistration;
+import com.zoroacademy.exception.BadRequestException;
+import com.zoroacademy.exception.ConflictException;
+import com.zoroacademy.exception.ResourceNotFoundException;
+import com.zoroacademy.repository.CompetitionRegistrationRepository;
+import com.zoroacademy.repository.CompetitionRepository;
+import com.zoroacademy.util.PhoneValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.server.ResponseStatusException;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Service
+public class RazorpayPaymentService {
+
+    private static final Logger log = LoggerFactory.getLogger(RazorpayPaymentService.class);
+
+    private final CompetitionRepository competitionRepository;
+    private final CompetitionRegistrationRepository registrationRepository;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+
+    @Value("${razorpay.key-id:}")
+    private String keyId;
+
+    @Value("${razorpay.key-secret:}")
+    private String keySecret;
+
+    @Value("${razorpay.webhook-secret:}")
+    private String webhookSecret;
+
+    @Value("${razorpay.base-url:https://api.razorpay.com/v1}")
+    private String razorpayBaseUrl;
+
+    // In-memory rate limiting: max 20 order requests per minute per IP
+    private final Map<String, List<Long>> rateLimitMap = new ConcurrentHashMap<>();
+
+    @Autowired
+    public RazorpayPaymentService(
+            CompetitionRepository competitionRepository,
+            CompetitionRegistrationRepository registrationRepository,
+            @Autowired(required = false) RestTemplate restTemplate,
+            @Autowired(required = false) ObjectMapper objectMapper
+    ) {
+        this.competitionRepository = competitionRepository;
+        this.registrationRepository = registrationRepository;
+        this.restTemplate = (restTemplate != null) ? restTemplate : new RestTemplate();
+        this.objectMapper = (objectMapper != null) ? objectMapper : new ObjectMapper();
+    }
+
+    public void checkRateLimit(String clientIp) {
+        if (clientIp == null || clientIp.isBlank()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        long windowStart = now - 60000; // 1 minute window
+
+        rateLimitMap.compute(clientIp, (ip, timestamps) -> {
+            if (timestamps == null) {
+                timestamps = new ArrayList<>();
+            }
+            timestamps.removeIf(t -> t < windowStart);
+            if (timestamps.size() >= 20) {
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many requests. Please try again later.");
+            }
+            timestamps.add(now);
+            return timestamps;
+        });
+    }
+
+    @Transactional
+    public RazorpayOrderResponse createCompetitionOrder(CompetitionOrderRequest request, String clientIp) {
+        checkRateLimit(clientIp);
+
+        Competition comp = competitionRepository.findById(request.getCompetitionId())
+                .orElseThrow(() -> new ResourceNotFoundException("Competition not found with ID: " + request.getCompetitionId()));
+
+        if (!"Active".equalsIgnoreCase(comp.getStatus())) {
+            throw new BadRequestException("Competition is not active for registration");
+        }
+
+        // Validate registration window if dates configured
+        LocalDate today = LocalDate.now();
+        if (comp.getRegStartDate() != null && !comp.getRegStartDate().isBlank()) {
+            try {
+                LocalDate start = LocalDate.parse(comp.getRegStartDate().trim(), DateTimeFormatter.ISO_LOCAL_DATE);
+                if (today.isBefore(start)) {
+                    throw new BadRequestException("Competition registration has not opened yet (Opens: " + comp.getRegStartDate() + ")");
+                }
+            } catch (Exception ignored) {
+                // Ignore parsing errors for non-standard formats
+            }
+        }
+        if (comp.getRegEndDate() != null && !comp.getRegEndDate().isBlank()) {
+            try {
+                LocalDate end = LocalDate.parse(comp.getRegEndDate().trim(), DateTimeFormatter.ISO_LOCAL_DATE);
+                if (today.isAfter(end)) {
+                    throw new BadRequestException("Competition registration has closed (Closed: " + comp.getRegEndDate() + ")");
+                }
+            } catch (Exception ignored) {
+                // Ignore parsing errors for non-standard formats
+            }
+        }
+
+        String sanitizedPhone = PhoneValidator.sanitize(request.getStudentPhone());
+        String cleanEmail = request.getStudentEmail().trim().toLowerCase();
+
+        // Check for duplicates with PAID status
+        Optional<CompetitionRegistration> existingByPhone = registrationRepository.findByCompetitionIdAndStudentPhone(comp.getId(), sanitizedPhone);
+        if (existingByPhone.isPresent() && isPaid(existingByPhone.get().getPaymentStatus())) {
+            throw new ConflictException("Participant with phone " + sanitizedPhone + " is already registered and confirmed for this competition");
+        }
+
+        Optional<CompetitionRegistration> existingByEmail = registrationRepository.findByCompetitionIdAndStudentEmailIgnoreCase(comp.getId(), cleanEmail);
+        if (existingByEmail.isPresent() && isPaid(existingByEmail.get().getPaymentStatus())) {
+            throw new ConflictException("Participant with email " + cleanEmail + " is already registered and confirmed for this competition");
+        }
+
+        // Server-side fee computation (IGNORE any client amount)
+        BigDecimal fee = comp.getRegistrationFee() != null ? comp.getRegistrationFee() : BigDecimal.ZERO;
+        long amountPaise = fee.multiply(new BigDecimal("100")).longValue();
+
+        // Reuse existing pending registration or create fresh
+        CompetitionRegistration reg = existingByEmail.orElseGet(() -> existingByPhone.orElseGet(() -> {
+            CompetitionRegistration newReg = new CompetitionRegistration();
+            newReg.setId("reg_" + UUID.randomUUID());
+            newReg.setCompetition(comp);
+            return newReg;
+        }));
+
+        reg.setStudentName(request.getStudentName());
+        reg.setStudentEmail(cleanEmail);
+        reg.setStudentPhone(sanitizedPhone);
+        reg.setStudentId(request.getStudentId());
+        reg.setAge(request.getAge());
+        reg.setSchool(request.getSchool());
+        reg.setCity(request.getCity());
+
+        // Free Competition -> Confirm immediately without payment
+        if (amountPaise <= 0) {
+            reg.setPaymentStatus("PAID");
+            reg.setAmountPaise(0L);
+            reg.setPaidAt(LocalDateTime.now());
+            registrationRepository.save(reg);
+
+            return RazorpayOrderResponse.builder()
+                    .orderId(null)
+                    .amount(0L)
+                    .currency("INR")
+                    .keyId(null)
+                    .registrationId(reg.getId())
+                    .free(true)
+                    .build();
+        }
+
+        // Paid Competition -> Check server keys
+        if (keyId == null || keyId.isBlank() || keySecret == null || keySecret.isBlank()) {
+            log.error("Online payments are not configured: RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is not set in the environment.");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Online payments are not configured");
+        }
+
+        // Call Razorpay Orders REST API
+        String orderId = callRazorpayCreateOrder(amountPaise, reg.getId(), comp.getId(), cleanEmail);
+
+        reg.setPaymentStatus("PENDING_PAYMENT");
+        reg.setRazorpayOrderId(orderId);
+        reg.setAmountPaise(amountPaise);
+        registrationRepository.save(reg);
+
+        return RazorpayOrderResponse.builder()
+                .orderId(orderId)
+                .amount(amountPaise)
+                .currency("INR")
+                .keyId(keyId.trim())
+                .registrationId(reg.getId())
+                .free(false)
+                .build();
+    }
+
+    private String callRazorpayCreateOrder(long amountPaise, String receiptId, String competitionId, String email) {
+        try {
+            String url = razorpayBaseUrl + "/orders";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBasicAuth(keyId.trim(), keySecret.trim());
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("amount", amountPaise);
+            body.put("currency", "INR");
+            body.put("receipt", receiptId);
+
+            Map<String, String> notes = new HashMap<>();
+            notes.put("competitionId", competitionId);
+            notes.put("email", email);
+            body.put("notes", notes);
+
+            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+            ResponseEntity<String> response = restTemplate.postForEntity(url, requestEntity, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                String id = root.path("id").asText();
+                if (id != null && !id.isBlank()) {
+                    return id;
+                }
+            }
+            throw new RuntimeException("Unexpected response from Razorpay Orders API: " + response.getBody());
+        } catch (Exception e) {
+            log.error("Error creating Razorpay order: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to initialize payment order with payment gateway: " + e.getMessage());
+        }
+    }
+
+    @Transactional
+    public CompetitionRegistration verifyPayment(RazorpayVerifyRequest request) {
+        String orderId = request.getOrderId();
+        String paymentId = request.getPaymentId();
+        String signature = request.getSignature();
+
+        CompetitionRegistration reg = registrationRepository.findByRazorpayOrderId(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Registration not found for Razorpay Order ID: " + orderId));
+
+        // Idempotency: if already paid, return existing verified registration
+        if (isPaid(reg.getPaymentStatus())) {
+            log.info("Payment already verified for order {}", orderId);
+            return reg;
+        }
+
+        // Verify HMAC-SHA256 signature
+        if (keySecret == null || keySecret.isBlank()) {
+            log.error("Online payments verification failed: RAZORPAY_KEY_SECRET is not set.");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Online payments are not configured");
+        }
+
+        boolean valid = verifyHmacSha256Signature(orderId + "|" + paymentId, signature, keySecret);
+        if (!valid) {
+            log.warn("Invalid payment signature for order {} and payment {}", orderId, paymentId);
+            throw new BadRequestException("Invalid payment signature");
+        }
+
+        reg.setPaymentStatus("PAID");
+        reg.setRazorpayPaymentId(paymentId);
+        reg.setRazorpaySignature(signature);
+        reg.setPaidAt(LocalDateTime.now());
+        return registrationRepository.save(reg);
+    }
+
+    @Transactional
+    public boolean handleWebhook(String payload, String signatureHeader) {
+        if (webhookSecret == null || webhookSecret.isBlank()) {
+            log.warn("Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not configured.");
+            return false;
+        }
+
+        boolean valid = verifyHmacSha256Signature(payload, signatureHeader, webhookSecret);
+        if (!valid) {
+            log.warn("Invalid Razorpay webhook signature");
+            throw new BadRequestException("Invalid webhook signature");
+        }
+
+        try {
+            JsonNode root = objectMapper.readTree(payload);
+            String event = root.path("event").asText();
+
+            if ("payment.captured".equals(event)) {
+                JsonNode paymentEntity = root.path("payload").path("payment").path("entity");
+                String orderId = paymentEntity.path("order_id").asText();
+                String paymentId = paymentEntity.path("id").asText();
+
+                if (orderId != null && !orderId.isBlank()) {
+                    registrationRepository.findByRazorpayOrderId(orderId).ifPresent(reg -> {
+                        if (!isPaid(reg.getPaymentStatus())) {
+                            reg.setPaymentStatus("PAID");
+                            reg.setRazorpayPaymentId(paymentId);
+                            reg.setPaidAt(LocalDateTime.now());
+                            registrationRepository.save(reg);
+                            log.info("Webhook successfully marked registration {} as PAID", reg.getId());
+                        }
+                    });
+                }
+            } else if ("payment.failed".equals(event)) {
+                log.info("Razorpay webhook recorded failed payment: {}", payload);
+            }
+            return true;
+        } catch (Exception e) {
+            log.error("Error processing Razorpay webhook: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    public static boolean verifyHmacSha256Signature(String data, String signature, String secret) {
+        if (data == null || signature == null || secret == null) {
+            return false;
+        }
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(secretKey);
+            byte[] hmac = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hmac) {
+                hex.append(String.format("%02x", b));
+            }
+            String calculatedSignature = hex.toString();
+
+            // Constant-time comparison
+            return MessageDigest.isEqual(
+                    calculatedSignature.getBytes(StandardCharsets.UTF_8),
+                    signature.trim().toLowerCase().getBytes(StandardCharsets.UTF_8)
+            );
+        } catch (Exception e) {
+            log.error("Error calculating HMAC-SHA256 signature: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean isPaid(String status) {
+        return status != null && ("PAID".equalsIgnoreCase(status) || "Paid".equalsIgnoreCase(status));
+    }
+
+    // Expire pending registrations after 30 minutes
+    @Scheduled(fixedRate = 300000)
+    @Transactional
+    public void expirePendingRegistrations() {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(30);
+        List<CompetitionRegistration> pendingList = registrationRepository.findByPaymentStatusAndCreatedAtBefore("PENDING_PAYMENT", cutoff);
+        for (CompetitionRegistration reg : pendingList) {
+            reg.setPaymentStatus("EXPIRED");
+            registrationRepository.save(reg);
+            log.info("Expired unpaid pending competition registration {} (order {})", reg.getId(), reg.getRazorpayOrderId());
+        }
+    }
+
+    // Setters for unit testing
+    public void setKeyId(String keyId) {
+        this.keyId = keyId;
+    }
+
+    public void setKeySecret(String keySecret) {
+        this.keySecret = keySecret;
+    }
+
+    public void setWebhookSecret(String webhookSecret) {
+        this.webhookSecret = webhookSecret;
+    }
+
+    public void setRazorpayBaseUrl(String razorpayBaseUrl) {
+        this.razorpayBaseUrl = razorpayBaseUrl;
+    }
+}
