@@ -66,15 +66,20 @@ export default function TrainerDoubtsPage() {
     if (!text || !text.trim()) return;
 
     try {
-      const res = await resolveDoubt(doubtId, trainerName, text);
+      const res = await resolveDoubt(doubtId, trainerName, text.trim());
       if (res.success) {
         setMsg('Doubt resolved & answer sent to student!');
-        setTimeout(() => setMsg(''), 3000);
+        setTimeout(() => setMsg(''), 4000);
         setReplyText(prev => ({ ...prev, [doubtId]: '' }));
         await loadAllData();
+      } else {
+        setMsg(res.message || 'Failed to submit answer');
+        setTimeout(() => setMsg(''), 4000);
       }
     } catch (err) {
       console.error('Failed to resolve doubt:', err);
+      setMsg(err.message || 'Error occurred while submitting answer');
+      setTimeout(() => setMsg(''), 4000);
     }
   };
 
@@ -227,27 +232,42 @@ export default function TrainerDoubtsPage() {
                 "{doubt.question}"
               </div>
 
-              {doubt.status?.toUpperCase() === 'OPEN' ? (
-                <div className="flex gap-2 pt-2">
-                  <input
-                    type="text"
-                    placeholder="Type your guidance answer here..."
+              {doubt.status?.toUpperCase() === 'OPEN' || doubt.status?.toUpperCase() === 'PENDING' ? (
+                <div className="space-y-3 pt-2">
+                  <label htmlFor={`doubt-reply-${doubt.id}`} className="block text-xs font-bold text-slate-700">
+                    Your Answer & Guidance:
+                  </label>
+                  <textarea
+                    id={`doubt-reply-${doubt.id}`}
+                    rows={3}
+                    placeholder="Type your detailed answer or guidance for the student..."
                     aria-label={`Reply to ${doubt.studentName}`}
                     value={replyText[doubt.id] || ''}
                     onChange={(e) => setReplyText({ ...replyText, [doubt.id]: e.target.value })}
-                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white focus:border-[#0F52BA]"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-y"
                   />
-                  <button
-                    onClick={() => handleReply(doubt.id)}
-                    className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs shadow-sm cursor-pointer"
-                  >
-                    Send Answer
-                  </button>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => handleReply(doubt.id)}
+                      disabled={!replyText[doubt.id] || !replyText[doubt.id].trim()}
+                      className="bg-[#0F52BA] hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-extrabold px-6 py-2.5 rounded-xl text-xs shadow-sm cursor-pointer transition-colors"
+                    >
+                      Send Answer
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl text-xs text-emerald-900 font-medium">
-                  <span className="font-extrabold block text-emerald-800 text-[10px] uppercase">Resolved Answer ({doubt.resolvedBy || trainerName}):</span>
-                  {doubt.answer || doubt.reply || 'Guidance provided.'}
+                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl text-xs text-emerald-900 font-medium space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-emerald-800 text-[10px] uppercase tracking-wider">
+                      Resolved Answer ({doubt.resolvedBy || doubt.trainerName || trainerName}):
+                    </span>
+                    {doubt.replyDate && (
+                      <span className="text-[10px] text-emerald-600 font-bold">{doubt.replyDate}</span>
+                    )}
+                  </div>
+                  <p className="whitespace-pre-wrap">{doubt.answer || doubt.reply || 'No answer recorded.'}</p>
                 </div>
               )}
             </div>

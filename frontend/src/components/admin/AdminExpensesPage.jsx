@@ -197,12 +197,15 @@ export default function AdminExpensesPage({ setActiveScreen }) {
     .filter(r => (r.paymentStatus === 'Paid' || r.paymentStatus === 'PAID'))
     .filter(r => {
       if (!fromDate && !toDate) return true;
-      const d = (r.paymentDate || r.registrationDate || '').split(' ')[0];
+      const d = (r.paidAt || r.paymentDate || r.registrationDate || '').split('T')[0].split(' ')[0];
       if (fromDate && d < fromDate) return false;
       if (toDate && d > toDate) return false;
       return true;
     })
-    .reduce((sum, r) => sum + (parseFloat(r.registrationFee) || 0), 0);
+    .reduce((sum, r) => {
+      const amt = r.amount != null ? Number(r.amount) : (r.amountPaise != null ? Number(r.amountPaise) / 100 : Number(r.registrationFee || 0));
+      return sum + amt;
+    }, 0);
 
   const totalIncome = totalStudentFeeIncome + totalCompIncome;
   const totalExpense = filteredExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
@@ -224,11 +227,11 @@ export default function AdminExpensesPage({ setActiveScreen }) {
     .filter(r => (r.paymentStatus === 'Paid' || r.paymentStatus === 'PAID'))
     .map(r => ({
       id: `comp_${r.id}`,
-      date: (r.paymentDate || r.registrationDate || '').split(' ')[0] || '2026-09-20',
+      date: (r.paidAt || r.paymentDate || r.registrationDate || '').split('T')[0].split(' ')[0] || '2026-09-20',
       title: r.competitionName || 'Competition Registration',
       participant: r.studentName || 'Participant',
       source: 'Competition Registration',
-      amount: parseFloat(r.registrationFee || 0),
+      amount: r.amount != null ? Number(r.amount) : (r.amountPaise != null ? Number(r.amountPaise) / 100 : Number(r.registrationFee || 0)),
       paymentStatus: 'Paid',
       referenceNo: r.razorpayPaymentId || r.razorpayOrderId || 'RAZORPAY_PAID'
     }));

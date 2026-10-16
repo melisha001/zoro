@@ -4,25 +4,44 @@ import { logActivity } from './activityLogApi';
 export const getCompetitionRegistrations = async () => {
   const res = await apiGet('/competitions/registrations');
   if (res && res.success && Array.isArray(res.data)) {
-    const normalized = res.data.map(r => ({
-      id: r.id,
-      competitionId: r.competition?.id || r.competitionId,
-      competitionName: r.competition?.title || r.competitionName || 'Competition',
-      studentId: r.studentId || null,
-      studentName: r.studentName || 'Participant',
-      studentEmail: r.studentEmail || '',
-      studentPhone: r.studentPhone || '',
-      age: r.age || null,
-      school: r.school || '',
-      city: r.city || '',
-      registrationDate: r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : '',
-      registrationFee: r.competition?.registrationFee || 0,
-      paymentStatus: r.paymentStatus || 'Pending',
-      registrationStatus: 'Registered',
-      score: r.score,
-      rank: r.rank,
-      certificateUrl: r.certificateUrl
-    }));
+    const normalized = res.data.map(r => {
+      const regFee = r.registrationFee ?? r.competition?.registrationFee ?? 0;
+      const amt = r.amount != null 
+        ? Number(r.amount) 
+        : (r.amountPaise != null ? Number(r.amountPaise) / 100 : Number(regFee));
+      const amtPaise = r.amountPaise != null 
+        ? Number(r.amountPaise) 
+        : Math.round(amt * 100);
+
+      return {
+        id: r.id,
+        competitionId: r.competitionId || r.competition?.id || null,
+        competitionName: r.competitionName || r.competition?.title || 'Competition',
+        studentId: r.studentId || null,
+        studentName: r.studentName || 'Participant',
+        studentEmail: r.studentEmail || '',
+        studentPhone: r.studentPhone || '',
+        age: r.age || null,
+        school: r.school || '',
+        city: r.city || '',
+        registrationDate: r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : '',
+        registrationFee: Number(regFee),
+        amount: amt,
+        amountPaise: amtPaise,
+        currency: r.currency || 'INR',
+        paymentStatus: r.paymentStatus || 'Pending',
+        razorpayOrderId: r.razorpayOrderId || null,
+        razorpayPaymentId: r.razorpayPaymentId || null,
+        razorpaySignature: r.razorpaySignature || null,
+        signatureVerified: Boolean(r.signatureVerified),
+        paidAt: r.paidAt || null,
+        paymentDate: r.paidAt ? new Date(r.paidAt).toISOString().split('T')[0] : (r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : ''),
+        registrationStatus: 'Registered',
+        score: r.score,
+        rank: r.rank,
+        certificateUrl: r.certificateUrl
+      };
+    });
     return apiResponse(normalized);
   }
   return apiResponse([], false, res?.message || 'Failed to fetch competition registrations');
@@ -98,6 +117,17 @@ export const updateRegistrationStatus = async (id, _regStatus, payStatus) => {
     return apiResponse(true, true, 'Registration updated successfully');
   }
   return apiResponse(false, false, res?.message || 'Failed to update registration');
+};
+
+export const updateCompetitionRegistration = async (id, updateData) => {
+  if (!id) {
+    return apiResponse(null, false, 'Registration ID is required');
+  }
+  const res = await apiPut(`/competitions/registrations/${encodeURIComponent(id)}`, updateData);
+  if (res && res.success) {
+    return apiResponse(res.data, true, 'Registration updated successfully');
+  }
+  return apiResponse(null, false, res?.message || 'Failed to update registration');
 };
 
 // COMPETITION ATTENDANCE API

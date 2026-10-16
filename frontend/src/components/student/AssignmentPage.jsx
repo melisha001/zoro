@@ -589,16 +589,7 @@ export default function AssignmentPage({ setActiveScreen }) {
                           <Eye className="w-3 h-3" />
                           <span>View</span>
                         </button>
-                        {item.taskDoc.fileUrl && (
-                          <button
-                            type="button"
-                            onClick={() => openFileWithSignedLink(item.taskDoc.fileUrl, item.taskDoc.name)}
-                            className="px-2.5 py-1 bg-white hover:bg-purple-100 text-purple-700 font-black rounded-lg border border-purple-200 flex items-center space-x-1 cursor-pointer"
-                          >
-                            <Download className="w-3 h-3" />
-                            <span>Download</span>
-                          </button>
-                        )}
+
                       </div>
                     </div>
                   ) : null}
@@ -654,10 +645,10 @@ export default function AssignmentPage({ setActiveScreen }) {
                               <span className="font-bold text-emerald-200 truncate max-w-[200px]">📄 Corrected Assignment</span>
                               <button
                                 type="button"
-                                onClick={() => openFileWithSignedLink(sub.correctedFileUrl, 'Corrected_Assignment')}
+                                onClick={() => setViewerFile({ name: 'Corrected Assignment', url: sub.correctedFileUrl, type: 'pdf' })}
                                 className="text-emerald-300 hover:text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
                               >
-                                <Download className="w-3.5 h-3.5" /> Download
+                                <Eye className="w-3.5 h-3.5" /> View
                               </button>
                             </div>
                           )}
@@ -777,6 +768,7 @@ export default function AssignmentPage({ setActiveScreen }) {
         isOpen={Boolean(viewerFile)}
         onClose={() => setViewerFile(null)}
         file={viewerFile}
+        hideDownload={true}
       />
 
     </div>

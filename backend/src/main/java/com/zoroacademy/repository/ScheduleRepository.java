@@ -19,6 +19,8 @@ public interface ScheduleRepository extends JpaRepository<Schedule, String> {
     List<Schedule> findByDate(String date);
     List<Schedule> findAllByOrderByDateAsc();
 
+    List<Schedule> findByAudienceIgnoreCase(String audience);
+
     @org.springframework.data.jpa.repository.Query("SELECT s FROM Schedule s WHERE s.notesFileUrl LIKE %:fileId% OR s.worksheetFileUrl LIKE %:fileId% OR s.assignmentFileUrl LIKE %:fileId%")
     List<Schedule> findByAnyFileUrlContaining(@org.springframework.data.repository.query.Param("fileId") String fileId);
 }

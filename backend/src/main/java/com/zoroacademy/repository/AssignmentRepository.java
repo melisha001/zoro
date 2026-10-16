@@ -18,6 +18,6 @@ public interface AssignmentRepository extends JpaRepository<Assignment, String> 
     List<Assignment> findByCourseIdOrCourseIgnoreCase(String courseId, String course);
     List<Assignment> findByBatchIdOrBatchIgnoreCase(String batchId, String batch);
 
-    @org.springframework.data.jpa.repository.Query("SELECT a FROM Assignment a WHERE a.attachment LIKE %:fileId%")
+    @org.springframework.data.jpa.repository.Query(value = "SELECT * FROM assignments a WHERE CAST(a.attachment AS text) LIKE CONCAT('%', :fileId, '%')", nativeQuery = true)
     List<Assignment> findByAnyFileUrlContaining(@org.springframework.data.repository.query.Param("fileId") String fileId);
 }

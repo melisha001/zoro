@@ -1,28 +1,35 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Users, UserCheck, Calendar, Download, BookOpen, Layers, User, Check, X as XIcon, Clock } from 'lucide-react';
-import { getAttendanceRecords, recordAttendance, recordBatchAttendance } from '../../api/attendanceApi';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { ArrowLeft, Users, UserCheck, Calendar, Download, BookOpen, Layers, Search, Clock, Check, AlertCircle } from 'lucide-react';
+import { getAttendanceRecords, getTrainerAttendanceRecords, updateStudentRemark, updateTrainerRemark } from '../../api/attendanceApi';
 import { getStudents, getTrainers } from '../../api/userApi';
 import { getCourses } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { getSchedules } from '../../api/scheduleApi';
 import { exportToExcel } from '../../utils/excelExporter';
-import { useDialog } from '../../context/DialogContext';
+import { getNowInKolkata, getSessionStartDateTime, getSessionEndDateTime, syncServerTime } from '../../utils/scheduleSortUtil';
 
 export default function AdminAttendancePage({ setActiveScreen }) {
-  const { showSuccess, showError } = useDialog();
   const [activeTab, setActiveTab] = useState('students'); // 'students' | 'trainers'
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [filterAllDates, setFilterAllDates] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState('');
   const [selectedBatch, setSelectedBatch] = useState('');
+  const [searchSchedule, setSearchSchedule] = useState('');
 
   const [allRecords, setAllRecords] = useState([]);
+  const [trainerRecords, setTrainerRecords] = useState([]);
   const [students, setStudents] = useState([]);
   const [trainers, setTrainers] = useState([]);
   const [courses, setCourses] = useState([]);
   const [batches, setBatches] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+
+  // Remarks state: key -> remark string
+  const [studentRemarks, setStudentRemarks] = useState({});
+  const [trainerRemarks, setTrainerRemarks] = useState({});
+  const [savedIndicator, setSavedIndicator] = useState({}); // key -> boolean
+  const debounceTimers = useRef({});
 
   useEffect(() => {
     loadData();
@@ -31,8 +38,10 @@ export default function AdminAttendancePage({ setActiveScreen }) {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [attRes, stdRes, trnRes, crsRes, bRes, schRes] = await Promise.all([
+      await syncServerTime();
+      const [attRes, trAttRes, stdRes, trnRes, crsRes, bRes, schRes] = await Promise.all([
         getAttendanceRecords(),
+        getTrainerAttendanceRecords(),
         getStudents(),
         getTrainers(),
         getCourses(),
@@ -40,17 +49,204 @@ export default function AdminAttendancePage({ setActiveScreen }) {
         getSchedules()
       ]);
 
-      setAllRecords(attRes.data || []);
+      const attList = attRes.data || [];
+      const trList = trAttRes.data || [];
+      setAllRecords(attList);
+      setTrainerRecords(trList);
       setStudents(stdRes.data || []);
       setTrainers(trnRes.data || []);
-      setCourses(crsRes.data || []);
-      setBatches(bRes.data || []);
-      setSchedules(schRes.data || []);
+
+      // Filter courses: Only ONLINE and HYBRID (Requirement P2.A.1, P2.B.1: Recorded courses never appear)
+      const liveCourses = (crsRes.data || []).filter(c => {
+        const mode = (c.mode || '').toLowerCase();
+        return mode === 'online' || mode === 'hybrid';
+      });
+      setCourses(liveCourses);
+      const liveCourseIds = new Set(liveCourses.map(c => c.id));
+      const liveCourseTitles = new Set(liveCourses.map(c => (c.title || '').toLowerCase().trim()));
+
+      // Filter batches belonging to online/hybrid courses
+      const liveBatches = (bRes.data || []).filter(b => 
+        (b.courseId && liveCourseIds.has(b.courseId)) ||
+        (b.courseName && liveCourseTitles.has(b.courseName.toLowerCase().trim()))
+      );
+      setBatches(liveBatches);
+
+      // Filter schedules belonging to online/hybrid courses
+      const liveSchedules = (schRes.data || []).filter(s =>
+        (s.courseId && liveCourseIds.has(s.courseId)) ||
+        (s.course && liveCourseTitles.has(s.course.toLowerCase().trim()))
+      );
+      setSchedules(liveSchedules);
+
+      // Initialize remarks
+      const stRem = {};
+      attList.forEach(r => {
+        if (r.scheduleId && r.studentId) {
+          stRem[`${r.scheduleId}_${r.studentId}`] = r.remarks || r.remark || '';
+        }
+      });
+      setStudentRemarks(stRem);
+
+      const trRem = {};
+      trList.forEach(r => {
+        if (r.scheduleId && r.trainerId) {
+          trRem[`${r.scheduleId}_${r.trainerId}`] = r.remarks || r.remark || '';
+        }
+      });
+      setTrainerRemarks(trRem);
+
     } catch (err) {
       console.error('Failed to load attendance data:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const nowInKolkata = getNowInKolkata();
+  const nowMs = nowInKolkata.getTime();
+
+  // Helper to compute session status
+  const getSessionTimingState = (date, time) => {
+    const start = getSessionStartDateTime(date, time);
+    const end = getSessionEndDateTime(date, time);
+    const startMs = start ? start.getTime() : 0;
+    const endMs = end ? end.getTime() : 0;
+
+    if (nowMs < startMs) {
+      return 'UPCOMING';
+    } else if (nowMs >= startMs && nowMs <= endMs) {
+      return 'LIVE';
+    } else {
+      return 'FINISHED';
+    }
+  };
+
+  // Helper to determine student automatic attendance status
+  const getStudentStatus = (schedule, student) => {
+    const record = allRecords.find(r => 
+      r.scheduleId === schedule.id && 
+      (r.studentId === student.id || (r.studentName && r.studentName.toLowerCase().trim() === student.name?.toLowerCase().trim()))
+    );
+
+    if (record && (record.status || '').toUpperCase() === 'PRESENT') {
+      let timeLabel = '';
+      if (record.joinedAt) {
+        try {
+          const jDate = new Date(record.joinedAt);
+          timeLabel = jDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        } catch {
+          timeLabel = '';
+        }
+      }
+      return { status: 'PRESENT', record, timeLabel };
+    }
+
+    const timing = getSessionTimingState(schedule.date, schedule.time);
+    if (timing === 'FINISHED') {
+      return { status: 'ABSENT', record };
+    } else if (timing === 'LIVE') {
+      return { status: 'IN_PROGRESS', record };
+    } else {
+      return { status: 'UPCOMING', record };
+    }
+  };
+
+  // Helper to determine trainer automatic attendance status
+  const getTrainerStatus = (schedule, trainer) => {
+    const record = trainerRecords.find(r =>
+      r.scheduleId === schedule.id &&
+      (r.trainerId === trainer.id || (r.trainerName && r.trainerName.toLowerCase().trim() === trainer.name?.toLowerCase().trim()))
+    );
+
+    if (record && (record.status || '').toUpperCase() === 'PRESENT') {
+      let timeLabel = '';
+      if (record.joinedAt) {
+        try {
+          const jDate = new Date(record.joinedAt);
+          timeLabel = jDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        } catch {
+          timeLabel = '';
+        }
+      }
+      return { status: 'PRESENT', record, timeLabel };
+    }
+
+    const timing = getSessionTimingState(schedule.date, schedule.time);
+    if (timing === 'FINISHED') {
+      return { status: 'ABSENT', record };
+    } else if (timing === 'LIVE') {
+      return { status: 'IN_PROGRESS', record };
+    } else {
+      return { status: 'UPCOMING', record };
+    }
+  };
+
+  // Autosave Student Remark
+  const handleStudentRemarkChange = (scheduleId, studentId, text) => {
+    const key = `${scheduleId}_${studentId}`;
+    setStudentRemarks(prev => ({ ...prev, [key]: text }));
+
+    if (debounceTimers.current[key]) {
+      clearTimeout(debounceTimers.current[key]);
+    }
+
+    debounceTimers.current[key] = setTimeout(async () => {
+      try {
+        const res = await updateStudentRemark({ scheduleId, studentId, remark: text });
+        if (res.success) {
+          setSavedIndicator(prev => ({ ...prev, [key]: true }));
+          setTimeout(() => {
+            setSavedIndicator(prev => ({ ...prev, [key]: false }));
+          }, 2500);
+          // Refresh records quietly
+          setAllRecords(prev => {
+            const idx = prev.findIndex(r => r.scheduleId === scheduleId && r.studentId === studentId);
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = res.data;
+              return updated;
+            }
+            return [...prev, res.data];
+          });
+        }
+      } catch (err) {
+        console.error('Failed to autosave student remark:', err);
+      }
+    }, 800);
+  };
+
+  // Autosave Trainer Remark
+  const handleTrainerRemarkChange = (scheduleId, trainerId, text) => {
+    const key = `${scheduleId}_${trainerId}`;
+    setTrainerRemarks(prev => ({ ...prev, [key]: text }));
+
+    if (debounceTimers.current[key]) {
+      clearTimeout(debounceTimers.current[key]);
+    }
+
+    debounceTimers.current[key] = setTimeout(async () => {
+      try {
+        const res = await updateTrainerRemark({ scheduleId, trainerId, remark: text });
+        if (res.success) {
+          setSavedIndicator(prev => ({ ...prev, [key]: true }));
+          setTimeout(() => {
+            setSavedIndicator(prev => ({ ...prev, [key]: false }));
+          }, 2500);
+          setTrainerRecords(prev => {
+            const idx = prev.findIndex(r => r.scheduleId === scheduleId && r.trainerId === trainerId);
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = res.data;
+              return updated;
+            }
+            return [...prev, res.data];
+          });
+        }
+      } catch (err) {
+        console.error('Failed to autosave trainer remark:', err);
+      }
+    }, 800);
   };
 
   // Batches filtered by selected course
@@ -59,217 +255,193 @@ export default function AdminAttendancePage({ setActiveScreen }) {
     return batches.filter(b => b.courseName === selectedCourse || b.courseId === selectedCourse);
   }, [batches, selectedCourse]);
 
-  // Filter students based on course and batch
-  const filteredStudents = useMemo(() => {
-    return students.filter(s => {
-      if (selectedCourse) {
-        let inCourse = false;
-        if (s.courseBatches && Array.isArray(s.courseBatches)) {
-          inCourse = s.courseBatches.some(cb => cb.course === selectedCourse || cb.courseId === selectedCourse);
-        } else if (s.course) {
-          inCourse = s.course.toLowerCase().includes(selectedCourse.toLowerCase());
-        }
-        if (!inCourse) return false;
+  // Schedules matching filters
+  const filteredSchedules = useMemo(() => {
+    return schedules.filter(sch => {
+      if (!filterAllDates && selectedDate && sch.date !== selectedDate) {
+        return false;
       }
-
-      if (selectedBatch) {
-        let inBatch = false;
-        if (s.courseBatches && Array.isArray(s.courseBatches)) {
-          inBatch = s.courseBatches.some(cb => cb.batch === selectedBatch || cb.batchId === selectedBatch);
-        } else if (s.batch) {
-          inBatch = s.batch === selectedBatch;
-        }
-        if (!inBatch) return false;
+      if (selectedCourse && sch.course !== selectedCourse && sch.courseId !== selectedCourse) {
+        return false;
       }
-
+      if (selectedBatch && sch.batch !== selectedBatch && sch.batchId !== selectedBatch) {
+        return false;
+      }
+      if (searchSchedule && !sch.title.toLowerCase().includes(searchSchedule.toLowerCase())) {
+        return false;
+      }
       return true;
     });
-  }, [students, selectedCourse, selectedBatch]);
+  }, [schedules, filterAllDates, selectedDate, selectedCourse, selectedBatch, searchSchedule]);
 
-  // Map student attendance for selected date
-  const studentAttendanceMap = useMemo(() => {
-    const map = {};
-    allRecords.forEach(r => {
-      if (r.date === selectedDate) {
-        if (r.studentId) map[r.studentId] = r.status;
-        if (r.studentName) map[r.studentName.toLowerCase().trim()] = r.status;
-      }
-    });
-    return map;
-  }, [allRecords, selectedDate]);
+  // A) STUDENTS ATTENDANCE TAB: Group BATCH-wise (Requirement P2.A.1)
+  const batchWiseGroups = useMemo(() => {
+    const groups = [];
+    // Batches to consider:
+    const targetBatches = selectedBatch 
+      ? availableBatches.filter(b => b.name === selectedBatch || b.id === selectedBatch)
+      : availableBatches;
 
-  // Handler for student attendance toggle
-  const handleSetStudentAttendance = async (student, newStatus) => {
-    const record = {
-      studentId: student.id,
-      studentName: student.name,
-      courseId: student.courseBatches?.[0]?.courseId || student.course || selectedCourse || null,
-      batchId: student.courseBatches?.[0]?.batchId || student.batch || selectedBatch || null,
-      date: selectedDate,
-      status: newStatus,
-      recordedBy: 'Admin'
-    };
+    targetBatches.forEach(batch => {
+      // Find sessions for this batch
+      const batchSchedules = filteredSchedules.filter(sch => 
+        (sch.batchId && sch.batchId === batch.id) || 
+        (sch.batch && sch.batch.toLowerCase().trim() === batch.name.toLowerCase().trim())
+      );
 
-    try {
-      const res = await recordAttendance(record);
-      if (res.success) {
-        setAllRecords(prev => {
-          const filtered = prev.filter(r => !(r.date === selectedDate && (r.studentId === student.id || (r.studentName && r.studentName.toLowerCase().trim() === student.name.toLowerCase().trim()))));
-          return [...filtered, res.data || { ...record, id: `att_${Date.now()}` }];
+      // Find students enrolled in this batch
+      const batchStudents = students.filter(s => {
+        if (s.courseBatches && Array.isArray(s.courseBatches)) {
+          return s.courseBatches.some(cb => 
+            (cb.batchId && cb.batchId === batch.id) || 
+            (cb.batch && cb.batch.toLowerCase().trim() === batch.name.toLowerCase().trim())
+          );
+        }
+        return s.batch === batch.name || s.batchId === batch.id;
+      });
+
+      if (batchSchedules.length > 0 || batchStudents.length > 0) {
+        groups.push({
+          batch,
+          schedules: batchSchedules,
+          students: batchStudents
         });
       }
-    } catch (err) {
-      console.error('Failed to update student attendance:', err);
-    }
-  };
+    });
 
-  // Bulk actions for students
-  const handleBulkStudentAttendance = async (status) => {
-    if (filteredStudents.length === 0) return;
-    setSaving(true);
-    const records = filteredStudents.map(s => ({
-      studentId: s.id,
-      studentName: s.name,
-      courseId: s.courseBatches?.[0]?.courseId || s.course || selectedCourse || null,
-      batchId: s.courseBatches?.[0]?.batchId || s.batch || selectedBatch || null,
-      date: selectedDate,
-      status,
-      recordedBy: 'Admin'
-    }));
+    return groups;
+  }, [availableBatches, filteredSchedules, selectedBatch, students]);
 
-    try {
-      const res = await recordBatchAttendance(records);
-      if (res.success) {
-        await showSuccess(`Marked all ${filteredStudents.length} students as ${status}`, 'Attendance Updated');
-        const updated = await getAttendanceRecords();
-        setAllRecords(updated.data || []);
-      } else {
-        await showError(res?.message || 'Failed to update attendance', 'Update Failed');
+  // B) TRAINERS ATTENDANCE TAB: Group COURSE-wise (Requirement P2.B.1)
+  const courseWiseGroups = useMemo(() => {
+    const groups = [];
+    const targetCourses = selectedCourse
+      ? courses.filter(c => c.title === selectedCourse || c.id === selectedCourse)
+      : courses;
+
+    targetCourses.forEach(course => {
+      const courseSchedules = filteredSchedules.filter(sch =>
+        sch.courseId === course.id || sch.course === course.title
+      );
+
+      if (courseSchedules.length > 0) {
+        groups.push({
+          course,
+          schedules: courseSchedules
+        });
       }
-    } catch (err) {
-      await showError(err?.message || 'Failed to update attendance', 'Update Failed');
-    } finally {
-      setSaving(false);
-    }
-  };
+    });
 
-  // Export students attendance
+    return groups;
+  }, [courses, filteredSchedules, selectedCourse]);
+
+  // Summary Metrics: Students
+  const studentMetrics = useMemo(() => {
+    let totalInstances = 0;
+    let presentCount = 0;
+    let absentCount = 0;
+
+    batchWiseGroups.forEach(bg => {
+      bg.schedules.forEach(sch => {
+        bg.students.forEach(std => {
+          totalInstances++;
+          const info = getStudentStatus(sch, std);
+          if (info.status === 'PRESENT') presentCount++;
+          else if (info.status === 'ABSENT') absentCount++;
+        });
+      });
+    });
+
+    const evaluated = presentCount + absentCount;
+    const rate = evaluated > 0 ? Math.round((presentCount / evaluated) * 100) : (totalInstances > 0 ? 0 : 0);
+
+    return { total: totalInstances, present: presentCount, absent: absentCount, rate };
+  }, [batchWiseGroups, allRecords, nowMs]);
+
+  // Summary Metrics: Trainers
+  const trainerMetrics = useMemo(() => {
+    let totalSessions = 0;
+    let presentCount = 0;
+    let absentCount = 0;
+
+    courseWiseGroups.forEach(cg => {
+      cg.schedules.forEach(sch => {
+        totalSessions++;
+        const trainerUser = trainers.find(t => t.id === sch.trainerId || t.name === sch.trainer) || { id: sch.trainerId, name: sch.trainer };
+        const info = getTrainerStatus(sch, trainerUser);
+        if (info.status === 'PRESENT') presentCount++;
+        else if (info.status === 'ABSENT') absentCount++;
+      });
+    });
+
+    const evaluated = presentCount + absentCount;
+    const rate = evaluated > 0 ? Math.round((presentCount / evaluated) * 100) : 0;
+
+    return { total: totalSessions, present: presentCount, absent: absentCount, rate };
+  }, [courseWiseGroups, trainerRecords, trainers, nowMs]);
+
+  // Export to Excel for Students
   const handleExportStudents = () => {
-    const headers = ['Date', 'Student Name', 'Email', 'Phone', 'Course & Batch', 'Attendance Status'];
-    const rows = filteredStudents.map(s => {
-      const status = studentAttendanceMap[s.id] || studentAttendanceMap[s.name?.toLowerCase().trim()] || 'Absent';
-      const cStr = s.courseBatches?.map(cb => `${cb.course} (${cb.batch})`).join('; ') || s.course || 'General';
-      return [selectedDate, s.name, s.email, s.phone || '', cStr, status];
-    });
-    exportToExcel(`Student_Attendance_${selectedDate}.xlsx`, 'Student Attendance', headers, rows);
-  };
+    const headers = ['Date', 'Course', 'Batch', 'Session Time', 'Topic', 'Student Name', 'Email', 'Status', 'Joined Time', 'Remark', 'Remark By'];
+    const rows = [];
 
-  // --- TRAINERS VIEW ---
-  // Schedules on selected date
-  const daySchedules = useMemo(() => {
-    return schedules.filter(sch => sch.date === selectedDate);
-  }, [schedules, selectedDate]);
-
-  // Map trainer attendance by scheduleId or trainer
-  const trainerAttendanceMap = useMemo(() => {
-    const map = {};
-    allRecords.forEach(r => {
-      if (r.date === selectedDate) {
-        if (r.scheduleId) map[r.scheduleId] = r.status;
-        if (r.studentId) map[r.studentId] = r.status;
-        if (r.studentName) map[r.studentName.toLowerCase().trim()] = r.status;
-      }
-    });
-    return map;
-  }, [allRecords, selectedDate]);
-
-  // Handler for trainer attendance toggle
-  const handleSetTrainerAttendance = async (schedule, newStatus) => {
-    const trainerUser = trainers.find(t => t.id === schedule.trainerId || t.name === schedule.trainer);
-    const trainerId = schedule.trainerId || trainerUser?.id || schedule.trainer;
-    const trainerName = schedule.trainer || trainerUser?.name || 'Trainer';
-
-    const record = {
-      scheduleId: schedule.id,
-      studentId: trainerId,
-      studentName: trainerName,
-      courseId: schedule.courseId || schedule.course,
-      batchId: schedule.batchId || schedule.batch,
-      date: selectedDate,
-      status: newStatus,
-      recordedBy: 'Admin',
-      remarks: 'Trainer Class Attendance'
-    };
-
-    try {
-      const res = await recordAttendance(record);
-      if (res.success) {
-        setAllRecords(prev => {
-          const filtered = prev.filter(r => !(r.date === selectedDate && (r.scheduleId === schedule.id || r.studentId === trainerId)));
-          return [...filtered, res.data || { ...record, id: `att_trn_${Date.now()}` }];
+    batchWiseGroups.forEach(bg => {
+      bg.schedules.forEach(sch => {
+        bg.students.forEach(std => {
+          const info = getStudentStatus(sch, std);
+          const key = `${sch.id}_${std.id}`;
+          const remark = studentRemarks[key] || info.record?.remarks || '';
+          const remarkBy = info.record?.remarkBy || '';
+          rows.push([
+            sch.date,
+            sch.course,
+            sch.batch,
+            sch.time,
+            sch.title,
+            std.name,
+            std.email,
+            info.status,
+            info.timeLabel || '',
+            remark,
+            remarkBy
+          ]);
         });
-      }
-    } catch (err) {
-      console.error('Failed to update trainer attendance:', err);
-    }
-  };
-
-  // Bulk actions for trainers
-  const handleBulkTrainerAttendance = async (status) => {
-    if (daySchedules.length === 0) return;
-    setSaving(true);
-    const records = daySchedules.map(sch => {
-      const trainerUser = trainers.find(t => t.id === sch.trainerId || t.name === sch.trainer);
-      const trainerId = sch.trainerId || trainerUser?.id || sch.trainer;
-      const trainerName = sch.trainer || trainerUser?.name || 'Trainer';
-      return {
-        scheduleId: sch.id,
-        studentId: trainerId,
-        studentName: trainerName,
-        courseId: sch.courseId || sch.course,
-        batchId: sch.batchId || sch.batch,
-        date: selectedDate,
-        status,
-        recordedBy: 'Admin',
-        remarks: 'Trainer Class Attendance'
-      };
+      });
     });
 
-    try {
-      const res = await recordBatchAttendance(records);
-      if (res.success) {
-        await showSuccess(`Marked all ${daySchedules.length} trainer sessions as ${status}`, 'Attendance Updated');
-        const updated = await getAttendanceRecords();
-        setAllRecords(updated.data || []);
-      } else {
-        await showError(res?.message || 'Failed to update trainer attendance', 'Update Failed');
-      }
-    } catch (err) {
-      await showError(err?.message || 'Failed to update trainer attendance', 'Update Failed');
-    } finally {
-      setSaving(false);
-    }
+    exportToExcel(`Students_Automatic_Attendance_${selectedDate || 'all'}.xlsx`, 'Student Attendance', headers, rows);
   };
 
-  // Export trainer attendance
+  // Export to Excel for Trainers
   const handleExportTrainers = () => {
-    const headers = ['Date', 'Trainer Name', 'Course', 'Batch', 'Session Time', 'Topic', 'Attendance Status'];
-    const rows = daySchedules.map(sch => {
-      const status = trainerAttendanceMap[sch.id] || trainerAttendanceMap[sch.trainerId] || trainerAttendanceMap[sch.trainer?.toLowerCase().trim()] || 'Absent';
-      return [selectedDate, sch.trainer || 'Unassigned', sch.course || '', sch.batch || '', sch.time || '', sch.title || '', status];
+    const headers = ['Date', 'Course', 'Batch', 'Session Time', 'Topic', 'Trainer Name', 'Email', 'Status', 'Joined Time', 'Remark', 'Remark By'];
+    const rows = [];
+
+    courseWiseGroups.forEach(cg => {
+      cg.schedules.forEach(sch => {
+        const trainerUser = trainers.find(t => t.id === sch.trainerId || t.name === sch.trainer) || { id: sch.trainerId, name: sch.trainer };
+        const info = getTrainerStatus(sch, trainerUser);
+        const key = `${sch.id}_${trainerUser.id}`;
+        const remark = trainerRemarks[key] || info.record?.remarks || '';
+        const remarkBy = info.record?.remarkBy || '';
+        rows.push([
+          sch.date,
+          sch.course,
+          sch.batch,
+          sch.time,
+          sch.title,
+          trainerUser.name || sch.trainer,
+          trainerUser.email || '',
+          info.status,
+          info.timeLabel || '',
+          remark,
+          remarkBy
+        ]);
+      });
     });
-    exportToExcel(`Trainer_Attendance_${selectedDate}.xlsx`, 'Trainer Attendance', headers, rows);
+
+    exportToExcel(`Trainers_Automatic_Attendance_${selectedDate || 'all'}.xlsx`, 'Trainer Attendance', headers, rows);
   };
-
-  // KPI Calculations
-  const studentPresentCount = filteredStudents.filter(s => (studentAttendanceMap[s.id] || studentAttendanceMap[s.name?.toLowerCase().trim()] || '').toUpperCase() === 'PRESENT').length;
-  const studentLateCount = filteredStudents.filter(s => (studentAttendanceMap[s.id] || studentAttendanceMap[s.name?.toLowerCase().trim()] || '').toUpperCase() === 'LATE').length;
-  const studentAbsentCount = filteredStudents.length - studentPresentCount - studentLateCount;
-  const studentRate = filteredStudents.length > 0 ? Math.round((studentPresentCount / filteredStudents.length) * 100) : 0;
-
-  const trainerPresentCount = daySchedules.filter(sch => (trainerAttendanceMap[sch.id] || trainerAttendanceMap[sch.trainerId] || trainerAttendanceMap[sch.trainer?.toLowerCase().trim()] || '').toUpperCase() === 'PRESENT').length;
-  const trainerAbsentCount = daySchedules.length - trainerPresentCount;
-  const trainerRate = daySchedules.length > 0 ? Math.round((trainerPresentCount / daySchedules.length) * 100) : 0;
 
   return (
     <div className="p-6 sm:p-8 space-y-6 bg-slate-50 min-h-screen">
@@ -283,12 +455,12 @@ export default function AdminAttendancePage({ setActiveScreen }) {
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Admin Dashboard</span>
           </button>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Organization Attendance Management</h1>
-          <p className="text-xs text-slate-500 font-medium">Daily attendance tracking for Students and Trainers.</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Automatic Attendance Management</h1>
+          <p className="text-xs text-slate-500 font-medium">Fully automatic attendance tracking for live Online & Hybrid sessions.</p>
         </div>
 
         {/* Export Button */}
-        <div className="flex items-center space-x-3">
+        <div>
           {activeTab === 'students' ? (
             <button
               onClick={handleExportStudents}
@@ -309,7 +481,7 @@ export default function AdminAttendancePage({ setActiveScreen }) {
         </div>
       </div>
 
-      {/* TOP SWITCH: [Students | Trainers] */}
+      {/* TOP SWITCH: [Students Attendance | Trainers Attendance] */}
       <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs flex max-w-md">
         <button
           onClick={() => setActiveTab('students')}
@@ -336,363 +508,420 @@ export default function AdminAttendancePage({ setActiveScreen }) {
         </button>
       </div>
 
-      {/* ===================== STUDENTS VIEW ===================== */}
+      {/* FILTERS BAR */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+        <div>
+          <label className="block text-slate-700 font-bold mb-1 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+              <span>Date</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setFilterAllDates(!filterAllDates)}
+              className="text-[10px] text-blue-600 font-extrabold hover:underline"
+            >
+              {filterAllDates ? 'Specific Date' : 'All Dates'}
+            </button>
+          </label>
+          <input
+            type="date"
+            disabled={filterAllDates}
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className={`w-full px-3.5 py-2.5 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer ${
+              filterAllDates ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-50'
+            }`}
+          />
+        </div>
+
+        <div>
+          <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
+            <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+            <span>Course (Online / Hybrid)</span>
+          </label>
+          <select
+            value={selectedCourse}
+            onChange={(e) => {
+              setSelectedCourse(e.target.value);
+              setSelectedBatch('');
+            }}
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
+          >
+            <option value="">All Online & Hybrid Courses</option>
+            {courses.map(c => (
+              <option key={c.id} value={c.title}>{c.title} ({c.mode})</option>
+            ))}
+          </select>
+        </div>
+
+        {activeTab === 'students' && (
+          <div>
+            <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-blue-600" />
+              <span>Batch</span>
+            </label>
+            <select
+              value={selectedBatch}
+              onChange={(e) => setSelectedBatch(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
+            >
+              <option value="">All Batches</option>
+              {availableBatches.map(b => (
+                <option key={b.id} value={b.name}>{b.name} ({b.courseName})</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
+            <Search className="w-3.5 h-3.5 text-blue-600" />
+            <span>Search Schedule Title</span>
+          </label>
+          <input
+            type="text"
+            placeholder="Search session title..."
+            value={searchSchedule}
+            onChange={(e) => setSearchSchedule(e.target.value)}
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
+          />
+        </div>
+      </div>
+
+      {/* KPI SUMMARY CARDS */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-blue-600">
+          <div className="text-xs font-bold text-slate-500">
+            {activeTab === 'students' ? 'Total Student Sessions' : 'Total Scheduled Sessions'}
+          </div>
+          <div className="text-2xl font-black text-slate-900 mt-1">
+            {activeTab === 'students' ? studentMetrics.total : trainerMetrics.total}
+          </div>
+          <div className="text-[10px] text-slate-400 font-semibold mt-0.5">Live-session courses</div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-emerald-600">
+          <div className="text-xs font-bold text-slate-500">Present (Joined)</div>
+          <div className="text-2xl font-black text-emerald-700 mt-1">
+            {activeTab === 'students' ? studentMetrics.present : trainerMetrics.present}
+          </div>
+          <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
+            {(activeTab === 'students' ? studentMetrics.rate : trainerMetrics.rate)}% Attendance Rate
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-rose-500">
+          <div className="text-xs font-bold text-slate-500">Absent (Ended without Join)</div>
+          <div className="text-2xl font-black text-rose-700 mt-1">
+            {activeTab === 'students' ? studentMetrics.absent : trainerMetrics.absent}
+          </div>
+          <div className="text-[10px] text-rose-500 font-bold mt-0.5">Automatic Absent</div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-purple-500">
+          <div className="text-xs font-bold text-slate-500">Live Active Batches</div>
+          <div className="text-2xl font-black text-purple-700 mt-1">
+            {batches.length}
+          </div>
+          <div className="text-[10px] text-purple-600 font-bold mt-0.5">Online & Hybrid Batches</div>
+        </div>
+      </div>
+
+      {/* ===================== TAB A: STUDENTS ATTENDANCE (GROUPED BATCH-WISE) ===================== */}
       {activeTab === 'students' && (
         <div className="space-y-6">
-          {/* Filters Bar */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-            <div>
-              <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                <span>Attendance Date</span>
-              </label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
-              />
+          {loading ? (
+            <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400">
+              Loading automatic student attendance records...
             </div>
-
-            <div>
-              <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
-                <BookOpen className="w-3.5 h-3.5 text-blue-600" />
-                <span>Filter by Course</span>
-              </label>
-              <select
-                value={selectedCourse}
-                onChange={(e) => {
-                  setSelectedCourse(e.target.value);
-                  setSelectedBatch('');
-                }}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
-              >
-                <option value="">All Courses</option>
-                {courses.map(c => (
-                  <option key={c.id} value={c.title}>{c.title}</option>
-                ))}
-              </select>
+          ) : batchWiseGroups.length === 0 ? (
+            <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400 space-y-2">
+              <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
+              <p className="text-sm font-bold text-slate-700">No batch sessions found matching filters</p>
+              <p className="text-xs text-slate-400">Only Online and Hybrid live courses are tracked here.</p>
             </div>
+          ) : (
+            batchWiseGroups.map(bg => (
+              <div key={bg.batch.id} className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4">
+                {/* Batch Header Card */}
+                <div className="p-5 bg-gradient-to-r from-blue-900 to-indigo-950 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="bg-blue-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md">BATCH</span>
+                      <h2 className="text-base font-black tracking-tight">{bg.batch.name}</h2>
+                    </div>
+                    <div className="text-xs text-blue-200 font-semibold mt-1">
+                      Course: <strong>{bg.batch.courseName}</strong> • Assigned Trainer(s): <strong>{bg.batch.trainerName || 'Unassigned'}</strong>
+                    </div>
+                  </div>
+                  <div className="text-xs font-bold text-blue-200">
+                    <span className="text-white font-black">{bg.schedules.length}</span> sessions • <span className="text-white font-black">{bg.students.length}</span> students enrolled
+                  </div>
+                </div>
 
-            <div>
-              <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-blue-600" />
-                <span>Filter by Batch</span>
-              </label>
-              <select
-                value={selectedBatch}
-                onChange={(e) => setSelectedBatch(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
-              >
-                <option value="">All Batches</option>
-                {availableBatches.map(b => (
-                  <option key={b.id} value={b.name}>{b.name} ({b.courseName})</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* KPI Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-blue-600">
-              <div className="text-xs font-bold text-slate-500">Total Filtered Students</div>
-              <div className="text-2xl font-black text-slate-900 mt-1">{filteredStudents.length}</div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-emerald-600">
-              <div className="text-xs font-bold text-slate-500">Present Today</div>
-              <div className="text-2xl font-black text-emerald-700 mt-1">{studentPresentCount}</div>
-              <div className="text-[10px] text-emerald-600 font-bold mt-0.5">{studentRate}% Attendance Rate</div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-amber-500">
-              <div className="text-xs font-bold text-slate-500">Late / Partial</div>
-              <div className="text-2xl font-black text-amber-700 mt-1">{studentLateCount}</div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-rose-500">
-              <div className="text-xs font-bold text-slate-500">Absent</div>
-              <div className="text-2xl font-black text-rose-700 mt-1">{studentAbsentCount}</div>
-            </div>
-          </div>
-
-          {/* Bulk Actions Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
-            <div className="text-xs font-bold text-slate-700">
-              Showing <strong className="text-blue-900">{filteredStudents.length}</strong> students for <strong>{selectedDate}</strong>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <button
-                disabled={saving || filteredStudents.length === 0}
-                onClick={() => handleBulkStudentAttendance('Present')}
-                className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1 cursor-pointer transition-colors"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>Mark All Present</span>
-              </button>
-
-              <button
-                disabled={saving || filteredStudents.length === 0}
-                onClick={() => handleBulkStudentAttendance('Absent')}
-                className="bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-800 font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1 cursor-pointer transition-colors"
-              >
-                <XIcon className="w-3.5 h-3.5" />
-                <span>Mark All Absent</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Students Table */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden">
-            {loading ? (
-              <div className="p-12 text-center text-xs font-bold text-slate-400">Loading attendance records...</div>
-            ) : filteredStudents.length === 0 ? (
-              <div className="p-12 text-center text-xs font-bold text-slate-400">No students match the selected course / batch filters.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider">
-                      <th className="py-3 px-4">Student</th>
-                      <th className="py-3 px-4">Contact</th>
-                      <th className="py-3 px-4">Course & Batch</th>
-                      <th className="py-3 px-4">Current Status</th>
-                      <th className="py-3 px-4 text-right">Attendance Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                    {filteredStudents.map(student => {
-                      const rawStatus = studentAttendanceMap[student.id] || studentAttendanceMap[student.name?.toLowerCase().trim()] || 'Absent';
-                      const currentStatus = rawStatus.toUpperCase();
+                {/* Sessions under this Batch */}
+                <div className="p-5 space-y-6">
+                  {bg.schedules.length === 0 ? (
+                    <div className="p-6 bg-slate-50 rounded-2xl text-center text-xs font-semibold text-slate-400 border border-slate-200">
+                      No live sessions scheduled for this batch {filterAllDates ? '' : `on ${selectedDate}`}.
+                    </div>
+                  ) : (
+                    bg.schedules.map(sch => {
+                      const timing = getSessionTimingState(sch.date, sch.time);
 
                       return (
-                        <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3.5 px-4 font-black text-slate-900">
-                            {student.name}
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-600 font-semibold">
-                            {student.email}
-                            {student.phone && <div className="text-[10px] text-slate-400">{student.phone}</div>}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            {student.courseBatches?.length > 0 ? (
-                              <div className="space-y-0.5">
-                                {student.courseBatches.map((cb, i) => (
-                                  <span key={i} className="inline-block bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold mr-1">
-                                    {cb.course} ({cb.batch || 'Unassigned'})
-                                  </span>
-                                ))}
+                        <div key={sch.id} className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4">
+                          {/* Session Info Bar */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs font-mono font-bold text-slate-600 flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5 text-blue-600" /> {sch.time}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-400">• {sch.date}</span>
+                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                  timing === 'LIVE'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse'
+                                    : timing === 'FINISHED'
+                                    ? 'bg-slate-200 text-slate-700'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {timing === 'LIVE' ? '● Live Now' : timing === 'FINISHED' ? 'Completed' : 'Upcoming'}
+                                </span>
                               </div>
-                            ) : (
-                              <span className="text-slate-500 italic">{student.course || 'No course assigned'}</span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                              currentStatus === 'PRESENT'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                : currentStatus === 'LATE'
-                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                : 'bg-rose-100 text-rose-800 border border-rose-200'
-                            }`}>
-                              {currentStatus === 'PRESENT' ? 'Present' : currentStatus === 'LATE' ? 'Late' : 'Absent'}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-right space-x-1.5">
-                            {['Present', 'Absent', 'Late'].map(statusOption => {
-                              const isSelected = currentStatus === statusOption.toUpperCase();
-                              return (
-                                <button
-                                  key={statusOption}
-                                  onClick={() => handleSetStudentAttendance(student, statusOption)}
-                                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                    isSelected
-                                      ? statusOption === 'Present'
-                                        ? 'bg-emerald-600 text-white shadow-xs'
-                                        : statusOption === 'Absent'
-                                        ? 'bg-rose-600 text-white shadow-xs'
-                                        : 'bg-amber-600 text-white shadow-xs'
-                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
-                                  }`}
-                                >
-                                  {statusOption}
-                                </button>
-                              );
-                            })}
-                          </td>
-                        </tr>
+                              <h3 className="text-sm font-black text-slate-900">{sch.title}</h3>
+                              <p className="text-[11px] font-medium text-slate-500">Trainer: {sch.trainer || 'Assigned Trainer'}</p>
+                            </div>
+                          </div>
+
+                          {/* Students Table for this Session */}
+                          {bg.students.length === 0 ? (
+                            <div className="p-4 text-center text-xs text-slate-400 font-semibold">
+                              No students currently assigned to this batch.
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                                <thead>
+                                  <tr className="border-b border-slate-200 bg-white/70 text-slate-500 font-bold uppercase tracking-wider">
+                                    <th className="py-2.5 px-3">Student Name</th>
+                                    <th className="py-2.5 px-3">Contact Email</th>
+                                    <th className="py-2.5 px-3">Automatic Status</th>
+                                    <th className="py-2.5 px-3">Attendance Remarks (Autosaved)</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200/60 font-medium text-slate-700">
+                                  {bg.students.map(std => {
+                                    const info = getStudentStatus(sch, std);
+                                    const key = `${sch.id}_${std.id}`;
+                                    const currentRemark = studentRemarks[key] !== undefined ? studentRemarks[key] : (info.record?.remarks || '');
+                                    const isSaved = savedIndicator[key];
+
+                                    return (
+                                      <tr key={std.id} className="hover:bg-white/80 transition-colors">
+                                        <td className="py-3 px-3 font-bold text-slate-900">
+                                          {std.name}
+                                        </td>
+                                        <td className="py-3 px-3 text-slate-500 font-semibold">
+                                          {std.email}
+                                        </td>
+                                        <td className="py-3 px-3">
+                                          {info.status === 'PRESENT' ? (
+                                            <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase">
+                                              <Check className="w-3 h-3 text-emerald-600" />
+                                              <span>Present {info.timeLabel ? `(${info.timeLabel})` : ''}</span>
+                                            </span>
+                                          ) : info.status === 'ABSENT' ? (
+                                            <span className="inline-flex items-center gap-1.5 bg-rose-100 text-rose-800 border border-rose-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase">
+                                              <AlertCircle className="w-3 h-3 text-rose-600" />
+                                              <span>Absent</span>
+                                            </span>
+                                          ) : info.status === 'IN_PROGRESS' ? (
+                                            <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase">
+                                              <span>In progress - not joined yet</span>
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase">
+                                              <span>Upcoming</span>
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="py-3 px-3">
+                                          <div className="space-y-1 max-w-md">
+                                            <div className="relative flex items-center">
+                                              <input
+                                                type="text"
+                                                placeholder={info.status === 'ABSENT' ? "Add reason for absence (autosaves)..." : "Add remark (autosaves)..."}
+                                                value={currentRemark}
+                                                onChange={(e) => handleStudentRemarkChange(sch.id, std.id, e.target.value)}
+                                                className={`w-full px-3 py-1.5 bg-white border rounded-xl text-xs font-semibold focus:outline-none focus:border-blue-600 transition-colors ${
+                                                  info.status === 'ABSENT' ? 'border-rose-200 bg-rose-50/20' : 'border-slate-200'
+                                                }`}
+                                              />
+                                              {isSaved && (
+                                                <span className="absolute right-2 text-emerald-600 text-[10px] font-extrabold flex items-center gap-0.5">
+                                                  <Check className="w-3 h-3" /> Saved
+                                                </span>
+                                              )}
+                                            </div>
+                                            {info.record?.remarkBy && (
+                                              <div className="text-[10px] text-slate-400 font-semibold pl-1">
+                                                by {info.record.remarkBy}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
                       );
-                    })}
-                  </tbody>
-                </table>
+                    })
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+            ))
+          )}
         </div>
       )}
 
-      {/* ===================== TRAINERS VIEW ===================== */}
+      {/* ===================== TAB B: TRAINERS ATTENDANCE (GROUPED COURSE-WISE) ===================== */}
       {activeTab === 'trainers' && (
         <div className="space-y-6">
-          {/* Date Filter Bar */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
-            <div className="flex-1 max-w-xs">
-              <label className="block text-slate-700 font-bold mb-1 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                <span>Scheduled Class Date</span>
-              </label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
-              />
+          {loading ? (
+            <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400">
+              Loading automatic trainer attendance records...
             </div>
-
-            {/* Bulk actions for trainers */}
-            <div className="flex items-center space-x-2 self-start sm:self-end">
-              <button
-                disabled={saving || daySchedules.length === 0}
-                onClick={() => handleBulkTrainerAttendance('Present')}
-                className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1 cursor-pointer transition-colors"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>Mark All Trainers Present</span>
-              </button>
-
-              <button
-                disabled={saving || daySchedules.length === 0}
-                onClick={() => handleBulkTrainerAttendance('Absent')}
-                className="bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-800 font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1 cursor-pointer transition-colors"
-              >
-                <XIcon className="w-3.5 h-3.5" />
-                <span>Mark All Trainers Absent</span>
-              </button>
+          ) : courseWiseGroups.length === 0 ? (
+            <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400 space-y-2">
+              <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
+              <p className="text-sm font-bold text-slate-700">No live sessions found for trainers</p>
+              <p className="text-xs text-slate-400">Trainers who have live classes scheduled in Online/Hybrid courses will appear here.</p>
             </div>
-          </div>
+          ) : (
+            courseWiseGroups.map(cg => (
+              <div key={cg.course.id} className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4">
+                {/* Course Heading Header */}
+                <div className="p-5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="bg-blue-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md">{cg.course.mode || 'LIVE'}</span>
+                      <h2 className="text-base font-black tracking-tight">{cg.course.title}</h2>
+                    </div>
+                    <div className="text-xs text-slate-300 font-semibold mt-1">
+                      Mode: <strong>{cg.course.mode}</strong> • Target Audience: <strong>{cg.course.audience || 'Student'}</strong>
+                    </div>
+                  </div>
+                  <div className="text-xs font-bold text-slate-300">
+                    <span className="text-white font-black">{cg.schedules.length}</span> live sessions
+                  </div>
+                </div>
 
-          {/* KPI Summary Cards for Trainers */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-blue-600">
-              <div className="text-xs font-bold text-slate-500">Scheduled Sessions Today</div>
-              <div className="text-2xl font-black text-slate-900 mt-1">{daySchedules.length}</div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-emerald-600">
-              <div className="text-xs font-bold text-slate-500">Trainers Present</div>
-              <div className="text-2xl font-black text-emerald-700 mt-1">{trainerPresentCount}</div>
-              <div className="text-[10px] text-emerald-600 font-bold mt-0.5">{trainerRate}% Coverage Rate</div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-rose-500">
-              <div className="text-xs font-bold text-slate-500">Trainers Absent</div>
-              <div className="text-2xl font-black text-rose-700 mt-1">{trainerAbsentCount}</div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs border-l-4 border-l-purple-500">
-              <div className="text-xs font-bold text-slate-500">Active Academy Trainers</div>
-              <div className="text-2xl font-black text-purple-700 mt-1">{trainers.length}</div>
-            </div>
-          </div>
-
-          {/* Trainers Schedules Table */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden">
-            {loading ? (
-              <div className="p-12 text-center text-xs font-bold text-slate-400">Loading trainer schedule attendance...</div>
-            ) : daySchedules.length === 0 ? (
-              <div className="p-12 text-center text-xs font-bold text-slate-400 space-y-2">
-                <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
-                <h3 className="text-base font-bold text-slate-700">No trainer sessions scheduled for {selectedDate}</h3>
-                <p className="text-xs text-slate-400">Trainers who have live classes scheduled in Schedule Management will appear here.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 font-bold uppercase tracking-wider">
-                      <th className="py-3 px-4">Trainer</th>
-                      <th className="py-3 px-4">Course</th>
-                      <th className="py-3 px-4">Batch</th>
-                      <th className="py-3 px-4">Scheduled Time</th>
-                      <th className="py-3 px-4">Session Topic</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Attendance Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                    {daySchedules.map(sch => {
-                      const trainerUser = trainers.find(t => t.id === sch.trainerId || t.name === sch.trainer);
-                      const trainerName = sch.trainer || trainerUser?.name || 'Assigned Trainer';
-                      const rawStatus = trainerAttendanceMap[sch.id] || trainerAttendanceMap[sch.trainerId] || trainerAttendanceMap[trainerName.toLowerCase().trim()] || 'Absent';
-                      const currentStatus = rawStatus.toUpperCase();
-
-                      return (
-                        <tr key={sch.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3.5 px-4 font-black text-slate-900">
-                            <div className="flex items-center space-x-2">
-                              <User className="w-4 h-4 text-blue-600" />
-                              <span>{trainerName}</span>
-                            </div>
-                            {trainerUser?.email && <div className="text-[10px] text-slate-400 font-normal pl-6">{trainerUser.email}</div>}
-                          </td>
-                          <td className="py-3.5 px-4 font-bold text-slate-800">
-                            {sch.course || 'Course'}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                              {sch.batch || 'All'}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
-                            <span className="inline-flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-slate-400" />
-                              {sch.time || '10:00 AM'}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-600 font-medium">
-                            {sch.title || 'Live Session'}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                              currentStatus === 'PRESENT'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                : 'bg-rose-100 text-rose-800 border border-rose-200'
-                            }`}>
-                              {currentStatus === 'PRESENT' ? 'Present' : 'Absent'}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-right space-x-2">
-                            <button
-                              onClick={() => handleSetTrainerAttendance(sch, 'Present')}
-                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                currentStatus === 'PRESENT'
-                                  ? 'bg-emerald-600 text-white shadow-xs'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
-                              }`}
-                            >
-                              Present
-                            </button>
-
-                            <button
-                              onClick={() => handleSetTrainerAttendance(sch, 'Absent')}
-                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                currentStatus !== 'PRESENT'
-                                  ? 'bg-rose-600 text-white shadow-xs'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
-                              }`}
-                            >
-                              Absent
-                            </button>
-                          </td>
+                {/* Sessions under this Course */}
+                <div className="p-5 space-y-4">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-bold uppercase tracking-wider">
+                          <th className="py-3 px-4">Session Title</th>
+                          <th className="py-3 px-4">Batch</th>
+                          <th className="py-3 px-4">Date & Time</th>
+                          <th className="py-3 px-4">Assigned Trainer</th>
+                          <th className="py-3 px-4">Automatic Status</th>
+                          <th className="py-3 px-4">Trainer Remarks (Autosaved)</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                        {cg.schedules.map(sch => {
+                          const trainerUser = trainers.find(t => t.id === sch.trainerId || t.name === sch.trainer) || { id: sch.trainerId, name: sch.trainer };
+                          const info = getTrainerStatus(sch, trainerUser);
+                          const key = `${sch.id}_${trainerUser.id}`;
+                          const currentRemark = trainerRemarks[key] !== undefined ? trainerRemarks[key] : (info.record?.remarks || '');
+                          const isSaved = savedIndicator[key];
+
+                          return (
+                            <tr key={sch.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-3.5 px-4 font-black text-slate-900">
+                                {sch.title}
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md text-[10px] font-bold">
+                                  {sch.batch || 'All'}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 font-mono font-bold text-slate-700">
+                                <div className="flex items-center gap-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>{sch.date} • {sch.time}</span>
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-4 font-bold text-slate-800">
+                                <div>{trainerUser.name || sch.trainer}</div>
+                                {trainerUser.email && (
+                                  <div className="text-[10px] text-slate-400 font-normal">{trainerUser.email}</div>
+                                )}
+                              </td>
+                              <td className="py-3.5 px-4">
+                                {info.status === 'PRESENT' ? (
+                                  <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase">
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                    <span>Present {info.timeLabel ? `(${info.timeLabel})` : ''}</span>
+                                  </span>
+                                ) : info.status === 'ABSENT' ? (
+                                  <span className="inline-flex items-center gap-1.5 bg-rose-100 text-rose-800 border border-rose-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase">
+                                    <AlertCircle className="w-3 h-3 text-rose-600" />
+                                    <span>Absent</span>
+                                  </span>
+                                ) : info.status === 'IN_PROGRESS' ? (
+                                  <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase">
+                                    <span>In progress - not joined yet</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase">
+                                    <span>Upcoming</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <div className="space-y-1 max-w-md">
+                                  <div className="relative flex items-center">
+                                    <input
+                                      type="text"
+                                      placeholder={info.status === 'ABSENT' ? "Add remark for absence (autosaves)..." : "Add remark (autosaves)..."}
+                                      value={currentRemark}
+                                      onChange={(e) => handleTrainerRemarkChange(sch.id, trainerUser.id, e.target.value)}
+                                      className={`w-full px-3 py-1.5 bg-white border rounded-xl text-xs font-semibold focus:outline-none focus:border-blue-600 transition-colors ${
+                                        info.status === 'ABSENT' ? 'border-rose-200 bg-rose-50/20' : 'border-slate-200'
+                                      }`}
+                                    />
+                                    {isSaved && (
+                                      <span className="absolute right-2 text-emerald-600 text-[10px] font-extrabold flex items-center gap-0.5">
+                                        <Check className="w-3 h-3" /> Saved
+                                      </span>
+                                    )}
+                                  </div>
+                                  {info.record?.remarkBy && (
+                                    <div className="text-[10px] text-slate-400 font-semibold pl-1">
+                                      by {info.record.remarkBy}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+            ))
+          )}
         </div>
       )}
 

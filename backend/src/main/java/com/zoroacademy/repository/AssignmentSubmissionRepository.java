@@ -27,6 +27,6 @@ public interface AssignmentSubmissionRepository extends JpaRepository<Assignment
     List<AssignmentSubmission> findByStudentEmailIgnoreCaseAndSubmitterRoleIgnoreCase(String studentEmail, String submitterRole);
     List<AssignmentSubmission> findByTrainerIdAndSubmitterRoleIgnoreCase(String trainerId, String submitterRole);
 
-    @org.springframework.data.jpa.repository.Query("SELECT s FROM AssignmentSubmission s WHERE s.attachment LIKE %:fileId% OR s.correctionAttachment LIKE %:fileId% OR s.correctedFileUrl LIKE %:fileId%")
+    @org.springframework.data.jpa.repository.Query(value = "SELECT * FROM assignment_submissions s WHERE CAST(s.attachment AS text) LIKE CONCAT('%', :fileId, '%') OR CAST(s.correction_attachment AS text) LIKE CONCAT('%', :fileId, '%') OR s.corrected_file_url LIKE CONCAT('%', :fileId, '%')", nativeQuery = true)
     List<AssignmentSubmission> findByAnyFileUrlContaining(@org.springframework.data.repository.query.Param("fileId") String fileId);
 }

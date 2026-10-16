@@ -19,9 +19,13 @@ public class ScheduleService {
     private final FileStorageService fileStorageService;
     private final com.zoroacademy.repository.StudentCourseBatchRepository studentCourseBatchRepository;
     private final com.zoroacademy.repository.AttendanceRecordRepository attendanceRecordRepository;
+    private final com.zoroacademy.repository.TrainerAttendanceRecordRepository trainerAttendanceRecordRepository;
+    private final com.zoroacademy.repository.EnrollmentRepository enrollmentRepository;
+    private final NotificationService notificationService;
+    private final com.zoroacademy.repository.TrainerCourseRequestRepository trainerCourseRequestRepository;
 
-    @org.springframework.beans.factory.annotation.Value("${schedule.resources-unlock-minutes:60}")
-    private int resourcesUnlockMinutes = 60;
+    @org.springframework.beans.factory.annotation.Value("${schedule.resources-unlock-minutes:30}")
+    private int resourcesUnlockMinutes = 30;
 
     public int getResourcesUnlockMinutes() {
         return resourcesUnlockMinutes;
@@ -38,7 +42,11 @@ public class ScheduleService {
                            com.zoroacademy.repository.UserRepository userRepository,
                            FileStorageService fileStorageService,
                            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.StudentCourseBatchRepository studentCourseBatchRepository,
-                           @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.AttendanceRecordRepository attendanceRecordRepository) {
+                           @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.AttendanceRecordRepository attendanceRecordRepository,
+                           @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.TrainerAttendanceRecordRepository trainerAttendanceRecordRepository,
+                           @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.EnrollmentRepository enrollmentRepository,
+                           @org.springframework.beans.factory.annotation.Autowired(required = false) NotificationService notificationService,
+                           @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.TrainerCourseRequestRepository trainerCourseRequestRepository) {
         this.scheduleRepository = scheduleRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
@@ -46,13 +54,17 @@ public class ScheduleService {
         this.fileStorageService = fileStorageService;
         this.studentCourseBatchRepository = studentCourseBatchRepository;
         this.attendanceRecordRepository = attendanceRecordRepository;
+        this.trainerAttendanceRecordRepository = trainerAttendanceRecordRepository;
+        this.enrollmentRepository = enrollmentRepository;
+        this.notificationService = notificationService;
+        this.trainerCourseRequestRepository = trainerCourseRequestRepository;
     }
 
     public ScheduleService(ScheduleRepository scheduleRepository,
                            com.zoroacademy.repository.CourseRepository courseRepository,
                            com.zoroacademy.repository.BatchRepository batchRepository,
                            com.zoroacademy.repository.UserRepository userRepository) {
-        this(scheduleRepository, courseRepository, batchRepository, userRepository, null, null, null);
+        this(scheduleRepository, courseRepository, batchRepository, userRepository, null, null, null, null, null, null, null);
     }
 
     private void enrichSchedule(Schedule s) {
@@ -170,7 +182,11 @@ public class ScheduleService {
             boolean trainerMatch = (schedule.getTrainerId() != null && !schedule.getTrainerId().isBlank() && schedule.getTrainerId().equals(existing.getTrainerId()))
                     || (schedule.getTrainer() != null && !schedule.getTrainer().isBlank() && schedule.getTrainer().equalsIgnoreCase(existing.getTrainer()));
 
-            if (batchMatch || trainerMatch) {
+            boolean courseMatch = "TRAINER".equalsIgnoreCase(schedule.getAudience())
+                    && ((schedule.getCourseId() != null && !schedule.getCourseId().isBlank() && schedule.getCourseId().equals(existing.getCourseId()))
+                        || (schedule.getCourse() != null && !schedule.getCourse().isBlank() && schedule.getCourse().equalsIgnoreCase(existing.getCourse())));
+
+            if (batchMatch || trainerMatch || courseMatch) {
                 java.time.LocalTime exSt = null;
                 java.time.LocalTime exEt = null;
                 if (existing.getStartTime() != null && existing.getEndTime() != null) {
@@ -191,10 +207,14 @@ public class ScheduleService {
                         throw new org.springframework.web.server.ResponseStatusException(
                             org.springframework.http.HttpStatus.CONFLICT,
                             "Schedule overlaps with existing session '" + existing.getTitle() + "' (" + existing.getTime() + ") for batch '" + (existing.getBatch() != null ? existing.getBatch() : schedule.getBatch()) + "'");
-                    } else {
+                    } else if (trainerMatch) {
                         throw new org.springframework.web.server.ResponseStatusException(
                             org.springframework.http.HttpStatus.CONFLICT,
                             "Schedule overlaps with existing session '" + existing.getTitle() + "' (" + existing.getTime() + ") for trainer '" + (existing.getTrainer() != null ? existing.getTrainer() : schedule.getTrainer()) + "'");
+                    } else {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                            org.springframework.http.HttpStatus.CONFLICT,
+                            "Schedule overlaps with existing session '" + existing.getTitle() + "' (" + existing.getTime() + ") for course '" + (existing.getCourse() != null ? existing.getCourse() : schedule.getCourse()) + "'");
                     }
                 }
             }
@@ -211,67 +231,87 @@ public class ScheduleService {
         }
 
         // Relational course resolution
+        com.zoroacademy.entity.Course resolvedCourse = null;
         if (schedule.getCourseId() != null && !schedule.getCourseId().isBlank()) {
-            courseRepository.findById(schedule.getCourseId()).ifPresent(c -> {
-                schedule.setCourse(c.getTitle());
-                if (schedule.getMeetLink() == null || schedule.getMeetLink().isBlank()) {
-                    schedule.setMeetLink(c.getGoogleMeetUrl());
-                }
-            });
+            resolvedCourse = courseRepository.findById(schedule.getCourseId()).orElse(null);
         } else if (schedule.getCourse() != null && !schedule.getCourse().isBlank()) {
-            courseRepository.findByTitleIgnoreCase(schedule.getCourse()).ifPresent(c -> {
-                schedule.setCourseId(c.getId());
-                if (schedule.getMeetLink() == null || schedule.getMeetLink().isBlank()) {
-                    schedule.setMeetLink(c.getGoogleMeetUrl());
-                }
-            });
+            resolvedCourse = courseRepository.findByTitleIgnoreCase(schedule.getCourse()).orElse(null);
         }
 
-        // Relational batch resolution
-        if (schedule.getBatchId() != null && !schedule.getBatchId().isBlank()) {
-            batchRepository.findById(schedule.getBatchId()).ifPresent(b -> schedule.setBatch(b.getName()));
-        } else if (schedule.getBatch() != null && !schedule.getBatch().isBlank()) {
-            batchRepository.findByNameIgnoreCaseAndCourseId(schedule.getBatch(), schedule.getCourseId())
-                    .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(schedule.getBatch(), schedule.getCourse()))
-                    .ifPresent(b -> schedule.setBatchId(b.getId()));
+        if (resolvedCourse != null) {
+            schedule.setCourse(resolvedCourse.getTitle());
+            schedule.setCourseId(resolvedCourse.getId());
+            if (schedule.getMeetLink() == null || schedule.getMeetLink().isBlank()) {
+                schedule.setMeetLink(resolvedCourse.getGoogleMeetUrl());
+            }
         }
 
-        // Relational trainer resolution
-        if (schedule.getTrainerId() != null && !schedule.getTrainerId().isBlank()) {
-            userRepository.findById(schedule.getTrainerId()).ifPresent(u -> schedule.setTrainer(u.getName()));
-        } else if (schedule.getTrainer() != null && !schedule.getTrainer().isBlank()) {
-            userRepository.findByNameIgnoreCase(schedule.getTrainer()).stream()
-                    .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
-                    .findFirst()
-                    .ifPresent(u -> schedule.setTrainerId(u.getId()));
-        }
+        boolean isTrainerAudience = (resolvedCourse != null && "trainer".equalsIgnoreCase(resolvedCourse.getAudience()))
+                || "TRAINER".equalsIgnoreCase(schedule.getAudience());
 
-        // Validate that trainer belongs to the batch if batch has assigned trainers
-        if (schedule.getBatchId() != null && !schedule.getBatchId().isBlank() && !"All".equalsIgnoreCase(schedule.getBatchId())) {
-            batchRepository.findById(schedule.getBatchId()).ifPresent(b -> {
-                if (b.getTrainerIds() != null && !b.getTrainerIds().isEmpty()) {
-                    boolean found = false;
-                    for (String bTid : b.getTrainerIds()) {
-                        if ((schedule.getTrainerId() != null && schedule.getTrainerId().equals(bTid)) ||
-                            (schedule.getTrainer() != null && schedule.getTrainer().equalsIgnoreCase(
-                                userRepository.findById(bTid).map(User::getName).orElse("")))) {
-                            found = true;
-                            break;
+        if (isTrainerAudience) {
+            schedule.setAudience("TRAINER");
+            // Batch and batch trainer are not required for trainer-audience courses
+            if ((schedule.getMeetLink() == null || schedule.getMeetLink().isBlank()) && resolvedCourse != null) {
+                schedule.setMeetLink(resolvedCourse.getGoogleMeetUrl());
+            }
+            if (schedule.getTrainer() == null || schedule.getTrainer().isBlank()) {
+                schedule.setTrainer("Admin");
+            }
+        } else {
+            schedule.setAudience("STUDENT");
+            // Relational batch resolution
+            if (schedule.getBatchId() != null && !schedule.getBatchId().isBlank()) {
+                batchRepository.findById(schedule.getBatchId()).ifPresent(b -> schedule.setBatch(b.getName()));
+            } else if (schedule.getBatch() != null && !schedule.getBatch().isBlank()) {
+                batchRepository.findByNameIgnoreCaseAndCourseId(schedule.getBatch(), schedule.getCourseId())
+                        .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(schedule.getBatch(), schedule.getCourse()))
+                        .ifPresent(b -> schedule.setBatchId(b.getId()));
+            }
+
+            // Relational trainer resolution
+            if (schedule.getTrainerId() != null && !schedule.getTrainerId().isBlank()) {
+                userRepository.findById(schedule.getTrainerId()).ifPresent(u -> schedule.setTrainer(u.getName()));
+            } else if (schedule.getTrainer() != null && !schedule.getTrainer().isBlank()) {
+                userRepository.findByNameIgnoreCase(schedule.getTrainer()).stream()
+                        .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
+                        .findFirst()
+                        .ifPresent(u -> schedule.setTrainerId(u.getId()));
+            }
+
+            // Validate that trainer belongs to the batch if batch has assigned trainers
+            if (schedule.getBatchId() != null && !schedule.getBatchId().isBlank() && !"All".equalsIgnoreCase(schedule.getBatchId())) {
+                batchRepository.findById(schedule.getBatchId()).ifPresent(b -> {
+                    if (b.getTrainerIds() != null && !b.getTrainerIds().isEmpty()) {
+                        boolean found = false;
+                        for (String bTid : b.getTrainerIds()) {
+                            if ((schedule.getTrainerId() != null && schedule.getTrainerId().equals(bTid)) ||
+                                (schedule.getTrainer() != null && schedule.getTrainer().equalsIgnoreCase(
+                                    userRepository.findById(bTid).map(User::getName).orElse("")))) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.BAD_REQUEST, 
+                                "Selected trainer is not assigned to batch '" + b.getName() + "'. Please choose an assigned batch trainer.");
                         }
                     }
-                    if (!found) {
-                        throw new org.springframework.web.server.ResponseStatusException(
-                            org.springframework.http.HttpStatus.BAD_REQUEST, 
-                            "Selected trainer is not assigned to batch '" + b.getName() + "'. Please choose an assigned batch trainer.");
-                    }
-                }
-            });
+                });
+            }
         }
 
         validateAndNormalizeSchedule(schedule, null);
         enrichSchedule(schedule);
 
-        return scheduleRepository.save(schedule);
+        Schedule saved = scheduleRepository.save(schedule);
+
+        if (isTrainerAudience && notificationService != null) {
+            notifyEnrolledTrainers(saved);
+        }
+
+        return saved;
     }
 
     @Transactional
@@ -315,51 +355,118 @@ public class ScheduleService {
             existing.setAssignmentFileName(updated.getAssignmentFileName());
         }
 
-        // Relational batch resolution
-        if (existing.getBatchId() != null && !existing.getBatchId().isBlank()) {
-            batchRepository.findById(existing.getBatchId()).ifPresent(b -> existing.setBatch(b.getName()));
-        } else if (existing.getBatch() != null && !existing.getBatch().isBlank()) {
-            batchRepository.findByNameIgnoreCaseAndCourseId(existing.getBatch(), existing.getCourseId())
-                    .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(existing.getBatch(), existing.getCourse()))
-                    .ifPresent(b -> existing.setBatchId(b.getId()));
-        }
-
-        // Relational trainer resolution
-        if (existing.getTrainerId() != null && !existing.getTrainerId().isBlank()) {
-            userRepository.findById(existing.getTrainerId()).ifPresent(u -> existing.setTrainer(u.getName()));
-        } else if (existing.getTrainer() != null && !existing.getTrainer().isBlank()) {
-            userRepository.findByNameIgnoreCase(existing.getTrainer()).stream()
-                    .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
-                    .findFirst()
-                    .ifPresent(u -> existing.setTrainerId(u.getId()));
-        }
-
-        // Validate that trainer belongs to the batch if batch has assigned trainers
-        if (existing.getBatchId() != null && !existing.getBatchId().isBlank() && !"All".equalsIgnoreCase(existing.getBatchId())) {
-            batchRepository.findById(existing.getBatchId()).ifPresent(b -> {
-                if (b.getTrainerIds() != null && !b.getTrainerIds().isEmpty()) {
-                    boolean found = false;
-                    for (String bTid : b.getTrainerIds()) {
-                        if ((existing.getTrainerId() != null && existing.getTrainerId().equals(bTid)) ||
-                            (existing.getTrainer() != null && existing.getTrainer().equalsIgnoreCase(
-                                userRepository.findById(bTid).map(User::getName).orElse("")))) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        throw new org.springframework.web.server.ResponseStatusException(
-                            org.springframework.http.HttpStatus.BAD_REQUEST, 
-                            "Selected trainer is not assigned to batch '" + b.getName() + "'. Please choose an assigned batch trainer.");
-                    }
+        // Relational course resolution
+        if (updated.getCourseId() != null && !updated.getCourseId().isBlank()) {
+            courseRepository.findById(updated.getCourseId()).ifPresent(c -> {
+                existing.setCourse(c.getTitle());
+                existing.setCourseId(c.getId());
+                if (c.getAudience() != null) {
+                    existing.setAudience("trainer".equalsIgnoreCase(c.getAudience()) ? "TRAINER" : "STUDENT");
                 }
             });
+        }
+
+        boolean isTrainerAudience = "TRAINER".equalsIgnoreCase(existing.getAudience())
+                || (existing.getCourseId() != null && courseRepository.findById(existing.getCourseId()).map(c -> "trainer".equalsIgnoreCase(c.getAudience())).orElse(false));
+
+        if (!isTrainerAudience) {
+            // Relational batch resolution
+            if (existing.getBatchId() != null && !existing.getBatchId().isBlank()) {
+                batchRepository.findById(existing.getBatchId()).ifPresent(b -> existing.setBatch(b.getName()));
+            } else if (existing.getBatch() != null && !existing.getBatch().isBlank()) {
+                batchRepository.findByNameIgnoreCaseAndCourseId(existing.getBatch(), existing.getCourseId())
+                        .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(existing.getBatch(), existing.getCourse()))
+                        .ifPresent(b -> existing.setBatchId(b.getId()));
+            }
+
+            // Relational trainer resolution
+            if (existing.getTrainerId() != null && !existing.getTrainerId().isBlank()) {
+                userRepository.findById(existing.getTrainerId()).ifPresent(u -> existing.setTrainer(u.getName()));
+            } else if (existing.getTrainer() != null && !existing.getTrainer().isBlank()) {
+                userRepository.findByNameIgnoreCase(existing.getTrainer()).stream()
+                        .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
+                        .findFirst()
+                        .ifPresent(u -> existing.setTrainerId(u.getId()));
+            }
+
+            // Validate that trainer belongs to the batch if batch has assigned trainers
+            if (existing.getBatchId() != null && !existing.getBatchId().isBlank() && !"All".equalsIgnoreCase(existing.getBatchId())) {
+                batchRepository.findById(existing.getBatchId()).ifPresent(b -> {
+                    if (b.getTrainerIds() != null && !b.getTrainerIds().isEmpty()) {
+                        boolean found = false;
+                        for (String bTid : b.getTrainerIds()) {
+                            if ((existing.getTrainerId() != null && existing.getTrainerId().equals(bTid)) ||
+                                (existing.getTrainer() != null && existing.getTrainer().equalsIgnoreCase(
+                                    userRepository.findById(bTid).map(User::getName).orElse("")))) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.BAD_REQUEST, 
+                                "Selected trainer is not assigned to batch '" + b.getName() + "'. Please choose an assigned batch trainer.");
+                        }
+                    }
+                });
+            }
         }
 
         validateAndNormalizeSchedule(existing, id);
         enrichSchedule(existing);
 
         return scheduleRepository.save(existing);
+    }
+
+    private void notifyEnrolledTrainers(Schedule schedule) {
+        if (notificationService == null) return;
+        java.util.Set<String> recipientTrainerIds = new java.util.HashSet<>();
+
+        if (schedule.getCourseId() != null) {
+            if (trainerCourseRequestRepository != null) {
+                trainerCourseRequestRepository.findByCourseId(schedule.getCourseId()).stream()
+                    .filter(r -> "Approved".equalsIgnoreCase(r.getStatus()))
+                    .forEach(r -> {
+                        if (r.getTrainerId() != null && !r.getTrainerId().isBlank()) {
+                            recipientTrainerIds.add(r.getTrainerId());
+                        }
+                    });
+            }
+            if (enrollmentRepository != null) {
+                enrollmentRepository.findByCourseId(schedule.getCourseId()).stream()
+                    .filter(e -> "Active".equalsIgnoreCase(e.getStatus()) || e.getStatus() == null)
+                    .forEach(e -> {
+                        if (e.getStudentId() != null && !e.getStudentId().isBlank()) {
+                            recipientTrainerIds.add(e.getStudentId());
+                        }
+                    });
+            }
+        }
+
+        String title = "New Trainer Session Scheduled: " + schedule.getTitle();
+        String message = "A new session for course '" + schedule.getCourse() + "' has been scheduled on "
+                + schedule.getDate() + " (" + schedule.getTime() + ").";
+
+        if (!recipientTrainerIds.isEmpty()) {
+            for (String tId : recipientTrainerIds) {
+                notificationService.createNotification(com.zoroacademy.entity.Notification.builder()
+                    .id("notif_" + java.util.UUID.randomUUID())
+                    .recipientId(tId)
+                    .recipientRole("TRAINER")
+                    .title(title)
+                    .message(message)
+                    .readStatus(false)
+                    .build());
+            }
+        } else {
+            notificationService.createNotification(com.zoroacademy.entity.Notification.builder()
+                .id("notif_" + java.util.UUID.randomUUID())
+                .recipientRole("TRAINER")
+                .title(title)
+                .message(message)
+                .readStatus(false)
+                .build());
+        }
     }
 
     private void cleanupStoredFilesFromText(String text) {
@@ -494,10 +601,10 @@ public class ScheduleService {
 
         if (start != null && now.isBefore(start)) {
             java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("hh:mm a");
-            throw new com.zoroacademy.exception.BadRequestException("Session has not started yet. Join opens at " + start.format(fmt));
+            throw new org.springframework.security.access.AccessDeniedException("Session has not started yet. Starts at " + start.format(fmt));
         }
         if (end != null && now.isAfter(end)) {
-            throw new com.zoroacademy.exception.BadRequestException("Session has already ended");
+            throw new org.springframework.security.access.AccessDeniedException("Session has already ended");
         }
 
         // 4. Meeting link resolution
@@ -514,7 +621,7 @@ public class ScheduleService {
             throw new com.zoroacademy.exception.BadRequestException("Meeting link not set. Contact admin.");
         }
 
-        // 5. Mark Attendance for student as PRESENT
+        // 5. Mark Attendance for student or trainer as PRESENT
         if (!isStaff && student != null && attendanceRecordRepository != null) {
             String sId = student.getId();
             com.zoroacademy.entity.AttendanceRecord att = attendanceRecordRepository.findByStudentIdAndScheduleId(sId, schedule.getId())
@@ -531,6 +638,25 @@ public class ScheduleService {
             att.setStatus("Present");
             att.setJoinedAt(java.time.LocalDateTime.now());
             attendanceRecordRepository.save(att);
+        } else if ("TRAINER".equalsIgnoreCase(userRole) && trainerAttendanceRecordRepository != null) {
+            String trId = studentId != null ? studentId : (student != null ? student.getId() : schedule.getTrainerId());
+            String trName = student != null ? student.getName() : schedule.getTrainer();
+            if (trId != null && !trId.isBlank()) {
+                com.zoroacademy.entity.TrainerAttendanceRecord trAtt = trainerAttendanceRecordRepository.findByScheduleIdAndTrainerId(schedule.getId(), trId)
+                        .orElse(com.zoroacademy.entity.TrainerAttendanceRecord.builder()
+                                .id("tratt_" + java.util.UUID.randomUUID())
+                                .scheduleId(schedule.getId())
+                                .trainerId(trId)
+                                .trainerName(trName != null ? trName : "Trainer")
+                                .courseId(schedule.getCourseId())
+                                .batchId(schedule.getBatchId())
+                                .date(schedule.getDate())
+                                .build());
+                trAtt.setStatus("Present");
+                trAtt.setJoinedAt(java.time.LocalDateTime.now());
+                trAtt.setUpdatedAt(java.time.LocalDateTime.now());
+                trainerAttendanceRecordRepository.save(trAtt);
+            }
         }
 
         java.util.Map<String, Object> response = new java.util.HashMap<>();
@@ -540,5 +666,127 @@ public class ScheduleService {
         response.put("status", "Present");
         response.put("message", "Joined successfully");
         return response;
+    }
+
+    @Transactional
+    public java.util.Map<String, Object> startSchedule(String scheduleId, String trainerId, String trainerEmail, String userRole) {
+        return joinSchedule(scheduleId, trainerId, trainerEmail, userRole != null ? userRole : "TRAINER");
+    }
+
+    @Transactional(readOnly = true)
+    public List<Schedule> getTrainerAudienceSchedules() {
+        List<com.zoroacademy.entity.Course> trainerCourses = courseRepository.findByAudienceIgnoreCase("trainer");
+        java.util.Set<String> liveTrainerCourseIds = trainerCourses.stream()
+                .filter(c -> c.getMode() != null && ("ONLINE".equalsIgnoreCase(c.getMode()) || "HYBRID".equalsIgnoreCase(c.getMode())))
+                .map(com.zoroacademy.entity.Course::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        java.util.Set<String> liveTrainerCourseTitles = trainerCourses.stream()
+                .filter(c -> c.getMode() != null && ("ONLINE".equalsIgnoreCase(c.getMode()) || "HYBRID".equalsIgnoreCase(c.getMode())))
+                .map(c -> c.getTitle().toLowerCase(java.util.Locale.ROOT).trim())
+                .collect(java.util.stream.Collectors.toSet());
+
+        java.util.Map<String, com.zoroacademy.entity.Course> courseMap = trainerCourses.stream()
+                .collect(java.util.stream.Collectors.toMap(com.zoroacademy.entity.Course::getId, c -> c, (a, b) -> a));
+
+        List<Schedule> all = scheduleRepository.findAllByOrderByDateAsc();
+        List<Schedule> filtered = new java.util.ArrayList<>();
+        java.time.ZonedDateTime now = com.zoroacademy.util.ScheduleTimeUtil.nowInKolkata();
+
+        for (Schedule s : all) {
+            boolean isTrainerAudience = "TRAINER".equalsIgnoreCase(s.getAudience());
+            boolean matchCourseId = s.getCourseId() != null && liveTrainerCourseIds.contains(s.getCourseId());
+            boolean matchCourseTitle = s.getCourse() != null && liveTrainerCourseTitles.contains(s.getCourse().toLowerCase(java.util.Locale.ROOT).trim());
+
+            if (!isTrainerAudience && !matchCourseId && !matchCourseTitle) {
+                continue;
+            }
+
+            // Exclude recorded courses
+            if (s.getCourseId() != null) {
+                com.zoroacademy.entity.Course c = courseRepository.findById(s.getCourseId()).orElse(null);
+                if (c != null && "RECORDED".equalsIgnoreCase(c.getMode())) {
+                    continue;
+                }
+            }
+
+            Schedule copy = new Schedule(
+                    s.getId(), s.getTitle(), s.getCourse(), s.getCourseId(), s.getBatch(), s.getBatchId(),
+                    s.getTrainer(), s.getTrainerId(), s.getTime(), s.getDate(), s.getMeetLink(),
+                    s.getStudentsCount(), s.getStatus(), s.getNotesFileUrl(), s.getNotesFileName(),
+                    s.getWorksheetFileUrl(), s.getWorksheetFileName(), s.getAssignmentFileUrl(),
+                    s.getAssignmentFileName(), s.getCreatedAt(), s.getUpdatedAt()
+            );
+            copy.setStartTime(s.getStartTime());
+            copy.setEndTime(s.getEndTime());
+            copy.setStartAt(s.getStartAt());
+            copy.setEndAt(s.getEndAt());
+            copy.setAudience("TRAINER");
+            copy.setServerNow(now.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+
+            // Status: Upcoming / Live now / Completed
+            java.time.ZonedDateTime start = com.zoroacademy.util.ScheduleTimeUtil.getSessionStart(s.getDate(), s.getTime());
+            java.time.ZonedDateTime end = com.zoroacademy.util.ScheduleTimeUtil.getSessionEnd(s.getDate(), s.getTime());
+            if (start != null && end != null) {
+                if (now.isBefore(start)) {
+                    copy.setStatus("Upcoming");
+                } else if (!now.isAfter(end)) {
+                    copy.setStatus("Live now");
+                } else {
+                    copy.setStatus("Completed");
+                }
+            } else {
+                copy.setStatus(s.getStatus() != null ? s.getStatus() : "Upcoming");
+            }
+
+            // Enrolled trainers count
+            int enrolledCount = 0;
+            if (s.getCourseId() != null) {
+                if (enrollmentRepository != null) {
+                    java.util.List<com.zoroacademy.entity.Enrollment> enrollments = enrollmentRepository.findByCourseId(s.getCourseId());
+                    enrolledCount = (int) enrollments.stream().filter(e -> "Active".equalsIgnoreCase(e.getStatus()) || e.getStatus() == null).count();
+                }
+                if (enrolledCount == 0 && courseMap.containsKey(s.getCourseId())) {
+                    com.zoroacademy.entity.Course c = courseMap.get(s.getCourseId());
+                    if (c.getEnrolled() != null && c.getEnrolled() > 0) {
+                        enrolledCount = c.getEnrolled();
+                    }
+                }
+            }
+            copy.setStudentsCount(enrolledCount);
+
+            // Documents unlock 30 minutes before session start
+            if (start != null) {
+                java.time.ZonedDateTime unlockThreshold = start.minusMinutes(30);
+                if (now.isBefore(unlockThreshold)) {
+                    copy.setLocked(true);
+                    copy.setUnlockTimeLabel(com.zoroacademy.util.ScheduleTimeUtil.formatUnlockTime(s.getDate(), s.getTime(), 30));
+                    copy.setNotesFileUrl(null);
+                    copy.setNotesFileName(null);
+                    copy.setWorksheetFileUrl(null);
+                    copy.setWorksheetFileName(null);
+                    copy.setAssignmentFileUrl(null);
+                    copy.setAssignmentFileName(null);
+                } else {
+                    copy.setLocked(false);
+                    copy.setUnlockTimeLabel(null);
+                }
+            } else {
+                copy.setLocked(false);
+            }
+
+            filtered.add(copy);
+        }
+
+        // Sort time-slot ascending (date ascending, then start time in minutes ascending)
+        filtered.sort((a, b) -> {
+            int dComp = (a.getDate() != null ? a.getDate() : "").compareTo(b.getDate() != null ? b.getDate() : "");
+            if (dComp != 0) return dComp;
+            return Integer.compare(
+                    com.zoroacademy.util.ScheduleTimeUtil.parseTimeToMinutes(a.getTime()),
+                    com.zoroacademy.util.ScheduleTimeUtil.parseTimeToMinutes(b.getTime())
+            );
+        });
+
+        return filtered;
     }
 }

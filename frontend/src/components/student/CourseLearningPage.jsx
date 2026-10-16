@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, Play, FileText, BookOpen, PlusCircle, Sparkles, ExternalLink, Calendar, Clock, Video, Lock, Unlock, Layers, CheckCircle2, Eye, Send, Award, Download } from 'lucide-react';
-import { getCourses, getCourseById, getTrainerCourseRequests } from '../../api/courseApi';
+import { getCourses, getCourseById } from '../../api/courseApi';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { createEnquiry, getMyEnquiries } from '../../api/enquiryApi';
 import { getStudentProgress, getStudentModuleProgress, authorizeVideoPlayback } from '../../api/progressApi';
 import { getSchedules, joinSchedule } from '../../api/scheduleApi';
 import { getSubmissions, createSubmission, getMyTrainerSubmissions } from '../../api/assignmentApi';
-import { uploadFile, resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl } from '../../api/fileApi';
 import { useAuth } from '../../context/AuthContext';
 import SecureVideoPlayer from '../common/SecureVideoPlayer';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
@@ -15,7 +15,7 @@ import { evaluateScheduleLocks, getScheduleJoinState, syncServerTime } from '../
 import { usePolling } from '../../hooks/usePolling';
 
 
-export default function CourseLearningPage({ courseId: initialCourseId, _setActiveScreen, isTrainerLearning = false }) {
+export default function CourseLearningPage({ courseId: initialCourseId, _setActiveScreen, isTrainerLearning = false, onBack }) {
   const { user } = useAuth();
   const isTrainer = isTrainerLearning || user?.role === 'TRAINER';
   const { showError } = useDialog();
@@ -104,7 +104,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
         } catch {
           // ignore
         }
-        const trainerCourses = allCourses.filter(c => c.audience === 'trainer');
+        const trainerCourses = allCourses.filter(c => c.audience?.toLowerCase() === 'trainer');
         setAvailableCourses(trainerCourses);
 
         const enrolled = trainerCourses.filter(c => {
@@ -118,7 +118,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
         });
         setEnrolledCourses(enrolled);
       } else {
-        const studentCourses = allCourses.filter(c => !c.audience || c.audience === 'student');
+        const studentCourses = allCourses.filter(c => !c.audience || c.audience?.toLowerCase() === 'student');
         setAvailableCourses(studentCourses);
 
         const enrolledRaw = await getStudentEnrolledCourses(studentIdentifier);
@@ -143,8 +143,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
       await loadSubmissionsData();
 
       if (initialCourseId) {
-        const coursePool = isTrainer ? allCourses.filter(c => c.audience === 'trainer') : allCourses.filter(c => !c.audience || c.audience === 'student');
-        const target = coursePool.find(c => c.id === initialCourseId) || coursePool[0];
+        const target = allCourses.find(c => c.id === initialCourseId) || (isTrainer ? allCourses.find(c => c.audience?.toLowerCase() === 'trainer') : allCourses.find(c => !c.audience || c.audience?.toLowerCase() === 'student'));
         if (target) selectCourseToLearn(target);
       } else {
         setActiveTab('my-courses');
@@ -270,10 +269,15 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
     }
     setSelectedCourse(fullCourse);
     
-    // Check Student Enrollment Authorization (Requirement #5 & #16)
-    const authRes = await authorizeVideoPlayback(studentIdentifier, fullCourse.id, fullCourse.modules?.[0]?.id);
-    setIsAuthorized(authRes.success);
-    setAuthMsg(authRes.message || '');
+    // Check Enrollment Authorization
+    if (isTrainer) {
+      setIsAuthorized(true);
+      setAuthMsg('');
+    } else {
+      const authRes = await authorizeVideoPlayback(studentIdentifier, fullCourse.id, fullCourse.modules?.[0]?.id);
+      setIsAuthorized(authRes.success);
+      setAuthMsg(authRes.message || '');
+    }
 
     // Load progress and submissions for this course
     await loadSubmissionsData();
@@ -607,7 +611,13 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
         <div className="space-y-6">
           
           <button
-            onClick={() => setActiveTab('my-courses')}
+            onClick={() => {
+              if (onBack) {
+                onBack();
+              } else {
+                setActiveTab('my-courses');
+              }
+            }}
             className="inline-flex items-center space-x-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -760,7 +770,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                 <div className="pt-2 border-t border-slate-200/60">
                                   <div className="px-3 py-2 bg-white/80 border border-slate-200 rounded-xl flex items-center gap-2 text-[11px] text-slate-500 font-semibold">
                                     <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                    <span>Classroom documents unlock 60 minutes before class</span>
+                                    <span>Classroom documents unlock 30 minutes before class</span>
                                   </div>
                                 </div>
                               ) : (
@@ -947,9 +957,6 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                             <button onClick={() => setViewerFile(activeModule.notesPdf)} className="text-[10px] text-emerald-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
                               <Eye className="w-3 h-3" /> View
                             </button>
-                            <button onClick={() => openFileWithSignedLink(activeModule.notesPdf.fileUrl, activeModule.notesPdf.name)} className="text-[10px] text-emerald-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
-                              <Download className="w-3 h-3" /> Download
-                            </button>
                           </div>
                         </div>
                       )}
@@ -964,9 +971,6 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                             <button onClick={() => setViewerFile(activeModule.activitySheetPdf)} className="text-[10px] text-blue-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
                               <Eye className="w-3 h-3" /> View
                             </button>
-                            <button onClick={() => openFileWithSignedLink(activeModule.activitySheetPdf.fileUrl, activeModule.activitySheetPdf.name)} className="text-[10px] text-blue-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
-                              <Download className="w-3 h-3" /> Download
-                            </button>
                           </div>
                         </div>
                       )}
@@ -980,9 +984,6 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                           <div className="flex items-center space-x-3 pt-1">
                             <button onClick={() => setViewerFile(activeModule.assignmentPdf)} className="text-[10px] text-purple-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
                               <Eye className="w-3 h-3" /> View
-                            </button>
-                            <button onClick={() => openFileWithSignedLink(activeModule.assignmentPdf.fileUrl, activeModule.assignmentPdf.name)} className="text-[10px] text-purple-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer">
-                              <Download className="w-3 h-3" /> Download
                             </button>
                           </div>
                         </div>
@@ -1045,13 +1046,6 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                   >
                                     <Eye className="w-3.5 h-3.5" /> View Task File
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openFileWithSignedLink(assignmentDoc.fileUrl, assignmentDoc.name)}
-                                    className="text-[11px] font-extrabold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
-                                  >
-                                    <Download className="w-3.5 h-3.5" /> Download
-                                  </button>
                                 </div>
                               </div>
                             )}
@@ -1107,10 +1101,10 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
                                           <span className="font-bold text-emerald-200 truncate">📄 Corrected Document</span>
                                           <button
                                             type="button"
-                                            onClick={() => openFileWithSignedLink(currentSub.correctedFileUrl, 'Corrected_Assignment')}
+                                            onClick={() => setViewerFile({ name: 'Corrected Document', url: currentSub.correctedFileUrl, type: 'pdf' })}
                                             className="text-emerald-300 hover:text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
                                           >
-                                            <Download className="w-3.5 h-3.5" /> Download Correction
+                                            <Eye className="w-3.5 h-3.5" /> View Correction
                                           </button>
                                         </div>
                                       )}
@@ -1338,7 +1332,7 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
         isOpen={Boolean(viewerFile)}
         onClose={() => setViewerFile(null)}
         file={viewerFile}
-        hideDownload={false}
+        hideDownload={true}
       />
     </div>
   );

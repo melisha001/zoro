@@ -124,7 +124,7 @@ export function getSessionEndDateTime(dateStr, timeStr) {
   return new Date(Date.UTC(year, month, day, hour, minute, 0));
 }
 
-export const RESOURCES_UNLOCK_MINUTES = 60;
+export const RESOURCES_UNLOCK_MINUTES = 30;
 
 export function getUnlockTimeString(dateStr, timeStr, unlockMinutes = RESOURCES_UNLOCK_MINUTES) {
   const start = getSessionStartDateTime(dateStr, timeStr);

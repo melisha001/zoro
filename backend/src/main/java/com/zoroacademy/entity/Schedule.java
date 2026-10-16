@@ -26,13 +26,13 @@ public class Schedule {
     @Column(name = "course_id", length = 128)
     private String courseId;
 
-    @Column(nullable = false)
+    @Column(name = "batch")
     private String batch;
 
     @Column(name = "batch_id", length = 128)
     private String batchId;
 
-    @Column(nullable = false)
+    @Column(name = "trainer")
     private String trainer;
 
     @Column(name = "trainer_id", length = 64)

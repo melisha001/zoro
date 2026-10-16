@@ -63,7 +63,7 @@ razorpay:
   webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
 
 schedule:
-  resources-unlock-minutes: 60
+  resources-unlock-minutes: ${SCHEDULE_RESOURCES_UNLOCK_MINUTES:30}
 
 springdoc:
   swagger-ui:

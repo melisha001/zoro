@@ -816,6 +816,7 @@ export default function TrainerAssignmentsPage() {
         isOpen={Boolean(viewerFile)}
         onClose={() => setViewerFile(null)}
         file={viewerFile}
+        hideDownload={true}
       />
 
     </div>

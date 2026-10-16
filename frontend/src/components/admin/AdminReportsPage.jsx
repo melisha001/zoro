@@ -61,7 +61,7 @@ export default function AdminReportsPage() {
   const attendanceRate = attendance.length > 0 ? Math.round((presentCount / attendance.length) * 100) : 94;
   const totalCompRev = competitionRegistrations
     .filter(r => r.paymentStatus === 'Paid' || r.paymentStatus === 'PAID')
-    .reduce((sum, r) => sum + (parseFloat(r.registrationFee) || 0), 0);
+    .reduce((sum, r) => sum + (r.amount != null ? Number(r.amount) : (r.amountPaise != null ? Number(r.amountPaise) / 100 : Number(r.registrationFee || 0))), 0);
 
   const handleExportReport = () => {
     const csvRows = [];

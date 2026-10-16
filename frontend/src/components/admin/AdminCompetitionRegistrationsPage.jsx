@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Trophy, Search, Filter, Calendar, Users, DollarSign, 
-  CheckCircle2, XCircle, AlertCircle, RefreshCw, Layers, ShieldCheck, Download, Eye, X 
+  CheckCircle2, XCircle, AlertCircle, RefreshCw, Layers, ShieldCheck, Download, Eye, X, Edit 
 } from 'lucide-react';
-import { getCompetitionRegistrations, updateRegistrationStatus } from '../../api/competitionRegistrationApi';
+import { getCompetitionRegistrations, updateRegistrationStatus, updateCompetitionRegistration } from '../../api/competitionRegistrationApi';
 import { getCompetitions } from '../../api/competitionApi';
 import ConfirmModal from '../common/ConfirmModal';
 
@@ -18,6 +18,13 @@ export default function AdminCompetitionRegistrationsPage() {
 
   const [viewingReg, setViewingReg] = useState(null);
   const [cancelModalReg, setCancelModalReg] = useState(null);
+  const [editingPaymentReg, setEditingPaymentReg] = useState(null);
+  const [paymentForm, setPaymentForm] = useState({
+    razorpayOrderId: '',
+    razorpayPaymentId: '',
+    amount: '',
+    paymentStatus: 'PAID'
+  });
 
   const loadData = async () => {
     setLoading(true);
@@ -46,6 +53,35 @@ export default function AdminCompetitionRegistrationsPage() {
     }
   };
 
+  const handleOpenEditPayment = (reg) => {
+    setEditingPaymentReg(reg);
+    const amt = reg.amount != null ? reg.amount : (reg.amountPaise != null ? reg.amountPaise / 100 : (reg.registrationFee || '0'));
+    setPaymentForm({
+      razorpayOrderId: reg.razorpayOrderId || '',
+      razorpayPaymentId: reg.razorpayPaymentId || '',
+      amount: String(amt),
+      paymentStatus: reg.paymentStatus || 'PAID'
+    });
+  };
+
+  const handleSavePaymentEdit = async (e) => {
+    e.preventDefault();
+    if (!editingPaymentReg) return;
+    try {
+      const payload = {
+        razorpayOrderId: paymentForm.razorpayOrderId.trim() || null,
+        razorpayPaymentId: paymentForm.razorpayPaymentId.trim() || null,
+        amount: paymentForm.amount ? Number(paymentForm.amount) : 0,
+        paymentStatus: paymentForm.paymentStatus
+      };
+      await updateCompetitionRegistration(editingPaymentReg.id, payload);
+      setEditingPaymentReg(null);
+      loadData();
+    } catch (err) {
+      console.error('Failed to update registration payment details:', err);
+    }
+  };
+
   const filteredRegistrations = registrations.filter(r => {
     const matchesSearch = !searchTerm || (
       r.studentName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -67,7 +103,7 @@ export default function AdminCompetitionRegistrationsPage() {
     r.registrationStatus !== 'Cancelled'
   );
   const totalRevenue = paidRegistrations.reduce((sum, r) => {
-    const amt = r.amountPaise != null ? Number(r.amountPaise) / 100 : Number(r.registrationFee || 0);
+    const amt = r.amount != null ? Number(r.amount) : (r.amountPaise != null ? Number(r.amountPaise) / 100 : Number(r.registrationFee || 0));
     return sum + amt;
   }, 0);
   const totalRegCount = registrations.filter(r => r.registrationStatus !== 'Cancelled').length;
@@ -235,7 +271,7 @@ export default function AdminCompetitionRegistrationsPage() {
                             {student.registrationDate}
                           </td>
                           <td className="py-3.5 px-4 font-extrabold text-slate-900">
-                            ₹{student.amountPaise != null ? (student.amountPaise / 100).toFixed(2) : (student.registrationFee ?? '0')}
+                            ₹{(student.amount != null ? Number(student.amount) : (student.amountPaise != null ? student.amountPaise / 100 : Number(student.registrationFee ?? 0))).toFixed(2)}
                           </td>
                           <td className="py-3.5 px-4">
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black ${
@@ -274,6 +310,13 @@ export default function AdminCompetitionRegistrationsPage() {
                               title="View Details"
                             >
                               <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditPayment(student)}
+                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer"
+                              title="Edit Payment / Order Details"
+                            >
+                              <Edit className="w-4 h-4" />
                             </button>
                             {student.registrationStatus !== 'Cancelled' && (
                               <button
@@ -318,12 +361,98 @@ export default function AdminCompetitionRegistrationsPage() {
               <div><strong>Competition:</strong> {viewingReg.competitionName}</div>
               <div><strong>Batch:</strong> {viewingReg.batchName}</div>
               <div><strong>Registration Date:</strong> {viewingReg.registrationDate}</div>
-              <div><strong>Amount:</strong> ₹{viewingReg.amountPaise != null ? (viewingReg.amountPaise / 100).toFixed(2) : (viewingReg.registrationFee || 0)}</div>
+              <div><strong>Amount:</strong> ₹{(viewingReg.amount != null ? Number(viewingReg.amount) : (viewingReg.amountPaise != null ? viewingReg.amountPaise / 100 : viewingReg.registrationFee || 0)).toFixed(2)}</div>
               <div><strong>Payment Status:</strong> <span className="font-bold text-emerald-700">{viewingReg.paymentStatus}</span></div>
               <div><strong>Razorpay Order ID:</strong> <span className="font-mono text-xs">{viewingReg.razorpayOrderId || 'None'}</span></div>
               <div><strong>Razorpay Payment ID:</strong> <span className="font-mono text-xs">{viewingReg.razorpayPaymentId || 'None'}</span></div>
               <div><strong>Payment Date/Time:</strong> {viewingReg.paidAt || viewingReg.paymentDate || 'N/A'}</div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PAYMENT DETAILS MODAL */}
+      {editingPaymentReg && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-xs">
+            <button
+              onClick={() => setEditingPaymentReg(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h3 className="text-xl font-black text-slate-900">Update Payment Details</h3>
+            <p className="text-slate-500 text-xs">
+              Participant: <strong className="text-slate-800">{editingPaymentReg.studentName}</strong> ({editingPaymentReg.studentEmail})
+            </p>
+
+            <form onSubmit={handleSavePaymentEdit} className="space-y-3 pt-2">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Razorpay Order ID</label>
+                <input
+                  type="text"
+                  placeholder="e.g. order_To9BmBYSQ6tIeC"
+                  value={paymentForm.razorpayOrderId}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, razorpayOrderId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Razorpay Payment ID</label>
+                <input
+                  type="text"
+                  placeholder="e.g. pay_To9CWFbE5lG2sO"
+                  value={paymentForm.razorpayPaymentId}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, razorpayPaymentId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Amount Paid (₹)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={paymentForm.amount}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Payment Status</label>
+                <select
+                  value={paymentForm.paymentStatus}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, paymentStatus: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none"
+                >
+                  <option value="PAID">PAID</option>
+                  <option value="PENDING_PAYMENT">PENDING_PAYMENT</option>
+                  <option value="Failed">Failed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingPaymentReg(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs cursor-pointer"
+                >
+                  Save Payment Details
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

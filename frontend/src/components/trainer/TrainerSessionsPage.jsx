@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Video, Copy, Calendar, Clock, AlertTriangle, Eye, FileText } from 'lucide-react';
+import { Video, Copy, Calendar, Clock, AlertTriangle, Eye, FileText, Lock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { getTrainerSchedules } from '../../api/scheduleApi';
-import { sortSchedulesChronologically, isValidGoogleMeetUrl } from '../../utils/scheduleSortUtil';
+import { getTrainerSchedules, startSchedule } from '../../api/scheduleApi';
+import { sortSchedulesChronologically, isValidGoogleMeetUrl, getScheduleJoinState, syncServerTime } from '../../utils/scheduleSortUtil';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import { usePolling } from '../../hooks/usePolling';
 
 export default function TrainerSessionsPage() {
   const { user } = useAuth();
@@ -16,8 +17,10 @@ export default function TrainerSessionsPage() {
   const [selectedScheduleIndex, setSelectedScheduleIndex] = useState(0);
   const [viewerFile, setViewerFile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [, setTimerTick] = useState(0);
 
   useEffect(() => {
+    syncServerTime();
     async function loadSchedules() {
       setLoading(true);
       try {
@@ -33,23 +36,59 @@ export default function TrainerSessionsPage() {
     loadSchedules();
   }, [trainerName]);
 
+  usePolling(() => {
+    setTimerTick(prev => prev + 1);
+  }, 15000);
+
   const currentSchedule = schedules[selectedScheduleIndex] || schedules[0] || null;
 
   const getAttachedResource = (item, type) => {
     if (!item) return null;
+    if (type === 'assignment') {
+      if (item.assignmentPdf) return typeof item.assignmentPdf === 'object' ? item.assignmentPdf : { name: `${item.title} Assignment.pdf`, fileUrl: item.assignmentPdf, type: 'pdf' };
+      if (item.assignmentFileUrl) return { name: item.assignmentFileName || `${item.title} Assignment.pdf`, fileUrl: item.assignmentFileUrl, type: 'pdf' };
+      if (item.assignmentFile) return item.assignmentFile;
+    }
+    if (type === 'worksheet') {
+      if (item.worksheetPdf) return typeof item.worksheetPdf === 'object' ? item.worksheetPdf : { name: `${item.title} Worksheet.pdf`, fileUrl: item.worksheetPdf, type: 'pdf' };
+      if (item.worksheetFileUrl) return { name: item.worksheetFileName || `${item.title} Worksheet.pdf`, fileUrl: item.worksheetFileUrl, type: 'pdf' };
+      if (item.worksheetFile) return item.worksheetFile;
+    }
+    if (type === 'notes') {
+      if (item.notesPdf) return typeof item.notesPdf === 'object' ? item.notesPdf : { name: `${item.title} Notes.pdf`, fileUrl: item.notesPdf, type: 'pdf' };
+      if (item.notesFileUrl) return { name: item.notesFileName || `${item.title} Notes.pdf`, fileUrl: item.notesFileUrl, type: 'pdf' };
+      if (item.notesFile) return item.notesFile;
+    }
+
     if (item.resources && item.resources[type]) {
       const res = item.resources[type];
-      return typeof res === 'string' ? { name: `${type.toUpperCase()} - ${item.title}`, url: res, type: 'pdf' } : res;
+      return typeof res === 'string' ? { name: `${type.toUpperCase()} - ${item.title}`, fileUrl: res, type: 'pdf' } : res;
     }
     if (item[type]) {
       const res = item[type];
-      return typeof res === 'string' ? { name: `${type.toUpperCase()} - ${item.title}`, url: res, type: 'pdf' } : res;
+      return typeof res === 'string' ? { name: `${type.toUpperCase()} - ${item.title}`, fileUrl: res, type: 'pdf' } : res;
     }
     return null;
   };
 
   const rawMeetUrl = currentSchedule?.googleMeetUrl || currentSchedule?.meetingUrl || currentSchedule?.meetLink || '';
   const hasValidMeet = isValidGoogleMeetUrl(rawMeetUrl);
+  const joinState = currentSchedule ? getScheduleJoinState(currentSchedule) : { enabled: false, label: 'No schedule' };
+
+  const handleStartSession = async () => {
+    if (!currentSchedule) return;
+    try {
+      const res = await startSchedule(currentSchedule.id);
+      const url = res?.data?.meetUrl || res?.meetUrl || rawMeetUrl;
+      if (url) {
+        window.open(url, '_blank');
+      }
+    } catch {
+      if (rawMeetUrl) {
+        window.open(rawMeetUrl, '_blank');
+      }
+    }
+  };
 
   const handleCopyLink = () => {
     if (!hasValidMeet) return;
@@ -142,22 +181,23 @@ export default function TrainerSessionsPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button 
-                disabled={!hasValidMeet}
-                onClick={() => {
-                  if (hasValidMeet) {
-                    window.open(rawMeetUrl, '_blank');
-                  }
-                }}
-                className={`font-extrabold px-6 py-3 rounded-xl shadow-md text-xs flex items-center space-x-2 ${
-                  hasValidMeet
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
-                    : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                }`}
-              >
-                <Video className="w-4 h-4" />
-                <span>{hasValidMeet ? 'Start Session (Google Meet)' : 'Meeting link not set'}</span>
-              </button>
+              {joinState.enabled ? (
+                <button 
+                  onClick={handleStartSession}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-6 py-3 rounded-xl shadow-md text-xs flex items-center space-x-2 cursor-pointer transition-transform active:scale-95"
+                >
+                  <Video className="w-4 h-4 fill-current" />
+                  <span>Start Session (Google Meet)</span>
+                </button>
+              ) : (
+                <button 
+                  disabled={true}
+                  className="bg-slate-200 text-slate-400 font-bold px-6 py-3 rounded-xl text-xs flex items-center space-x-2 border border-slate-300 cursor-not-allowed"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>{joinState.label.replace('Join opens at', 'Starts at')}</span>
+                </button>
+              )}
 
               <button 
                 disabled={!hasValidMeet}

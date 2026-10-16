@@ -17,6 +17,6 @@ public interface CompetitionRegistrationRepository extends JpaRepository<Competi
     Optional<CompetitionRegistration> findByRazorpayOrderId(String razorpayOrderId);
     List<CompetitionRegistration> findByPaymentStatusAndCreatedAtBefore(String paymentStatus, java.time.LocalDateTime cutoff);
 
-    @org.springframework.data.jpa.repository.Query("SELECT COALESCE(SUM(c.registrationFee), 0) FROM CompetitionRegistration r JOIN r.competition c WHERE LOWER(r.paymentStatus) = 'paid'")
+    @org.springframework.data.jpa.repository.Query("SELECT COALESCE(SUM(COALESCE(r.amount, c.registrationFee, 0)), 0) FROM CompetitionRegistration r JOIN r.competition c WHERE LOWER(r.paymentStatus) = 'paid'")
     java.math.BigDecimal sumPaidCompetitionFees();
 }

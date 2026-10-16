@@ -273,7 +273,30 @@ public class MeController {
         }
 
         if ("TRAINER".equals(role)) {
-            return ApiResponse.ok(scheduleRepository.findByTrainerIdOrTrainerIgnoreCaseOrderByDateAsc(user.getId(), user.getName()));
+            List<Schedule> teachingSchedules = scheduleRepository.findByTrainerIdOrTrainerIgnoreCaseOrderByDateAsc(user.getId(), user.getName());
+
+            // Also include schedules for trainer-audience courses where this trainer is approved/enrolled
+            List<com.zoroacademy.entity.TrainerCourseRequest> approvedRequests = trainerCourseRequestRepository.findByTrainerId(user.getId()).stream()
+                    .filter(r -> "Approved".equalsIgnoreCase(r.getStatus()))
+                    .toList();
+            Set<String> approvedCourseIds = approvedRequests.stream().map(com.zoroacademy.entity.TrainerCourseRequest::getCourseId).collect(Collectors.toSet());
+            Set<String> approvedCourseTitles = approvedRequests.stream().map(com.zoroacademy.entity.TrainerCourseRequest::getCourseTitle).filter(Objects::nonNull).map(String::toLowerCase).collect(Collectors.toSet());
+
+            List<Schedule> learningSchedules = scheduleRepository.findByAudienceIgnoreCase("TRAINER").stream()
+                    .filter(s -> (s.getCourseId() != null && approvedCourseIds.contains(s.getCourseId()))
+                            || (s.getCourse() != null && approvedCourseTitles.contains(s.getCourse().toLowerCase())))
+                    .toList();
+
+            Set<String> seenIds = new HashSet<>();
+            List<Schedule> combined = new ArrayList<>();
+            for (Schedule s : teachingSchedules) {
+                if (seenIds.add(s.getId())) combined.add(s);
+            }
+            for (Schedule s : learningSchedules) {
+                if (seenIds.add(s.getId())) combined.add(s);
+            }
+            combined.sort(Comparator.comparing(Schedule::getDate, Comparator.nullsLast(Comparator.naturalOrder())));
+            return ApiResponse.ok(combined);
         }
 
         // STUDENT

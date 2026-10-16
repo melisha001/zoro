@@ -210,6 +210,8 @@ class RazorpayPaymentServiceTest {
         assertEquals("PAID", result.getPaymentStatus());
         assertEquals(paymentId, result.getRazorpayPaymentId());
         assertEquals(validSig, result.getRazorpaySignature());
+        assertTrue(result.getSignatureVerified());
+        assertEquals("INR", result.getCurrency());
         assertNotNull(result.getPaidAt());
     }
 

@@ -3,7 +3,7 @@ import { X, Download, FileText, Film, Music, Image as ImageIcon, FileSpreadsheet
 import { resolveFileUrl, getFileLink, openFileWithSignedLink } from '../../api/fileApi';
 import SafeImage from './SafeImage';
 
-export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDownload = false }) {
+export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDownload = true }) {
   const [resolvedUrl, setResolvedUrl] = useState('');
   const [resolvedInfo, setResolvedInfo] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
@@ -77,8 +77,13 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
                    mimeType.includes('ms-powerpoint');
   const isArchive = ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext) || mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('tar');
 
+  const pdfSrc = hideDownload && isPdf ? (fileUrl.includes('#') ? fileUrl : `${fileUrl}#toolbar=0&navpanes=0`) : fileUrl;
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in">
+    <div 
+      onContextMenu={hideDownload ? (e) => e.preventDefault() : undefined}
+      className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in"
+    >
       <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden relative">
         
         {/* Modal Header */}
@@ -172,7 +177,7 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
               {isPdf && (
                 <div className="w-full h-[70vh] bg-white rounded-2xl overflow-hidden shadow-lg border border-slate-200">
                   <iframe
-                    src={fileUrl}
+                    src={pdfSrc}
                     title={fileName}
                     className="w-full h-full"
                   />

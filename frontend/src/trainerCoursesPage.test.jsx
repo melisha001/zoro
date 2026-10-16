@@ -144,6 +144,6 @@ describe('TrainerCoursesPage (Phase 5)', () => {
     });
 
     expect(screen.getByText('Enrolled / Active Access')).toBeDefined();
-    expect(screen.getByText('View Modules & Files')).toBeDefined();
+    expect(screen.getByText('Go to Classroom')).toBeDefined();
   });
 });

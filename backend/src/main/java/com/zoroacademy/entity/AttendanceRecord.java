@@ -39,6 +39,12 @@ public class AttendanceRecord {
     @Column(columnDefinition = "TEXT")
     private String remarks;
 
+    @Column(name = "remark_by", length = 128)
+    private String remarkBy;
+
+    @Column(name = "remark_at")
+    private LocalDateTime remarkAt;
+
     @Column(name = "recorded_by")
     private String recordedBy;
 
@@ -149,6 +155,32 @@ public class AttendanceRecord {
         this.remarks = remarks;
     }
 
+    @com.fasterxml.jackson.annotation.JsonProperty("remark")
+    public String getRemark() {
+        return remarks;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("remark")
+    public void setRemark(String remark) {
+        this.remarks = remark;
+    }
+
+    public String getRemarkBy() {
+        return remarkBy;
+    }
+
+    public void setRemarkBy(String remarkBy) {
+        this.remarkBy = remarkBy;
+    }
+
+    public java.time.LocalDateTime getRemarkAt() {
+        return remarkAt;
+    }
+
+    public void setRemarkAt(java.time.LocalDateTime remarkAt) {
+        this.remarkAt = remarkAt;
+    }
+
     public String getRecordedBy() {
         return recordedBy;
     }
@@ -219,6 +251,8 @@ public class AttendanceRecord {
         private String date;
         private String status;
         private String remarks;
+        private String remarkBy;
+        private LocalDateTime remarkAt;
         private String recordedBy;
         private LocalDateTime createdAt;
         private LocalDateTime joinedAt;
@@ -259,6 +293,18 @@ public class AttendanceRecord {
             this.remarks = remarks;
             return this;
         }
+        public Builder remark(String remark) {
+            this.remarks = remark;
+            return this;
+        }
+        public Builder remarkBy(String remarkBy) {
+            this.remarkBy = remarkBy;
+            return this;
+        }
+        public Builder remarkAt(LocalDateTime remarkAt) {
+            this.remarkAt = remarkAt;
+            return this;
+        }
         public Builder recordedBy(String recordedBy) {
             this.recordedBy = recordedBy;
             return this;
@@ -275,6 +321,8 @@ public class AttendanceRecord {
         public AttendanceRecord build() {
             AttendanceRecord r = new AttendanceRecord(id, scheduleId, studentId, studentName, courseId, batchId, date, status, remarks, recordedBy, createdAt);
             r.setJoinedAt(joinedAt);
+            r.setRemarkBy(remarkBy);
+            r.setRemarkAt(remarkAt);
             return r;
         }
     }

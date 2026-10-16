@@ -165,6 +165,9 @@ public class RazorpayPaymentService {
         if (amountPaise <= 0) {
             reg.setPaymentStatus("PAID");
             reg.setAmountPaise(0L);
+            reg.setAmount(BigDecimal.ZERO);
+            reg.setCurrency("INR");
+            reg.setSignatureVerified(false);
             reg.setPaidAt(LocalDateTime.now());
             registrationRepository.save(reg);
 
@@ -190,6 +193,9 @@ public class RazorpayPaymentService {
         reg.setPaymentStatus("PENDING_PAYMENT");
         reg.setRazorpayOrderId(orderId);
         reg.setAmountPaise(amountPaise);
+        reg.setAmount(fee);
+        reg.setCurrency("INR");
+        reg.setSignatureVerified(false);
         registrationRepository.save(reg);
 
         return RazorpayOrderResponse.builder()
@@ -267,6 +273,17 @@ public class RazorpayPaymentService {
         reg.setRazorpayPaymentId(paymentId);
         reg.setRazorpaySignature(signature);
         reg.setPaidAt(LocalDateTime.now());
+        reg.setSignatureVerified(true);
+        if (reg.getCurrency() == null) {
+            reg.setCurrency("INR");
+        }
+        if (reg.getAmount() == null) {
+            if (reg.getAmountPaise() != null) {
+                reg.setAmount(BigDecimal.valueOf(reg.getAmountPaise()).divide(BigDecimal.valueOf(100)));
+            } else if (reg.getCompetition() != null && reg.getCompetition().getRegistrationFee() != null) {
+                reg.setAmount(reg.getCompetition().getRegistrationFee());
+            }
+        }
         return registrationRepository.save(reg);
     }
 
@@ -298,6 +315,15 @@ public class RazorpayPaymentService {
                             reg.setPaymentStatus("PAID");
                             reg.setRazorpayPaymentId(paymentId);
                             reg.setPaidAt(LocalDateTime.now());
+                            reg.setSignatureVerified(true);
+                            if (reg.getCurrency() == null) reg.setCurrency("INR");
+                            if (reg.getAmount() == null) {
+                                if (reg.getAmountPaise() != null) {
+                                    reg.setAmount(BigDecimal.valueOf(reg.getAmountPaise()).divide(BigDecimal.valueOf(100)));
+                                } else if (reg.getCompetition() != null && reg.getCompetition().getRegistrationFee() != null) {
+                                    reg.setAmount(reg.getCompetition().getRegistrationFee());
+                                }
+                            }
                             registrationRepository.save(reg);
                             log.info("Webhook successfully marked registration {} as PAID", reg.getId());
                         }

@@ -27,6 +27,7 @@ const ManageStudentsPage = lazy(() => import('./components/admin/ManageStudentsP
 const ManageTrainersPage = lazy(() => import('./components/admin/ManageTrainersPage'));
 const AdminAttendancePage = lazy(() => import('./components/admin/AttendancePage'));
 const AdminSchedulePage = lazy(() => import('./components/admin/AdminSchedulePage'));
+const AdminTrainerSessionsPage = lazy(() => import('./components/admin/AdminTrainerSessionsPage'));
 const AdminFeesPage = lazy(() => import('./components/admin/AdminFeesPage'));
 const AdminExpensesPage = lazy(() => import('./components/admin/AdminExpensesPage'));
 const AdminSalaryPage = lazy(() => import('./components/admin/AdminSalaryPage'));
@@ -90,6 +91,7 @@ function getActiveScreenFromPath(path) {
   if (path === '/admin/trainers') return 'admin-manage-trainers';
   if (path === '/admin/attendance') return 'admin-attendance';
   if (path === '/admin/schedules') return 'admin-schedule';
+  if (path === '/admin/trainer-sessions') return 'admin-trainer-sessions';
   if (path === '/admin/assignments') return 'admin-assignments';
   if (path === '/admin/trainer-assignments') return 'admin-trainer-assignments';
   if (path === '/admin/doubts') return 'admin-doubts';
@@ -147,6 +149,7 @@ function screenToPath(screen, params = {}) {
     case 'admin-manage-trainers': return '/admin/trainers';
     case 'admin-attendance': return '/admin/attendance';
     case 'admin-schedule': return '/admin/schedules';
+    case 'admin-trainer-sessions': return '/admin/trainer-sessions';
     case 'admin-assignments': return '/admin/assignments';
     case 'admin-trainer-assignments': return '/admin/trainer-assignments';
     case 'admin-doubts': return '/admin/doubts';
@@ -484,6 +487,7 @@ function AppRoutes() {
           <Route path="trainers" element={<ManageTrainersPage />} />
           <Route path="attendance" element={<AdminAttendancePage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="schedules" element={<AdminSchedulePage />} />
+          <Route path="trainer-sessions" element={<AdminTrainerSessionsPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="assignments" element={<AdminAssignmentsPage />} />
           <Route path="trainer-assignments" element={<AdminTrainerAssignmentsPage />} />
           <Route path="doubts" element={<AdminDoubtsPage />} />

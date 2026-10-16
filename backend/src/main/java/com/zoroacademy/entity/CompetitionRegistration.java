@@ -1,6 +1,7 @@
 package com.zoroacademy.entity;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -17,7 +18,7 @@ public class CompetitionRegistration {
     @Column(length = 128)
     private String id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "competition_id", nullable = false)
     @JsonBackReference
     private Competition competition;
@@ -59,6 +60,15 @@ public class CompetitionRegistration {
 
     @Column(name = "amount_paise")
     private Long amountPaise;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal amount;
+
+    @Column(length = 10)
+    private String currency = "INR";
+
+    @Column(name = "signature_verified")
+    private Boolean signatureVerified = false;
 
     @Column(precision = 6, scale = 2)
     private BigDecimal score;
@@ -242,6 +252,51 @@ public class CompetitionRegistration {
         this.amountPaise = amountPaise;
     }
 
+    public BigDecimal getAmount() {
+        if (amount != null) {
+            return amount;
+        }
+        if (amountPaise != null) {
+            return BigDecimal.valueOf(amountPaise).divide(BigDecimal.valueOf(100));
+        }
+        return fetchRegistrationFee();
+    }
+
+    public void setAmount(BigDecimal amount) {
+        this.amount = amount;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
+    }
+
+    public Boolean getSignatureVerified() {
+        return signatureVerified;
+    }
+
+    public void setSignatureVerified(Boolean signatureVerified) {
+        this.signatureVerified = signatureVerified;
+    }
+
+    @JsonProperty("competitionId")
+    public String fetchCompetitionId() {
+        return competition != null ? competition.getId() : null;
+    }
+
+    @JsonProperty("competitionName")
+    public String fetchCompetitionName() {
+        return competition != null ? competition.getTitle() : null;
+    }
+
+    @JsonProperty("registrationFee")
+    public BigDecimal fetchRegistrationFee() {
+        return competition != null ? competition.getRegistrationFee() : null;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -262,6 +317,9 @@ public class CompetitionRegistration {
         private String razorpaySignature;
         private LocalDateTime paidAt;
         private Long amountPaise;
+        private BigDecimal amount;
+        private String currency = "INR";
+        private Boolean signatureVerified = false;
         private BigDecimal score;
         private Integer rank;
         private String certificateUrl;
@@ -327,6 +385,18 @@ public class CompetitionRegistration {
             this.amountPaise = amountPaise;
             return this;
         }
+        public Builder amount(BigDecimal amount) {
+            this.amount = amount;
+            return this;
+        }
+        public Builder currency(String currency) {
+            this.currency = currency;
+            return this;
+        }
+        public Builder signatureVerified(Boolean signatureVerified) {
+            this.signatureVerified = signatureVerified;
+            return this;
+        }
         public Builder score(BigDecimal score) {
             this.score = score;
             return this;
@@ -351,6 +421,9 @@ public class CompetitionRegistration {
             reg.setRazorpaySignature(razorpaySignature);
             reg.setPaidAt(paidAt);
             reg.setAmountPaise(amountPaise);
+            reg.setAmount(amount);
+            if (currency != null) reg.setCurrency(currency);
+            if (signatureVerified != null) reg.setSignatureVerified(signatureVerified);
             return reg;
         }
     }

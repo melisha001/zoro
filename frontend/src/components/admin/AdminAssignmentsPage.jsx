@@ -728,6 +728,7 @@ export default function AdminAssignmentsPage() {
         isOpen={Boolean(viewerFile)}
         onClose={() => setViewerFile(null)}
         file={viewerFile}
+        hideDownload={true}
       />
 
     </div>

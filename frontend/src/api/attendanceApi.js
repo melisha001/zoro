@@ -1,9 +1,9 @@
-import { apiGet, apiPost, apiResponse } from './client';
+import { apiGet, apiPost, apiPut, apiResponse } from './client';
 
 /**
  * Attendance Management API
  * 100% Database-backed via Spring Boot REST endpoints.
- * ZERO mock data. ZERO localStorage persistence.
+ * Automatic Attendance System (No manual marking).
  */
 
 export const getAttendanceRecords = async () => {
@@ -15,6 +15,14 @@ export const getAttendanceRecords = async () => {
     return apiResponse(res.data);
   }
   return apiResponse([], false, res?.message || 'Failed to fetch attendance records');
+};
+
+export const getTrainerAttendanceRecords = async () => {
+  const res = await apiGet('/attendance/trainer');
+  if (res.success && Array.isArray(res.data)) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch trainer attendance records');
 };
 
 export const getMyAttendanceRecords = async () => {
@@ -36,40 +44,34 @@ export const getStudentAttendance = async (studentId) => {
   return apiResponse([], false, res?.message || 'Failed to fetch student attendance');
 };
 
-export const recordAttendance = async (sessionData, studentName = 'Student', studentEmail = 'student@zoro.com', studentId = null) => {
-  const finalStudentId = studentId || sessionData?.studentId || studentEmail;
-  if (!finalStudentId) {
-    return apiResponse(null, false, 'Student identifier is required to record attendance');
+export const updateStudentRemark = async ({ scheduleId, studentId, remark, id }) => {
+  if (!studentId) {
+    return apiResponse(null, false, 'Student ID is required');
   }
+  const payload = { id, scheduleId, studentId, remark };
+  const res = id
+    ? await apiPut(`/attendance/${encodeURIComponent(id)}/remark`, payload)
+    : await apiPut('/attendance/remark', payload);
 
-  const payload = {
-    scheduleId: sessionData?.id ? String(sessionData.id) : null,
-    studentId: finalStudentId,
-    studentName: studentName || 'Student',
-    courseId: sessionData?.courseId || sessionData?.course,
-    batchId: sessionData?.batchId || sessionData?.batch,
-    date: sessionData?.date || new Date().toISOString().split('T')[0],
-    status: 'PRESENT',
-    remarks: 'Portal Live Class Join',
-    recordedBy: studentName || 'Student'
-  };
-
-  const res = await apiPost('/attendance', payload);
   if (res.success && res.data) {
-    return apiResponse(res.data, true, 'Attendance recorded');
+    return apiResponse(res.data, true, 'Student remark updated successfully');
   }
-  return apiResponse(null, false, res?.message || 'Failed to record attendance');
+  return apiResponse(null, false, res?.message || 'Failed to update student remark');
 };
 
-export const recordBatchAttendance = async (records) => {
-  if (!Array.isArray(records) || records.length === 0) {
-    return apiResponse(null, false, 'No attendance records provided');
+export const updateTrainerRemark = async ({ scheduleId, trainerId, remark, id }) => {
+  if (!trainerId) {
+    return apiResponse(null, false, 'Trainer ID is required');
   }
-  const res = await apiPost('/attendance/batch', records);
+  const payload = { id, scheduleId, trainerId, remark };
+  const res = id
+    ? await apiPut(`/attendance/trainer/${encodeURIComponent(id)}/remark`, payload)
+    : await apiPut('/attendance/trainer/remark', payload);
+
   if (res.success && res.data) {
-    return apiResponse(res.data, true, 'Batch attendance recorded');
+    return apiResponse(res.data, true, 'Trainer remark updated successfully');
   }
-  return apiResponse(null, false, res?.message || 'Failed to record batch attendance');
+  return apiResponse(null, false, res?.message || 'Failed to update trainer remark');
 };
 
 export const getAttendanceRemarks = async () => {
@@ -83,41 +85,25 @@ export const getAttendanceRemarks = async () => {
 
 export const addAttendanceRemark = async (remarkData) => {
   const finalStudentId = remarkData?.studentId || remarkData?.studentEmail || remarkData?.studentName;
-  if (!finalStudentId) {
-    return apiResponse(null, false, 'Student identifier is required for remark');
-  }
-
-  const payload = {
+  return updateStudentRemark({
+    id: remarkData?.id,
+    scheduleId: remarkData?.scheduleId,
     studentId: finalStudentId,
-    studentName: remarkData?.studentName,
-    courseId: remarkData?.courseId || remarkData?.course,
-    batchId: remarkData?.batchId || remarkData?.batch,
-    date: remarkData?.date || new Date().toISOString().split('T')[0],
-    status: remarkData?.status || 'PRESENT',
-    remarks: remarkData?.remark || remarkData?.remarks,
-    recordedBy: remarkData?.addedByName || 'Trainer'
-  };
-
-  const res = await apiPost('/attendance', payload);
-  if (res.success && res.data) {
-    return apiResponse(res.data, true, 'Remark added');
-  }
-  return apiResponse(null, false, res?.message || 'Failed to add remark');
+    remark: remarkData?.remark || remarkData?.remarks
+  });
 };
 
 export const saveAttendanceRemark = addAttendanceRemark;
 
-export const updateAttendanceStatus = async (recordId, status) => {
-  if (!recordId) {
-    return apiResponse(null, false, 'Attendance record ID is required');
-  }
-  const payload = {
-    id: recordId,
-    status: status
-  };
-  const res = await apiPost('/attendance', payload);
-  if (res.success && res.data) {
-    return apiResponse(res.data, true, 'Status updated');
-  }
-  return apiResponse(null, false, res?.message || 'Failed to update attendance status');
+// Legacy stubs kept for backwards compatibility; backend rejects manual marking with 403
+export const recordAttendance = async () => {
+  return apiResponse(null, false, 'Manual attendance marking is disabled.');
+};
+
+export const recordBatchAttendance = async () => {
+  return apiResponse(null, false, 'Manual attendance marking is disabled.');
+};
+
+export const updateAttendanceStatus = async () => {
+  return apiResponse(null, false, 'Manual attendance marking is disabled.');
 };

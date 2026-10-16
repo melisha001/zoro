@@ -1,7 +1,9 @@
 package com.zoroacademy.service;
 
 import com.zoroacademy.entity.AttendanceRecord;
+import com.zoroacademy.entity.TrainerAttendanceRecord;
 import com.zoroacademy.repository.AttendanceRecordRepository;
+import com.zoroacademy.repository.TrainerAttendanceRecordRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,28 +14,34 @@ import java.util.List;
 public class AttendanceService {
 
     private final AttendanceRecordRepository attendanceRepository;
+    private final TrainerAttendanceRecordRepository trainerAttendanceRepository;
     private final com.zoroacademy.repository.UserRepository userRepository;
     private final com.zoroacademy.repository.ScheduleRepository scheduleRepository;
     private final com.zoroacademy.repository.StudentCourseBatchRepository studentCourseBatchRepository;
     private final com.zoroacademy.repository.CourseRepository courseRepository;
+    private final com.zoroacademy.repository.BatchRepository batchRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     public AttendanceService(AttendanceRecordRepository attendanceRepository,
+                             TrainerAttendanceRecordRepository trainerAttendanceRepository,
                              com.zoroacademy.repository.UserRepository userRepository,
                              com.zoroacademy.repository.ScheduleRepository scheduleRepository,
                              @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.StudentCourseBatchRepository studentCourseBatchRepository,
-                             @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.CourseRepository courseRepository) {
+                             @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.CourseRepository courseRepository,
+                             @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.BatchRepository batchRepository) {
         this.attendanceRepository = attendanceRepository;
+        this.trainerAttendanceRepository = trainerAttendanceRepository;
         this.userRepository = userRepository;
         this.scheduleRepository = scheduleRepository;
         this.studentCourseBatchRepository = studentCourseBatchRepository;
         this.courseRepository = courseRepository;
+        this.batchRepository = batchRepository;
     }
 
     public AttendanceService(AttendanceRecordRepository attendanceRepository,
                              com.zoroacademy.repository.UserRepository userRepository,
                              com.zoroacademy.repository.ScheduleRepository scheduleRepository) {
-        this(attendanceRepository, userRepository, scheduleRepository, null, null);
+        this(attendanceRepository, null, userRepository, scheduleRepository, null, null, null);
     }
 
     public void enrichAttendanceRecord(AttendanceRecord r) {
@@ -104,85 +112,130 @@ public class AttendanceService {
         }
     }
 
-    private void deriveAbsentForActiveSchedules(List<AttendanceRecord> records, String specificStudentId) {
-        if (scheduleRepository == null || studentCourseBatchRepository == null) return;
-        List<com.zoroacademy.entity.Schedule> schedules = scheduleRepository.findAll();
-        java.time.ZonedDateTime now = com.zoroacademy.util.ScheduleTimeUtil.nowInKolkata();
-
-        for (com.zoroacademy.entity.Schedule s : schedules) {
-            boolean isActive = com.zoroacademy.util.ScheduleTimeUtil.isSessionActive(s.getDate(), s.getTime(), now);
-            if (!isActive) continue;
-
-            java.util.List<com.zoroacademy.entity.StudentCourseBatch> scbs = new java.util.ArrayList<>();
-            if (s.getBatchId() != null && !s.getBatchId().isBlank() && !"All".equalsIgnoreCase(s.getBatchId())) {
-                scbs.addAll(studentCourseBatchRepository.findByBatchId(s.getBatchId()));
-            } else if (s.getCourseId() != null && !s.getCourseId().isBlank()) {
-                scbs.addAll(studentCourseBatchRepository.findByCourseId(s.getCourseId()));
-            }
-
-            for (com.zoroacademy.entity.StudentCourseBatch scb : scbs) {
-                String stId = scb.getStudentId();
-                if (stId == null || stId.isBlank()) continue;
-                if (specificStudentId != null && !specificStudentId.equals(stId)) continue;
-
-                boolean exists = records.stream().anyMatch(r ->
-                        stId.equals(r.getStudentId()) && s.getId().equals(r.getScheduleId()));
-                if (!exists) {
-                    String stName = userRepository != null ? userRepository.findById(stId).map(com.zoroacademy.entity.User::getName).orElse("Student") : "Student";
-                    AttendanceRecord derived = AttendanceRecord.builder()
-                            .id("active_" + s.getId() + "_" + stId)
-                            .scheduleId(s.getId())
-                            .studentId(stId)
-                            .studentName(stName)
-                            .courseId(s.getCourseId())
-                            .batchId(s.getBatchId())
-                            .date(s.getDate())
-                            .status("Absent")
-                            .remarks("Live now - join to mark present")
-                            .recordedBy("SYSTEM_AUTO")
-                            .build();
-                    enrichAttendanceRecord(derived);
-                    records.add(derived);
-                }
-            }
+    public void enrichTrainerAttendanceRecord(TrainerAttendanceRecord r) {
+        if (r == null) return;
+        com.zoroacademy.entity.Schedule sch = null;
+        if (r.getScheduleId() != null && !r.getScheduleId().isBlank() && scheduleRepository != null) {
+            sch = scheduleRepository.findById(r.getScheduleId()).orElse(null);
         }
+
+        String courseTitle = null;
+        if (sch != null && sch.getCourse() != null && !sch.getCourse().isBlank()) {
+            courseTitle = sch.getCourse();
+        } else if (r.getCourseId() != null && !r.getCourseId().isBlank() && courseRepository != null) {
+            courseTitle = courseRepository.findById(r.getCourseId())
+                    .map(com.zoroacademy.entity.Course::getTitle)
+                    .orElse(null);
+        }
+        r.setCourse(courseTitle != null && !courseTitle.isBlank() ? courseTitle : "General Course");
+
+        if (sch != null && sch.getTitle() != null && !sch.getTitle().isBlank()) {
+            r.setTopic(sch.getTitle());
+        } else {
+            r.setTopic("Live Session");
+        }
+
+        if (sch != null && sch.getBatch() != null && !sch.getBatch().isBlank()) {
+            r.setBatch(sch.getBatch());
+        } else {
+            r.setBatch("All");
+        }
+
+        if (sch != null && sch.getTime() != null && !sch.getTime().isBlank()) {
+            r.setTime(sch.getTime());
+        } else if (r.getTime() == null || r.getTime().isBlank()) {
+            r.setTime("10:00 AM - 11:00 AM");
+        }
+
+        if (sch != null && sch.getMeetLink() != null) {
+            r.setMeetLink(sch.getMeetLink());
+        }
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000)
+    @Transactional
+    public void scheduledSyncAbsent() {
+        syncAbsentForFinishedSchedules();
     }
 
     @Transactional
     public void syncAbsentForFinishedSchedules() {
-        if (scheduleRepository == null || studentCourseBatchRepository == null) return;
+        syncAbsentForFinishedSchedules(com.zoroacademy.util.ScheduleTimeUtil.nowInKolkata());
+    }
+
+    @Transactional
+    public void syncAbsentForFinishedSchedules(java.time.ZonedDateTime now) {
+        if (scheduleRepository == null) return;
         List<com.zoroacademy.entity.Schedule> schedules = scheduleRepository.findAll();
-        java.time.ZonedDateTime now = com.zoroacademy.util.ScheduleTimeUtil.nowInKolkata();
 
         for (com.zoroacademy.entity.Schedule s : schedules) {
+            // Check if course is Online or Hybrid (never Recorded)
+            if (s.getCourseId() != null && courseRepository != null) {
+                com.zoroacademy.entity.Course c = courseRepository.findById(s.getCourseId()).orElse(null);
+                if (c != null && c.getMode() != null && "Recorded".equalsIgnoreCase(c.getMode().trim())) {
+                    continue;
+                }
+            }
+
             boolean isFinished = com.zoroacademy.util.ScheduleTimeUtil.isSessionFinished(s.getDate(), s.getTime(), now);
             if (!isFinished) continue;
 
-            java.util.List<com.zoroacademy.entity.StudentCourseBatch> scbs = new java.util.ArrayList<>();
-            if (s.getBatchId() != null && !s.getBatchId().isBlank() && !"All".equalsIgnoreCase(s.getBatchId())) {
-                scbs.addAll(studentCourseBatchRepository.findByBatchId(s.getBatchId()));
-            } else if (s.getCourseId() != null && !s.getCourseId().isBlank()) {
-                scbs.addAll(studentCourseBatchRepository.findByCourseId(s.getCourseId()));
+            // 1. Sync Student Absent records
+            if (studentCourseBatchRepository != null && attendanceRepository != null) {
+                java.util.List<com.zoroacademy.entity.StudentCourseBatch> scbs = new java.util.ArrayList<>();
+                if (s.getBatchId() != null && !s.getBatchId().isBlank() && !"All".equalsIgnoreCase(s.getBatchId())) {
+                    scbs.addAll(studentCourseBatchRepository.findByBatchId(s.getBatchId()));
+                } else if (s.getCourseId() != null && !s.getCourseId().isBlank()) {
+                    scbs.addAll(studentCourseBatchRepository.findByCourseId(s.getCourseId()));
+                }
+
+                for (com.zoroacademy.entity.StudentCourseBatch scb : scbs) {
+                    String stId = scb.getStudentId();
+                    if (stId == null || stId.isBlank()) continue;
+                    java.util.Optional<AttendanceRecord> existing = attendanceRepository.findByStudentIdAndScheduleId(stId, s.getId());
+                    if (existing.isEmpty()) {
+                        String stName = userRepository != null ? userRepository.findById(stId).map(com.zoroacademy.entity.User::getName).orElse("Student") : "Student";
+                        AttendanceRecord abs = AttendanceRecord.builder()
+                                .id("att_" + java.util.UUID.randomUUID())
+                                .studentId(stId)
+                                .studentName(stName)
+                                .scheduleId(s.getId())
+                                .courseId(s.getCourseId())
+                                .batchId(s.getBatchId())
+                                .date(s.getDate())
+                                .status("Absent")
+                                .recordedBy("SYSTEM_AUTO")
+                                .createdAt(java.time.LocalDateTime.now())
+                                .build();
+                        attendanceRepository.save(abs);
+                    }
+                }
             }
 
-            for (com.zoroacademy.entity.StudentCourseBatch scb : scbs) {
-                String stId = scb.getStudentId();
-                if (stId == null || stId.isBlank()) continue;
-                java.util.Optional<AttendanceRecord> existing = attendanceRepository.findByStudentIdAndScheduleId(stId, s.getId());
-                if (existing.isEmpty()) {
-                    String stName = userRepository != null ? userRepository.findById(stId).map(com.zoroacademy.entity.User::getName).orElse("Student") : "Student";
-                    AttendanceRecord abs = AttendanceRecord.builder()
-                            .id("att_" + java.util.UUID.randomUUID())
-                            .studentId(stId)
-                            .studentName(stName)
-                            .scheduleId(s.getId())
-                            .courseId(s.getCourseId())
-                            .batchId(s.getBatchId())
-                            .date(s.getDate())
-                            .status("Absent")
-                            .recordedBy("SYSTEM_AUTO")
-                            .build();
-                    attendanceRepository.save(abs);
+            // 2. Sync Trainer Absent records
+            if (trainerAttendanceRepository != null) {
+                String trId = s.getTrainerId();
+                if (trId != null && !trId.isBlank()) {
+                    java.util.Optional<TrainerAttendanceRecord> existingTr = trainerAttendanceRepository.findByScheduleIdAndTrainerId(s.getId(), trId);
+                    if (existingTr.isEmpty()) {
+                        String trName = s.getTrainer();
+                        if ((trName == null || trName.isBlank()) && userRepository != null) {
+                            trName = userRepository.findById(trId).map(com.zoroacademy.entity.User::getName).orElse("Trainer");
+                        }
+                        TrainerAttendanceRecord absTr = TrainerAttendanceRecord.builder()
+                                .id("tratt_" + java.util.UUID.randomUUID())
+                                .scheduleId(s.getId())
+                                .trainerId(trId)
+                                .trainerName(trName != null ? trName : "Trainer")
+                                .courseId(s.getCourseId())
+                                .batchId(s.getBatchId())
+                                .date(s.getDate())
+                                .status("Absent")
+                                .createdAt(java.time.LocalDateTime.now())
+                                .updatedAt(java.time.LocalDateTime.now())
+                                .build();
+                        trainerAttendanceRepository.save(absTr);
+                    }
                 }
             }
         }
@@ -192,8 +245,16 @@ public class AttendanceService {
     public List<AttendanceRecord> getAllAttendance() {
         syncAbsentForFinishedSchedules();
         List<AttendanceRecord> list = new java.util.ArrayList<>(attendanceRepository.findAll());
-        deriveAbsentForActiveSchedules(list, null);
         list.forEach(this::enrichAttendanceRecord);
+        return list;
+    }
+
+    @Transactional
+    public List<TrainerAttendanceRecord> getAllTrainerAttendance() {
+        syncAbsentForFinishedSchedules();
+        if (trainerAttendanceRepository == null) return List.of();
+        List<TrainerAttendanceRecord> list = new java.util.ArrayList<>(trainerAttendanceRepository.findAll());
+        list.forEach(this::enrichTrainerAttendanceRecord);
         return list;
     }
 
@@ -202,6 +263,15 @@ public class AttendanceService {
         syncAbsentForFinishedSchedules();
         List<AttendanceRecord> list = new java.util.ArrayList<>(attendanceRepository.findByScheduleId(scheduleId));
         list.forEach(this::enrichAttendanceRecord);
+        return list;
+    }
+
+    @Transactional
+    public List<TrainerAttendanceRecord> getTrainerAttendanceBySchedule(String scheduleId) {
+        syncAbsentForFinishedSchedules();
+        if (trainerAttendanceRepository == null) return List.of();
+        List<TrainerAttendanceRecord> list = new java.util.ArrayList<>(trainerAttendanceRepository.findByScheduleId(scheduleId));
+        list.forEach(this::enrichTrainerAttendanceRecord);
         return list;
     }
 
@@ -215,78 +285,151 @@ public class AttendanceService {
                     .orElse(studentIdOrEmail);
         }
         List<AttendanceRecord> list = new java.util.ArrayList<>(attendanceRepository.findByStudentId(effectiveId));
-        deriveAbsentForActiveSchedules(list, effectiveId);
         list.forEach(this::enrichAttendanceRecord);
         return list;
     }
 
     @Transactional
-    public AttendanceRecord recordAttendance(AttendanceRecord record) {
-        // Resolve studentId
-        resolveStudent(record);
-
-        if (record.getDate() == null || record.getDate().isBlank()) {
-            record.setDate(LocalDate.now().toString());
+    public List<TrainerAttendanceRecord> getTrainerAttendanceByTrainer(String trainerIdOrName) {
+        syncAbsentForFinishedSchedules();
+        if (trainerAttendanceRepository == null) return List.of();
+        String effectiveId = trainerIdOrName;
+        if (userRepository != null) {
+            effectiveId = userRepository.findByNameIgnoreCase(trainerIdOrName).stream()
+                    .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
+                    .findFirst()
+                    .map(com.zoroacademy.entity.User::getId)
+                    .orElse(trainerIdOrName);
         }
-
-        if (record.getScheduleId() != null && !record.getScheduleId().isBlank()) {
-            scheduleRepository.findById(record.getScheduleId()).ifPresent(sch -> {
-                if (record.getCourseId() == null || record.getCourseId().isBlank()) record.setCourseId(sch.getCourseId());
-                if (record.getBatchId() == null || record.getBatchId().isBlank()) record.setBatchId(sch.getBatchId());
-                if (record.getDate() == null || record.getDate().isBlank()) record.setDate(sch.getDate());
-            });
-        }
-
-        // Upsert by (studentId, scheduleId) if scheduleId is provided
-        if (record.getScheduleId() != null && !record.getScheduleId().isBlank() && record.getStudentId() != null) {
-            java.util.Optional<AttendanceRecord> existing = attendanceRepository.findByStudentIdAndScheduleId(record.getStudentId(), record.getScheduleId());
-            if (existing.isPresent()) {
-                AttendanceRecord att = existing.get();
-                att.setStatus(record.getStatus());
-                if (record.getRemarks() != null) att.setRemarks(record.getRemarks());
-                if (record.getDate() != null) att.setDate(record.getDate());
-                if (record.getRecordedBy() != null) att.setRecordedBy(record.getRecordedBy());
-                if (record.getCourseId() != null) att.setCourseId(record.getCourseId());
-                if (record.getBatchId() != null) att.setBatchId(record.getBatchId());
-                return attendanceRepository.save(att);
-            }
-        }
-
-        if (record.getId() == null || record.getId().isBlank()) {
-            record.setId("att_" + java.util.UUID.randomUUID());
-        }
-
-        return attendanceRepository.save(record);
+        List<TrainerAttendanceRecord> list = new java.util.ArrayList<>(trainerAttendanceRepository.findByTrainerId(effectiveId));
+        list.forEach(this::enrichTrainerAttendanceRecord);
+        return list;
     }
 
     @Transactional
-    public AttendanceRecord markAttendance(AttendanceRecord record) {
-        return recordAttendance(record);
-    }
-
-    @Transactional
-    public List<AttendanceRecord> recordBatchAttendance(List<AttendanceRecord> records) {
-        List<AttendanceRecord> saved = new java.util.ArrayList<>();
-        for (AttendanceRecord r : records) {
-            saved.add(recordAttendance(r));
+    public AttendanceRecord updateStudentRemark(String scheduleId, String studentId, String remark, String remarkBy) {
+        if (studentId == null || studentId.isBlank()) {
+            throw new IllegalArgumentException("Student ID is required");
         }
+        AttendanceRecord att = null;
+        if (scheduleId != null && !scheduleId.isBlank()) {
+            att = attendanceRepository.findByStudentIdAndScheduleId(studentId, scheduleId).orElse(null);
+        }
+        if (att == null) {
+            com.zoroacademy.entity.Schedule sch = scheduleId != null && scheduleRepository != null ? scheduleRepository.findById(scheduleId).orElse(null) : null;
+            String stName = userRepository != null ? userRepository.findById(studentId).map(com.zoroacademy.entity.User::getName).orElse("Student") : "Student";
+            java.time.ZonedDateTime now = com.zoroacademy.util.ScheduleTimeUtil.nowInKolkata();
+            boolean isFinished = sch != null && com.zoroacademy.util.ScheduleTimeUtil.isSessionFinished(sch.getDate(), sch.getTime(), now);
+
+            att = AttendanceRecord.builder()
+                    .id("att_" + java.util.UUID.randomUUID())
+                    .scheduleId(scheduleId)
+                    .studentId(studentId)
+                    .studentName(stName)
+                    .courseId(sch != null ? sch.getCourseId() : null)
+                    .batchId(sch != null ? sch.getBatchId() : null)
+                    .date(sch != null ? sch.getDate() : LocalDate.now().toString())
+                    .status(isFinished ? "Absent" : "Upcoming")
+                    .recordedBy("SYSTEM_AUTO")
+                    .createdAt(java.time.LocalDateTime.now())
+                    .build();
+        }
+        att.setRemarks(remark);
+        att.setRemarkBy(remarkBy != null ? remarkBy : "Admin");
+        att.setRemarkAt(java.time.LocalDateTime.now());
+        AttendanceRecord saved = attendanceRepository.save(att);
+        enrichAttendanceRecord(saved);
         return saved;
     }
 
-    private void resolveStudent(AttendanceRecord record) {
-        if (record.getStudentId() != null && record.getStudentId().contains("@")) {
-            userRepository.findByEmailIgnoreCase(record.getStudentId()).ifPresent(u -> {
-                record.setStudentId(u.getId());
-                if (record.getStudentName() == null || record.getStudentName().isBlank()) {
-                    record.setStudentName(u.getName());
-                }
-            });
-        } else if (record.getStudentId() != null && !record.getStudentId().isBlank()) {
-            userRepository.findById(record.getStudentId()).ifPresent(u -> {
-                if (record.getStudentName() == null || record.getStudentName().isBlank()) {
-                    record.setStudentName(u.getName());
-                }
-            });
+    @Transactional
+    public TrainerAttendanceRecord updateTrainerRemark(String scheduleId, String trainerId, String remark, String remarkBy) {
+        if (trainerId == null || trainerId.isBlank()) {
+            throw new IllegalArgumentException("Trainer ID is required");
         }
+        if (trainerAttendanceRepository == null) {
+            throw new IllegalStateException("Trainer attendance repository is not configured");
+        }
+        TrainerAttendanceRecord tratt = null;
+        if (scheduleId != null && !scheduleId.isBlank()) {
+            tratt = trainerAttendanceRepository.findByScheduleIdAndTrainerId(scheduleId, trainerId).orElse(null);
+        }
+        if (tratt == null) {
+            com.zoroacademy.entity.Schedule sch = scheduleId != null && scheduleRepository != null ? scheduleRepository.findById(scheduleId).orElse(null) : null;
+            String trName = sch != null ? sch.getTrainer() : null;
+            if (trName == null && userRepository != null) {
+                trName = userRepository.findById(trainerId).map(com.zoroacademy.entity.User::getName).orElse("Trainer");
+            }
+            java.time.ZonedDateTime now = com.zoroacademy.util.ScheduleTimeUtil.nowInKolkata();
+            boolean isFinished = sch != null && com.zoroacademy.util.ScheduleTimeUtil.isSessionFinished(sch.getDate(), sch.getTime(), now);
+
+            tratt = TrainerAttendanceRecord.builder()
+                    .id("tratt_" + java.util.UUID.randomUUID())
+                    .scheduleId(scheduleId)
+                    .trainerId(trainerId)
+                    .trainerName(trName != null ? trName : "Trainer")
+                    .courseId(sch != null ? sch.getCourseId() : null)
+                    .batchId(sch != null ? sch.getBatchId() : null)
+                    .date(sch != null ? sch.getDate() : LocalDate.now().toString())
+                    .status(isFinished ? "Absent" : "Upcoming")
+                    .createdAt(java.time.LocalDateTime.now())
+                    .updatedAt(java.time.LocalDateTime.now())
+                    .build();
+        }
+        tratt.setRemarks(remark);
+        tratt.setRemarkBy(remarkBy != null ? remarkBy : "Admin");
+        tratt.setRemarkAt(java.time.LocalDateTime.now());
+        tratt.setUpdatedAt(java.time.LocalDateTime.now());
+        TrainerAttendanceRecord saved = trainerAttendanceRepository.save(tratt);
+        enrichTrainerAttendanceRecord(saved);
+        return saved;
+    }
+
+    @Transactional
+    public TrainerAttendanceRecord recordTrainerJoinOrStart(String scheduleId, String trainerId, String trainerName) {
+        if (scheduleId == null || scheduleId.isBlank()) {
+            throw new IllegalArgumentException("Schedule ID is required");
+        }
+        if (scheduleRepository == null || trainerAttendanceRepository == null) {
+            throw new IllegalStateException("Repositories not configured");
+        }
+        com.zoroacademy.entity.Schedule s = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new IllegalArgumentException("Schedule not found: " + scheduleId));
+
+        java.time.ZonedDateTime now = com.zoroacademy.util.ScheduleTimeUtil.nowInKolkata();
+        java.time.ZonedDateTime start = com.zoroacademy.util.ScheduleTimeUtil.getSessionStart(s.getDate(), s.getTime());
+        java.time.ZonedDateTime end = com.zoroacademy.util.ScheduleTimeUtil.getSessionEnd(s.getDate(), s.getTime());
+
+        if (start != null && now.isBefore(start)) {
+            java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("hh:mm a");
+            throw new com.zoroacademy.exception.BadRequestException("Session has not started yet. Window opens at " + start.format(fmt));
+        }
+        if (end != null && now.isAfter(end)) {
+            throw new com.zoroacademy.exception.BadRequestException("Session has already ended");
+        }
+
+        String effectiveTrainerName = trainerName;
+        if ((effectiveTrainerName == null || effectiveTrainerName.isBlank()) && userRepository != null) {
+            effectiveTrainerName = userRepository.findById(trainerId).map(com.zoroacademy.entity.User::getName).orElse(s.getTrainer());
+        }
+
+        TrainerAttendanceRecord record = trainerAttendanceRepository.findByScheduleIdAndTrainerId(scheduleId, trainerId)
+                .orElse(TrainerAttendanceRecord.builder()
+                        .id("tratt_" + java.util.UUID.randomUUID())
+                        .scheduleId(scheduleId)
+                        .trainerId(trainerId)
+                        .trainerName(effectiveTrainerName != null ? effectiveTrainerName : "Trainer")
+                        .courseId(s.getCourseId())
+                        .batchId(s.getBatchId())
+                        .date(s.getDate())
+                        .createdAt(java.time.LocalDateTime.now())
+                        .build());
+
+        record.setStatus("Present");
+        record.setJoinedAt(java.time.LocalDateTime.now());
+        record.setUpdatedAt(java.time.LocalDateTime.now());
+        TrainerAttendanceRecord saved = trainerAttendanceRepository.save(record);
+        enrichTrainerAttendanceRecord(saved);
+        return saved;
     }
 }

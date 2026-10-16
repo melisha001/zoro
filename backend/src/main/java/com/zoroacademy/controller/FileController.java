@@ -187,6 +187,15 @@ public class FileController {
                     .body(ApiResponse.error("NOT_FOUND", "File not found"));
         }
 
+        if (download) {
+            String cat = storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "";
+            if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("schedule")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .header("X-Error-Code", "DOWNLOAD_FORBIDDEN")
+                        .body(ApiResponse.error("DOWNLOAD_FORBIDDEN", "Download is disabled for view-only resources"));
+            }
+        }
+
         // Security check for non-public files
         if (!Boolean.TRUE.equals(storedFile.getIsPublic())) {
             boolean hasValidToken = token != null && expires != null && fileStorageService.validateInternalToken(id, token, expires);
@@ -249,8 +258,15 @@ public class FileController {
             @RequestParam(value = "title", required = false) String titleParam
     ) {
         StoredFile storedFile = fileStorageService.getFileMetadata(id);
-        if (!Boolean.TRUE.equals(storedFile.getIsPublic())) {
+        if (storedFile == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+        if (!Boolean.TRUE.equals(storedFile.getIsPublic())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        String cat = storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "";
+        if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("schedule")) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
         Resource resource = fileStorageService.loadFileAsResource(storedFile);

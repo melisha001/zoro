@@ -206,6 +206,16 @@ public class CompetitionService {
         CompetitionRegistration reg = registrationRepository.findById(regId)
                 .orElseThrow(() -> new IllegalArgumentException("Registration not found: " + regId));
         if (updated.getPaymentStatus() != null) reg.setPaymentStatus(updated.getPaymentStatus());
+        if (updated.getRazorpayOrderId() != null) reg.setRazorpayOrderId(updated.getRazorpayOrderId());
+        if (updated.getRazorpayPaymentId() != null) reg.setRazorpayPaymentId(updated.getRazorpayPaymentId());
+        if (updated.getAmount() != null) {
+            reg.setAmount(updated.getAmount());
+            reg.setAmountPaise(updated.getAmount().multiply(java.math.BigDecimal.valueOf(100)).longValue());
+        } else if (updated.getAmountPaise() != null) {
+            reg.setAmountPaise(updated.getAmountPaise());
+            reg.setAmount(java.math.BigDecimal.valueOf(updated.getAmountPaise()).divide(java.math.BigDecimal.valueOf(100)));
+        }
+        if (updated.getPaidAt() != null) reg.setPaidAt(updated.getPaidAt());
         if (updated.getScore() != null) reg.setScore(updated.getScore());
         if (updated.getRank() != null) reg.setRank(updated.getRank());
         if (updated.getCertificateUrl() != null) reg.setCertificateUrl(updated.getCertificateUrl());

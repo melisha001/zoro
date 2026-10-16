@@ -1,9 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import HeroCarousel from './components/public/HeroCarousel';
 
-describe('HeroCarousel (Phase 4)', () => {
+describe('HeroCarousel (Phase 4 & P14)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders neutral brand gradient when 0 images provided', () => {
     const { container } = render(
       <HeroCarousel images={[]}>
@@ -62,5 +66,105 @@ describe('HeroCarousel (Phase 4)', () => {
     // Indicator dots present for all 3 images
     const dots = container.querySelectorAll('button');
     expect(dots.length).toBe(3);
+  });
+
+  it('advances through all images and wraps using fake timers, including after simulated remount', () => {
+    vi.useFakeTimers();
+
+    const multiImages = [
+      { id: 'h1', url: 'https://cdn.bunny.net/hero1.webp', altText: 'Slide 1', active: true },
+      { id: 'h2', url: 'https://cdn.bunny.net/hero2.webp', altText: 'Slide 2', active: true },
+      { id: 'h3', url: 'https://cdn.bunny.net/hero3.webp', altText: 'Slide 3', active: true }
+    ];
+
+    const { container, unmount } = render(
+      <HeroCarousel images={multiImages} intervalSeconds={5}>
+        <h1>Carousel Mode</h1>
+      </HeroCarousel>
+    );
+
+    const section = container.querySelector('[data-testid="hero-carousel-section"]');
+    expect(section).toBeDefined();
+    expect(section.getAttribute('data-current-index')).toBe('0');
+
+    // Advance 5 seconds -> advances to index 1
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(section.getAttribute('data-current-index')).toBe('1');
+
+    // Advance 5 seconds -> advances to index 2
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(section.getAttribute('data-current-index')).toBe('2');
+
+    // Advance 5 seconds -> wraps back to index 0
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(section.getAttribute('data-current-index')).toBe('0');
+
+    // Advance another 5 seconds -> index 1
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(section.getAttribute('data-current-index')).toBe('1');
+
+    // Test simulated remount
+    unmount();
+
+    const { container: remountContainer } = render(
+      <HeroCarousel images={multiImages} intervalSeconds={5}>
+        <h1>Carousel Mode Remounted</h1>
+      </HeroCarousel>
+    );
+
+    const remountSection = remountContainer.querySelector('[data-testid="hero-carousel-section"]');
+    expect(remountSection).toBeDefined();
+    expect(remountSection.getAttribute('data-current-index')).toBe('0');
+
+    // Timer works cleanly after remount
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(remountSection.getAttribute('data-current-index')).toBe('1');
+  });
+
+  it('pauses on visibility hidden and advances on visibility restore', () => {
+    vi.useFakeTimers();
+
+    const multiImages = [
+      { id: 'h1', url: 'https://cdn.bunny.net/hero1.webp', altText: 'Slide 1', active: true },
+      { id: 'h2', url: 'https://cdn.bunny.net/hero2.webp', altText: 'Slide 2', active: true }
+    ];
+
+    const { container } = render(
+      <HeroCarousel images={multiImages} intervalSeconds={5}>
+        <h1>Visibility Test</h1>
+      </HeroCarousel>
+    );
+
+    const section = container.querySelector('[data-testid="hero-carousel-section"]');
+    expect(section.getAttribute('data-current-index')).toBe('0');
+
+    // Simulate tab hidden
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // Advance time while hidden - should not advance
+    act(() => {
+      vi.advanceTimersByTime(15000);
+    });
+    expect(section.getAttribute('data-current-index')).toBe('0');
+
+    // Restore visibility - should advance immediately
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(section.getAttribute('data-current-index')).toBe('1');
   });
 });

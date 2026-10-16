@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, User, CheckCircle2, Edit2, Trash2, X, AlertTriangle, RefreshCw, Eye, Upload } from 'lucide-react';
+import { Plus, User, Users, GraduationCap, CheckCircle2, Edit2, Trash2, X, AlertTriangle, RefreshCw, Eye, Upload, Search } from 'lucide-react';
 import { getSchedules, createSchedule, updateSchedule, deleteSchedule } from '../../api/scheduleApi';
 import { uploadFile } from '../../api/fileApi';
 import { getTrainers } from '../../api/userApi';
@@ -89,9 +89,12 @@ function getBatchTrainers(batch, allTrainers = []) {
 
 export default function AdminSchedulePage() {
   const { showSuccess, showError, showWarning } = useDialog();
+  const [activeScheduleTab, setActiveScheduleTab] = useState('student'); // 'student' | 'trainer'
   const [selectedDateFilter, setSelectedDateFilter] = useState('');
   const [selectedBatchFilter, setSelectedBatchFilter] = useState('All');
   const [selectedTrainerFilter, setSelectedTrainerFilter] = useState('All');
+  const [selectedTrainerCourseFilter, setSelectedTrainerCourseFilter] = useState('All');
+  const [searchScheduleTitle, setSearchScheduleTitle] = useState('');
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
@@ -162,9 +165,11 @@ export default function AdminSchedulePage() {
 
       // Only show Online & Hybrid courses in Schedule Management
       const liveCourses = loadedCourses.filter(c => c.mode === 'Online' || c.mode === 'Hybrid' || !c.mode);
+      const studentLive = liveCourses.filter(c => c.audience !== 'trainer');
+      const defaultCourse = studentLive[0] || liveCourses[0];
 
-      if (liveCourses.length > 0) {
-        const firstCourse = liveCourses[0].title;
+      if (defaultCourse) {
+        const firstCourse = defaultCourse.title;
         const matchingBatches = loadedBatches.filter(b => b.courseName === firstCourse && b.status === 'Active');
         const defaultBatch = matchingBatches[0];
         const bTrainers = getBatchTrainers(defaultBatch, loadedTrainers);
@@ -188,17 +193,29 @@ export default function AdminSchedulePage() {
   }, []);
 
   const handleCourseChangeInForm = (newCourseTitle) => {
-    const courseBatches = (batchesList || []).filter(b => b.courseName === newCourseTitle && b.status === 'Active');
-    const firstBatch = courseBatches[0];
-    const bTrainers = getBatchTrainers(firstBatch, trainers);
-    const chosenTrainer = bTrainers.length === 1 ? bTrainers[0].name : '';
+    const selectedCrs = (courses || []).find(c => c.title === newCourseTitle);
+    const isTrainerCrs = selectedCrs?.audience === 'trainer';
 
-    setFormData(prev => ({
-      ...prev,
-      course: newCourseTitle,
-      batch: firstBatch ? firstBatch.name : '',
-      trainer: chosenTrainer
-    }));
+    if (isTrainerCrs) {
+      setFormData(prev => ({
+        ...prev,
+        course: newCourseTitle,
+        batch: '',
+        trainer: 'Admin'
+      }));
+    } else {
+      const courseBatches = (batchesList || []).filter(b => b.courseName === newCourseTitle && b.status === 'Active');
+      const firstBatch = courseBatches[0];
+      const bTrainers = getBatchTrainers(firstBatch, trainers);
+      const chosenTrainer = bTrainers.length === 1 ? bTrainers[0].name : '';
+
+      setFormData(prev => ({
+        ...prev,
+        course: newCourseTitle,
+        batch: firstBatch ? firstBatch.name : '',
+        trainer: chosenTrainer
+      }));
+    }
   };
 
   const handleBatchChangeInForm = (newBatchName) => {
@@ -368,24 +385,36 @@ export default function AdminSchedulePage() {
 
   const handleAddSchedule = async (e) => {
     e.preventDefault();
-    if (!formData.title.trim() || !formData.date || !formData.batch) return;
+    if (!formData.title?.trim() || !formData.date || !formData.course) return;
 
-    if (!formData.trainer) {
-      showError('Please select a trainer for this session.', 'Trainer Required');
-      return;
-    }
+    const selectedCourseObj = (courses || []).find(c => c.title === formData.course);
+    const isTrainerCourse = selectedCourseObj?.audience === 'trainer' || activeScheduleTab === 'trainer';
 
-    const selectedBatchObj = (batchesList || []).find(b => b.name === formData.batch && (b.courseName === formData.course || !formData.course));
-    const bTrainers = getBatchTrainers(selectedBatchObj, trainers);
-    if (bTrainers.length === 0) {
-      showError('This batch has no trainers assigned. Batches cannot be scheduled without an assigned trainer. Please assign a trainer in Batch Management first.', 'Cannot Schedule Session');
-      return;
-    }
+    let matchedTrainerObj = null;
+    let selectedBatchObj = null;
 
-    const matchedTrainerObj = bTrainers.find(t => t.name === formData.trainer || t.id === formData.trainer);
-    if (!matchedTrainerObj && bTrainers.length > 0) {
-      showError('Selected trainer is not assigned to this batch. Please select an assigned batch trainer.', 'Invalid Trainer');
-      return;
+    if (!isTrainerCourse) {
+      if (!formData.batch) {
+        showError('Please select a batch for this session.', 'Batch Required');
+        return;
+      }
+      if (!formData.trainer) {
+        showError('Please select a trainer for this session.', 'Trainer Required');
+        return;
+      }
+
+      selectedBatchObj = (batchesList || []).find(b => b.name === formData.batch && (b.courseName === formData.course || !formData.course));
+      const bTrainers = getBatchTrainers(selectedBatchObj, trainers);
+      if (bTrainers.length === 0) {
+        showError('This batch has no trainers assigned. Batches cannot be scheduled without an assigned trainer. Please assign a trainer in Batch Management first.', 'Cannot Schedule Session');
+        return;
+      }
+
+      matchedTrainerObj = bTrainers.find(t => t.name === formData.trainer || t.id === formData.trainer);
+      if (!matchedTrainerObj && bTrainers.length > 0) {
+        showError('Selected trainer is not assigned to this batch. Please select an assigned batch trainer.', 'Invalid Trainer');
+        return;
+      }
     }
 
     // 1. Date not in past
@@ -422,19 +451,45 @@ export default function AdminSchedulePage() {
     }
 
     const formattedTime = formatTimeSlot(formData.startTime, formData.endTime);
-    const payload = {
+    const payload = isTrainerCourse ? {
       ...formData,
+      courseId: selectedCourseObj?.id || formData.courseId || '',
+      audience: 'TRAINER',
+      batch: null,
+      batchId: null,
+      trainer: 'Admin',
+      trainerId: null,
+      meetLink: selectedCourseObj?.googleMeetUrl || '',
+      time: formattedTime,
+      notesFileUrl: formData.notesFile?.fileUrl || null,
+      notesFileName: formData.notesFile?.name || null,
+      worksheetFileUrl: formData.worksheetFile?.fileUrl || null,
+      worksheetFileName: formData.worksheetFile?.name || null,
+      assignmentFileUrl: formData.assignmentFile?.fileUrl || null,
+      assignmentFileName: formData.assignmentFile?.name || null
+    } : {
+      ...formData,
+      courseId: selectedCourseObj?.id || formData.courseId || '',
+      audience: 'STUDENT',
       trainer: matchedTrainerObj?.name || formData.trainer,
       trainerId: matchedTrainerObj?.id || '',
       batchId: selectedBatchObj?.id || '',
-      time: formattedTime
+      time: formattedTime,
+      notesFileUrl: formData.notesFile?.fileUrl || null,
+      notesFileName: formData.notesFile?.name || null,
+      worksheetFileUrl: formData.worksheetFile?.fileUrl || null,
+      worksheetFileName: formData.worksheetFile?.name || null,
+      assignmentFileUrl: formData.assignmentFile?.fileUrl || null,
+      assignmentFileName: formData.assignmentFile?.name || null
     };
+
+    const targetDesc = isTrainerCourse ? `Trainer Course: ${formData.course}` : formData.batch;
 
     try {
       if (editingSchedule) {
         const res = await updateSchedule(editingSchedule.id, payload);
         if (res && res.success) {
-          logActivity('Schedule Updated', `Updated session "${formData.title}" for ${formData.batch}`, 'Schedule');
+          logActivity('Schedule Updated', `Updated session "${formData.title}" for ${targetDesc}`, 'Schedule');
           await showSuccess(res.message || `Session "${formData.title}" updated successfully.`, 'Schedule Updated');
         } else {
           await showError(res?.message || 'Failed to update schedule', 'Update Failed');
@@ -448,9 +503,9 @@ export default function AdminSchedulePage() {
         });
 
         if (res?.success) {
-          logActivity('Schedule Created', `Scheduled session "${formData.title}" for ${formData.batch} on ${formData.date} (${formattedTime})`, 'Schedule');
+          logActivity('Schedule Created', `Scheduled session "${formData.title}" for ${targetDesc} on ${formData.date} (${formattedTime})`, 'Schedule');
           await notifyScheduleCreated(res.data || payload);
-          await showSuccess(`Session "${formData.title}" created for ${formData.batch}. Automatic notifications dispatched.`, 'Schedule Created');
+          await showSuccess(`Session "${formData.title}" created for ${targetDesc}. Automatic notifications dispatched.`, 'Schedule Created');
         } else {
           await showError(res?.message || 'Failed to create schedule', 'Creation Failed');
           return;
@@ -592,23 +647,83 @@ export default function AdminSchedulePage() {
 
   // Filter out Recorded courses from schedule management dropdown
   const liveCourses = safeCourses.filter(c => c.mode === 'Online' || c.mode === 'Hybrid' || !c.mode);
+  const studentLiveCourses = liveCourses.filter(c => c.audience !== 'trainer');
+  const trainerLiveCourses = liveCourses.filter(c => c.audience === 'trainer');
 
-  const filteredSchedules = safeSchedules.filter(item => {
+  const isTrainerSchedule = (s) => {
+    if (!s) return false;
+    if (s.audience === 'TRAINER') return true;
+    const crs = safeCourses.find(c => c.id === s.courseId || c.title === s.course);
+    return crs?.audience === 'trainer';
+  };
+
+  const studentSchedules = safeSchedules.filter(s => !isTrainerSchedule(s));
+  const trainerSchedules = safeSchedules.filter(s => isTrainerSchedule(s));
+  const currentTabSchedules = activeScheduleTab === 'trainer' ? trainerSchedules : studentSchedules;
+
+  const filteredSchedules = currentTabSchedules.filter(item => {
     if (!item) return false;
-    const matchesBatch = selectedBatchFilter === 'All' || item.batchId === selectedBatchFilter || item.batch === selectedBatchFilter;
-    const matchesTrainer = selectedTrainerFilter === 'All' || 
-      (item.trainer && item.trainer.toLowerCase().includes(selectedTrainerFilter.toLowerCase()));
     const matchesDate = !selectedDateFilter || item.date === selectedDateFilter;
-    return matchesBatch && matchesTrainer && matchesDate;
+    const matchesSearch = !searchScheduleTitle || (item.title && item.title.toLowerCase().includes(searchScheduleTitle.toLowerCase()));
+
+    if (activeScheduleTab === 'trainer') {
+      const matchesCourse = selectedTrainerCourseFilter === 'All' 
+        || item.courseId === selectedTrainerCourseFilter 
+        || item.course === selectedTrainerCourseFilter;
+      return matchesDate && matchesCourse && matchesSearch;
+    } else {
+      const matchesBatch = selectedBatchFilter === 'All' || item.batchId === selectedBatchFilter || item.batch === selectedBatchFilter;
+      const matchesTrainer = selectedTrainerFilter === 'All' || 
+        (item.trainer && item.trainer.toLowerCase().includes(selectedTrainerFilter.toLowerCase()));
+      return matchesDate && matchesBatch && matchesTrainer && matchesSearch;
+    }
   });
 
-  const upcomingCount = safeSchedules.filter(s => s && s.status === 'Upcoming').length;
-  const rescheduledCount = safeSchedules.filter(s => s && s.status === 'Rescheduled').length;
-  const completedCount = safeSchedules.filter(s => s && s.status === 'Completed').length;
+  const upcomingCount = currentTabSchedules.filter(s => s && s.status === 'Upcoming').length;
+  const rescheduledCount = currentTabSchedules.filter(s => s && s.status === 'Rescheduled').length;
+  const completedCount = currentTabSchedules.filter(s => s && s.status === 'Completed').length;
 
   const availableBatchesForSelectedCourse = safeBatches.filter(b => b.courseName === formData.course && b.status === 'Active');
   const selectedBatchObj = safeBatches.find(b => b.name === formData.batch && (b.courseName === formData.course || !formData.course));
   const currentBatchTrainers = getBatchTrainers(selectedBatchObj, safeTrainers);
+
+  const selectedCourseObj = safeCourses.find(c => c.title === formData.course);
+  const isTrainerCourse = selectedCourseObj?.audience === 'trainer' || (activeScheduleTab === 'trainer' && !selectedCourseObj);
+
+  const handleOpenAddModal = () => {
+    setEditingSchedule(null);
+    const targetCourses = activeScheduleTab === 'trainer' ? trainerLiveCourses : studentLiveCourses;
+    const firstCourseObj = targetCourses[0] || liveCourses[0];
+    const firstCourse = firstCourseObj?.title || '';
+    const isTrainer = activeScheduleTab === 'trainer' || firstCourseObj?.audience === 'trainer';
+
+    let defaultBatch = '';
+    let defaultTrainer = '';
+    if (!isTrainer) {
+      const courseBatches = safeBatches.filter(b => b.courseName === firstCourse && b.status === 'Active');
+      defaultBatch = courseBatches[0]?.name || '';
+      const bTrainers = getBatchTrainers(courseBatches[0], safeTrainers);
+      defaultTrainer = bTrainers.length === 1 ? bTrainers[0].name : '';
+    } else {
+      defaultTrainer = 'Admin';
+    }
+
+    setFormData({
+      title: '',
+      course: firstCourse,
+      batch: defaultBatch,
+      trainer: defaultTrainer,
+      startTime: '17:00',
+      endTime: '18:00',
+      time: '05:00 PM - 06:00 PM',
+      date: todayStr,
+      notesFile: null,
+      worksheetFile: null,
+      assignmentFile: null
+    });
+    setFileErrors({});
+    setShowAddModal(true);
+  };
 
   return (
     <div className="space-y-6 bg-slate-50 min-h-screen p-6 sm:p-8">
@@ -633,36 +748,65 @@ export default function AdminSchedulePage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Master Schedule Management</h1>
-          <p className="text-slate-500 text-xs sm:text-sm mt-1">Manage live class timetables for Online & Hybrid courses, auto-fetch trainers, attach study files, and notify users.</p>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">Manage live class timetables for student batches and trainer-audience courses with automatic notifications.</p>
         </div>
 
         <button
-          onClick={() => {
-            const firstCourse = liveCourses[0]?.title || 'English Communication';
-            const courseBatches = safeBatches.filter(b => b.courseName === firstCourse && b.status === 'Active');
-            const defaultBatch = courseBatches[0];
-            const bTrainers = getBatchTrainers(defaultBatch, safeTrainers);
-            const defaultTrainer = bTrainers.length === 1 ? bTrainers[0].name : '';
-            setFormData({
-              title: '',
-              course: firstCourse,
-              batch: defaultBatch?.name || '',
-              trainer: defaultTrainer,
-              startTime: '17:00',
-              endTime: '18:00',
-              time: '05:00 PM - 06:00 PM',
-              date: todayStr,
-              notesFile: null,
-              worksheetFile: null,
-              assignmentFile: null
-            });
-            setFileErrors({});
-            setShowAddModal(true);
-          }}
+          onClick={handleOpenAddModal}
           className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-md flex items-center space-x-2 text-xs sm:text-sm self-start sm:self-auto cursor-pointer transition-colors"
         >
           <Plus className="w-4 h-4" />
-          <span>Add New Schedule</span>
+          <span>{activeScheduleTab === 'trainer' ? 'Schedule Trainer Session' : 'Add New Schedule'}</span>
+        </button>
+      </div>
+
+      {/* Switch Tabs: Students Schedules vs Trainers Schedules */}
+      <div className="flex border-b border-slate-200 gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveScheduleTab('student');
+            setSelectedDateFilter('');
+            setSelectedBatchFilter('All');
+            setSelectedTrainerFilter('All');
+            setSearchScheduleTitle('');
+          }}
+          className={`px-5 py-3 font-black text-xs sm:text-sm border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+            activeScheduleTab === 'student'
+              ? 'border-[#0F52BA] text-[#0F52BA] bg-blue-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Students Schedules</span>
+          <span className={`ml-1.5 px-2 py-0.5 text-[11px] rounded-full font-bold ${
+            activeScheduleTab === 'student' ? 'bg-blue-100 text-[#0F52BA]' : 'bg-slate-200 text-slate-600'
+          }`}>
+            {studentSchedules.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveScheduleTab('trainer');
+            setSelectedDateFilter('');
+            setSelectedTrainerCourseFilter('All');
+            setSearchScheduleTitle('');
+          }}
+          className={`px-5 py-3 font-black text-xs sm:text-sm border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+            activeScheduleTab === 'trainer'
+              ? 'border-[#0F52BA] text-[#0F52BA] bg-blue-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <GraduationCap className="w-4 h-4" />
+          <span>Trainers Schedules</span>
+          <span className={`ml-1.5 px-2 py-0.5 text-[11px] rounded-full font-bold ${
+            activeScheduleTab === 'trainer' ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-600'
+          }`}>
+            {trainerSchedules.length}
+          </span>
         </button>
       </div>
 
@@ -670,7 +814,7 @@ export default function AdminSchedulePage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="text-xs text-slate-500 font-semibold">Total Sessions</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{safeSchedules.length}</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{currentTabSchedules.length}</div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="text-xs text-slate-500 font-semibold">Upcoming</div>
@@ -702,6 +846,20 @@ export default function AdminSchedulePage() {
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto text-xs">
           
           <div>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Search Topic</label>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search session title..."
+                value={searchScheduleTitle}
+                onChange={(e) => setSearchScheduleTitle(e.target.value)}
+                className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
             <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Filter Date</label>
             <input
               type="date"
@@ -711,40 +869,64 @@ export default function AdminSchedulePage() {
             />
           </div>
 
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Filter Batch</label>
-            <select
-              value={selectedBatchFilter}
-              onChange={(e) => setSelectedBatchFilter(e.target.value)}
-              className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
-            >
-              <option value="All">All Batches</option>
-              {safeBatches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name} ({b.courseName})</option>
-              ))}
-            </select>
-          </div>
+          {activeScheduleTab === 'student' ? (
+            <>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Filter Batch</label>
+                <select
+                  value={selectedBatchFilter}
+                  onChange={(e) => setSelectedBatchFilter(e.target.value)}
+                  className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                >
+                  <option value="All">All Batches</option>
+                  {safeBatches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name} ({b.courseName})</option>
+                  ))}
+                </select>
+              </div>
 
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Filter Trainer</label>
-            <select
-              value={selectedTrainerFilter}
-              onChange={(e) => setSelectedTrainerFilter(e.target.value)}
-              className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
-            >
-              <option value="All">All Trainers</option>
-              {safeTrainers.map((t) => (
-                <option key={t.id} value={t.name}>{t.name}</option>
-              ))}
-            </select>
-          </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Filter Trainer</label>
+                <select
+                  value={selectedTrainerFilter}
+                  onChange={(e) => setSelectedTrainerFilter(e.target.value)}
+                  className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                >
+                  <option value="All">All Trainers</option>
+                  {safeTrainers.map((t) => (
+                    <option key={t.id} value={t.name}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Filter Trainer Course</label>
+              <select
+                value={selectedTrainerCourseFilter}
+                onChange={(e) => setSelectedTrainerCourseFilter(e.target.value)}
+                className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+              >
+                <option value="All">All Trainer Courses</option>
+                {trainerLiveCourses.map((c) => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          {selectedDateFilter && (
+          {(selectedDateFilter || searchScheduleTitle || (activeScheduleTab === 'student' && (selectedBatchFilter !== 'All' || selectedTrainerFilter !== 'All')) || (activeScheduleTab === 'trainer' && selectedTrainerCourseFilter !== 'All')) && (
             <button
-              onClick={() => setSelectedDateFilter('')}
-              className="mt-4 px-2 py-1 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-lg font-bold text-[10px] cursor-pointer"
+              onClick={() => {
+                setSelectedDateFilter('');
+                setSelectedBatchFilter('All');
+                setSelectedTrainerFilter('All');
+                setSelectedTrainerCourseFilter('All');
+                setSearchScheduleTitle('');
+              }}
+              className="mt-4 px-2.5 py-1 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-lg font-bold text-[10px] cursor-pointer"
             >
-              Clear Date Filter
+              Clear Filters
             </button>
           )}
 
@@ -759,8 +941,8 @@ export default function AdminSchedulePage() {
               <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-bold uppercase tracking-wider">
                 <th className="py-3.5 px-4">Session & Course</th>
                 <th className="py-3.5 px-4">Schedule Date</th>
-                <th className="py-3.5 px-4">Batch</th>
-                <th className="py-3.5 px-4">Assigned Trainer</th>
+                <th className="py-3.5 px-4">{activeScheduleTab === 'trainer' ? 'Target Audience' : 'Batch'}</th>
+                <th className="py-3.5 px-4">{activeScheduleTab === 'trainer' ? 'Conductor' : 'Assigned Trainer'}</th>
                 <th className="py-3.5 px-4">Time Slot</th>
                 <th className="py-3.5 px-4">Attachments</th>
                 <th className="py-3.5 px-4">Status</th>
@@ -799,21 +981,42 @@ export default function AdminSchedulePage() {
                             </span>
                           )}
                         </div>
-                        <div className="text-slate-500 text-xs font-semibold">{item.course || 'English Communication'}</div>
+                        <div className="text-slate-500 text-xs font-semibold flex items-center gap-1.5 mt-0.5">
+                          <span>{item.course || 'English Communication'}</span>
+                          {activeScheduleTab === 'trainer' && (
+                            <span className="inline-flex items-center text-[10px] bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded">
+                              Trainer Course
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-4 px-4 font-bold text-slate-800">
                         {item.date || todayStr}
                       </td>
-                      <td className="py-4 px-4 font-bold text-[#0F52BA]">
-                        <span className="bg-blue-50 text-[#0F52BA] border border-blue-200 px-2.5 py-1 rounded-lg">
-                          {item.batch || 'Unassigned'}
-                        </span>
+                      <td className="py-4 px-4 font-bold">
+                        {activeScheduleTab === 'trainer' ? (
+                          <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-800 border border-purple-200 px-2.5 py-1 rounded-lg text-xs font-bold">
+                            <GraduationCap className="w-3.5 h-3.5 text-purple-600" />
+                            <span>{item.studentsCount ?? 'All'} Enrolled Trainers</span>
+                          </span>
+                        ) : (
+                          <span className="bg-blue-50 text-[#0F52BA] border border-blue-200 px-2.5 py-1 rounded-lg font-bold">
+                            {item.batch || 'Unassigned'}
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 px-4 font-extrabold text-slate-800">
-                        <span className="inline-flex items-center gap-1">
-                          <User className="w-3.5 h-3.5 text-slate-400" />
-                          {item.trainer || 'Unassigned'}
-                        </span>
+                        {activeScheduleTab === 'trainer' ? (
+                          <span className="inline-flex items-center gap-1 text-slate-700">
+                            <User className="w-3.5 h-3.5 text-purple-600" />
+                            <span>Admin (Conductor)</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            <User className="w-3.5 h-3.5 text-slate-400" />
+                            {item.trainer || 'Unassigned'}
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 px-4 text-slate-700 font-mono font-bold">{item.time || '10:00 AM - 11:00 AM'}</td>
                       
@@ -1014,91 +1217,99 @@ export default function AdminSchedulePage() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Course (Online & Hybrid Only) *</label>
+                <label className="block font-bold text-slate-700 mb-1">
+                  {isTrainerCourse ? 'Trainer Course (Online & Hybrid Only) *' : 'Course (Online & Hybrid Only) *'}
+                </label>
                 <select
                   value={formData.course}
                   onChange={(e) => handleCourseChangeInForm(e.target.value)}
                   className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
                 >
-                  {liveCourses.map((c) => (
+                  {(activeScheduleTab === 'trainer' ? (trainerLiveCourses.length > 0 ? trainerLiveCourses : liveCourses) : (studentLiveCourses.length > 0 ? studentLiveCourses : liveCourses)).map((c) => (
                     <option key={c.id} value={c.title}>{c.title} ({c.mode || 'Online'})</option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Batch (Course-Filtered) *</label>
-                  <select
-                    value={formData.batch}
-                    onChange={(e) => handleBatchChangeInForm(e.target.value)}
-                    disabled={availableBatchesForSelectedCourse.length === 0}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
-                  >
-                    {availableBatchesForSelectedCourse.length > 0 ? (
-                      availableBatchesForSelectedCourse.map((b) => (
-                        <option key={b.id} value={b.name}>{b.name}</option>
-                      ))
-                    ) : (
-                      <option value="">No batches for this course</option>
+              {/* Batch & Batch Trainer - Only shown for student-audience courses */}
+              {!isTrainerCourse ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Batch (Course-Filtered) *</label>
+                    <select
+                      value={formData.batch}
+                      onChange={(e) => handleBatchChangeInForm(e.target.value)}
+                      disabled={availableBatchesForSelectedCourse.length === 0}
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
+                    >
+                      {availableBatchesForSelectedCourse.length > 0 ? (
+                        availableBatchesForSelectedCourse.map((b) => (
+                          <option key={b.id} value={b.name}>{b.name}</option>
+                        ))
+                      ) : (
+                        <option value="">No batches for this course</option>
+                      )}
+                    </select>
+                    {availableBatchesForSelectedCourse.length === 0 && (
+                      <p className="text-[10px] text-amber-600 font-bold mt-1">No active batches available for this course.</p>
                     )}
-                  </select>
-                  {availableBatchesForSelectedCourse.length === 0 && (
-                    <p className="text-[10px] text-amber-600 font-bold mt-1">No active batches available for this course.</p>
-                  )}
-                </div>
+                  </div>
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Batch Trainer *</label>
-                  {currentBatchTrainers.length === 0 ? (
-                    <div>
-                      <input
-                        type="text"
-                        readOnly
-                        value="No trainer assigned to this batch"
-                        className="w-full px-3 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl font-semibold text-xs cursor-not-allowed"
-                      />
-                      <p className="text-[10px] text-rose-600 font-bold mt-1">
-                        ⚠️ This batch has no trainers assigned. Batches cannot be scheduled without an assigned trainer.
-                      </p>
-                    </div>
-                  ) : currentBatchTrainers.length === 1 ? (
-                    <div>
-                      <input
-                        type="text"
-                        readOnly
-                        value={formData.trainer || currentBatchTrainers[0].name}
-                        className="w-full px-3 py-2.5 bg-slate-100 border border-slate-200 rounded-xl font-extrabold text-blue-900 cursor-not-allowed"
-                        title="Sole trainer assigned to this batch"
-                      />
-                      <p className="text-[9px] text-slate-500 font-medium mt-1">
-                        ✓ Assigned batch trainer: {currentBatchTrainers[0].name}
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <select
-                        required
-                        value={formData.trainer}
-                        onChange={(e) => setFormData(prev => ({ ...prev, trainer: e.target.value }))}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-blue-600"
-                      >
-                        <option value="">-- Select Batch Trainer --</option>
-                        {currentBatchTrainers.map(t => (
-                          <option key={t.id || t.name} value={t.name}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-[9px] text-indigo-600 font-bold mt-1">
-                        👥 Select which of the {currentBatchTrainers.length} batch trainers conducts this session
-                      </p>
-                    </div>
-                  )}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Batch Trainer *</label>
+                    {currentBatchTrainers.length === 0 ? (
+                      <div>
+                        <input
+                          type="text"
+                          readOnly
+                          value="No trainer assigned to this batch"
+                          className="w-full px-3 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl font-semibold text-xs cursor-not-allowed"
+                        />
+                        <p className="text-[10px] text-rose-600 font-bold mt-1">
+                          ⚠️ This batch has no trainers assigned. Batches cannot be scheduled without an assigned trainer.
+                        </p>
+                      </div>
+                    ) : currentBatchTrainers.length === 1 ? (
+                      <div>
+                        <input
+                          type="text"
+                          readOnly
+                          value={formData.trainer || currentBatchTrainers[0].name}
+                          className="w-full px-3 py-2.5 bg-slate-100 border border-slate-200 rounded-xl font-extrabold text-blue-900 cursor-not-allowed"
+                          title="Sole trainer assigned to this batch"
+                        />
+                        <p className="text-[9px] text-slate-500 font-medium mt-1">
+                          ✓ Assigned batch trainer: {currentBatchTrainers[0].name}
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <select
+                          required
+                          value={formData.trainer}
+                          onChange={(e) => setFormData(prev => ({ ...prev, trainer: e.target.value }))}
+                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-blue-600"
+                        >
+                          <option value="">-- Select Batch Trainer --</option>
+                          {currentBatchTrainers.map(t => (
+                            <option key={t.id || t.name} value={t.name}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[9px] text-indigo-600 font-bold mt-1">
+                          👥 Select which of the {currentBatchTrainers.length} batch trainers conducts this session
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-
-              </div>
+              ) : (
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-purple-900 text-xs font-semibold flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-purple-600 shrink-0" />
+                  <span>Trainer-audience course: Conducted by Admin for all enrolled trainers. Google Meet link will be automatically fetched from course settings.</span>
+                </div>
+              )}
 
               {/* START TIME & END TIME INPUTS WITH DURATION PREVIEW & QUICK BUTTONS */}
               <div className="space-y-2.5 p-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl">
@@ -1288,7 +1499,7 @@ export default function AdminSchedulePage() {
                 </div>
               </div>
 
-              {currentBatchTrainers.length === 0 && (
+              {!isTrainerCourse && currentBatchTrainers.length === 0 && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] font-semibold">
                   ⚠️ This batch has no assigned trainers. Batches cannot be scheduled without an assigned trainer. Please assign a trainer in Batch Management.
                 </div>
@@ -1296,10 +1507,10 @@ export default function AdminSchedulePage() {
 
               <button
                 type="submit"
-                disabled={!formData.batch || currentBatchTrainers.length === 0 || !formData.trainer}
+                disabled={isTrainerCourse ? (!formData.title?.trim() || !formData.date || !formData.course) : (!formData.batch || currentBatchTrainers.length === 0 || !formData.trainer)}
                 className="w-full bg-[#0F52BA] hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-3.5 rounded-xl shadow-md transition-colors text-xs mt-3 cursor-pointer"
               >
-                {editingSchedule ? 'Update Schedule & Notify' : 'Schedule & Auto-Notify Trainer & Batch'}
+                {editingSchedule ? 'Update Schedule & Notify' : (isTrainerCourse ? 'Schedule & Auto-Notify Enrolled Trainers' : 'Schedule & Auto-Notify Trainer & Batch')}
               </button>
             </form>
           </div>
@@ -1451,6 +1662,7 @@ export default function AdminSchedulePage() {
         isOpen={Boolean(viewerFile)}
         onClose={() => setViewerFile(null)}
         file={viewerFile}
+        hideDownload={true}
       />
 
     </div>

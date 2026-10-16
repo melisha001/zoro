@@ -87,12 +87,16 @@ export default function TrainerSubmissionsPage() {
       setSubmissions(trnSubmissions);
 
       const recCourses = allCourses.filter(c => 
-        (c.mode === 'Recorded' || c.mode === 'Hybrid') &&
-        (matchesTrainerName(c.assignedTrainer, trainerName, trainerEmail) || allocatedCrs.some(ac => ac.id === c.id))
+        (c.mode || '').toLowerCase().trim() === 'recorded' &&
+        (matchesTrainerName(c.assignedTrainer, trainerName, trainerEmail) ||
+         (c.trainerId && user?.id && c.trainerId === user.id) ||
+         (Array.isArray(c.allocatedTrainers) && (c.allocatedTrainers.includes(trainerName) || c.allocatedTrainers.includes(trainerEmail))))
       );
       setAssignedRecordedCourses(recCourses);
-      if (recCourses.length > 0 && !expandedRecordedCourseId) {
+      if (recCourses.length > 0) {
         setExpandedRecordedCourseId(recCourses[0].id);
+      } else {
+        setExpandedRecordedCourseId(null);
       }
     } catch (err) {
       console.error('Error loading Submissions Page data:', err);
@@ -559,71 +563,98 @@ export default function TrainerSubmissionsPage() {
 
                         {/* ENROLLED STUDENTS UNDER RECORDED SESSION (Requirement 5.4 - NO EMAIL DISPLAY) */}
                         <div className="space-y-4 pt-4 border-t border-slate-100">
-                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                            <UserCheck className="w-4 h-4 text-purple-600" />
-                            Enrolled Students & Submission Status ({students.length})
-                          </h4>
+                          {(() => {
+                            const courseStudents = students.filter(s => {
+                              if (Array.isArray(s.courseBatches)) {
+                                return s.courseBatches.some(cb => 
+                                  (cb.courseId && cb.courseId === course.id) ||
+                                  (cb.course && cb.course.toLowerCase().trim() === (course.title || '').toLowerCase().trim())
+                                );
+                              }
+                              if (Array.isArray(s.courses)) {
+                                return s.courses.some(c => c === course.title || c === course.id);
+                              }
+                              return false;
+                            });
 
-                          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                            <table className="w-full text-left border-collapse text-xs">
-                              <thead>
-                                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-                                  <th className="py-3 px-4">#</th>
-                                  <th className="py-3 px-4">Student Name</th>
-                                  <th className="py-3 px-4">Course</th>
-                                  <th className="py-3 px-4">Batch</th>
-                                  <th className="py-3 px-4">Submission Status</th>
-                                  <th className="py-3 px-4 text-right">Action</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                                {students.map((s, idx) => {
-                                  const sub = courseSubs.find(subItem => 
-                                    subItem.studentEmail?.toLowerCase() === s.email?.toLowerCase() ||
-                                    subItem.studentName?.toLowerCase() === s.name?.toLowerCase()
-                                  );
-                                  const isCorrected = sub && (sub.status === 'Corrected' || sub.status === 'Reviewed');
+                            return (
+                              <>
+                                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                                  <UserCheck className="w-4 h-4 text-purple-600" />
+                                  Enrolled Students & Submission Status ({courseStudents.length})
+                                </h4>
 
-                                  return (
-                                    <tr key={s.id || idx} className="hover:bg-slate-50">
-                                      <td className="py-3 px-4 font-mono text-slate-400">{idx + 1}</td>
-                                      
-                                      {/* Student Name rendered cleanly; Email hidden (Requirement 10) */}
-                                      <td className="py-3 px-4 font-black text-slate-900">{s.name}</td>
-                                      
-                                      <td className="py-3 px-4 text-slate-700">{course.title}</td>
-                                      <td className="py-3 px-4 font-bold text-purple-900">{s.batch || (s.courseBatches?.find(cb => cb.course === course.title)?.batch) || 'Unassigned'}</td>
-                                      
-                                      <td className="py-3 px-4">
-                                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
-                                          isCorrected
-                                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                            : sub
-                                            ? 'bg-amber-100 text-amber-800 border-amber-200'
-                                            : 'bg-slate-100 text-slate-600 border-slate-200'
-                                        }`}>
-                                          {isCorrected ? '✓ Corrected' : sub ? 'Pending Review' : 'No Submission'}
-                                        </span>
-                                      </td>
+                                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                                  <table className="w-full text-left border-collapse text-xs">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
+                                        <th className="py-3 px-4">#</th>
+                                        <th className="py-3 px-4">Student Name</th>
+                                        <th className="py-3 px-4">Course</th>
+                                        <th className="py-3 px-4">Batch</th>
+                                        <th className="py-3 px-4">Submission Status</th>
+                                        <th className="py-3 px-4 text-right">Action</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                                      {courseStudents.length === 0 ? (
+                                        <tr>
+                                          <td colSpan={6} className="py-6 text-center text-slate-400 font-bold text-xs">
+                                            No students currently enrolled in this recorded course.
+                                          </td>
+                                        </tr>
+                                      ) : (
+                                        courseStudents.map((s, idx) => {
+                                          const sub = courseSubs.find(subItem => 
+                                            subItem.studentEmail?.toLowerCase() === s.email?.toLowerCase() ||
+                                            subItem.studentName?.toLowerCase() === s.name?.toLowerCase()
+                                          );
+                                          const isCorrected = sub && (sub.status === 'Corrected' || sub.status === 'Reviewed');
 
-                                      <td className="py-3 px-4 text-right">
-                                        {sub ? (
-                                          <button
-                                            onClick={() => handleOpenCorrectionModal(sub)}
-                                            className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] px-3 py-1 rounded-lg cursor-pointer"
-                                          >
-                                            {isCorrected ? 'Edit Correction' : 'Correct'}
-                                          </button>
-                                        ) : (
-                                          <span className="text-[11px] text-slate-400 italic">Not Submitted</span>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
+                                          return (
+                                            <tr key={s.id || idx} className="hover:bg-slate-50">
+                                              <td className="py-3 px-4 font-mono text-slate-400">{idx + 1}</td>
+                                              
+                                              {/* Student Name rendered cleanly; Email hidden (Requirement 10) */}
+                                              <td className="py-3 px-4 font-black text-slate-900">{s.name}</td>
+                                              
+                                              <td className="py-3 px-4 text-slate-700">{course.title}</td>
+                                              <td className="py-3 px-4 font-bold text-purple-900">{s.batch || (s.courseBatches?.find(cb => cb.course === course.title)?.batch) || 'Self-Paced'}</td>
+                                              
+                                              <td className="py-3 px-4">
+                                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
+                                                  isCorrected
+                                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                                    : sub
+                                                    ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                                                }`}>
+                                                  {isCorrected ? '✓ Corrected' : sub ? 'Pending Review' : 'No Submission'}
+                                                </span>
+                                              </td>
+
+                                              <td className="py-3 px-4 text-right">
+                                                {sub ? (
+                                                  <button
+                                                    onClick={() => handleOpenCorrectionModal(sub)}
+                                                    className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] px-3 py-1 rounded-lg cursor-pointer"
+                                                  >
+                                                    {isCorrected ? 'Edit Correction' : 'Correct'}
+                                                  </button>
+                                                ) : (
+                                                  <span className="text-[11px] text-slate-400 italic">Not Submitted</span>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
 
                       </div>
@@ -772,6 +803,7 @@ export default function TrainerSubmissionsPage() {
         isOpen={Boolean(viewerFile)}
         onClose={() => setViewerFile(null)}
         file={viewerFile}
+        hideDownload={true}
       />
 
     </div>

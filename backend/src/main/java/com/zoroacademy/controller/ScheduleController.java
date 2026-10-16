@@ -51,9 +51,51 @@ public class ScheduleController {
         return ApiResponse.ok(result, "Session joined successfully");
     }
 
+    @PostMapping("/{id}/start")
+    public ApiResponse<java.util.Map<String, Object>> startSchedule(
+            @PathVariable String id,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.zoroacademy.security.UserPrincipal principal) {
+        String trainerId = principal != null ? principal.getId() : null;
+        String trainerEmail = principal != null ? principal.getEmail() : null;
+        String userRole = principal != null ? principal.getRole() : "TRAINER";
+        java.util.Map<String, Object> result = scheduleService.startSchedule(id, trainerId, trainerEmail, userRole);
+        return ApiResponse.ok(result, "Session started successfully");
+    }
+
     @DeleteMapping("/{id}")
     public ApiResponse<Boolean> deleteSchedule(@PathVariable String id) {
         scheduleService.deleteSchedule(id);
         return ApiResponse.ok(true, "Schedule deleted successfully");
+    }
+
+    private boolean isAdmin(com.zoroacademy.security.UserPrincipal principal, org.springframework.security.core.Authentication auth) {
+        if (principal != null && "ADMIN".equalsIgnoreCase(principal.getRole())) {
+            return true;
+        }
+        if (auth != null && auth.getAuthorities() != null) {
+            return auth.getAuthorities().stream()
+                    .anyMatch(a -> "ROLE_ADMIN".equalsIgnoreCase(a.getAuthority()) || "ADMIN".equalsIgnoreCase(a.getAuthority()));
+        }
+        return false;
+    }
+
+    @GetMapping("/admin/trainer-sessions")
+    public ApiResponse<List<Schedule>> getAdminTrainerSessions(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.zoroacademy.security.UserPrincipal principal,
+            org.springframework.security.core.Authentication auth) {
+        if (!isAdmin(principal, auth)) {
+            throw new org.springframework.security.access.AccessDeniedException("Admin access required");
+        }
+        return ApiResponse.ok(scheduleService.getTrainerAudienceSchedules());
+    }
+
+    @GetMapping("/trainer-courses")
+    public ApiResponse<List<Schedule>> getTrainerCourses(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.zoroacademy.security.UserPrincipal principal,
+            org.springframework.security.core.Authentication auth) {
+        if (!isAdmin(principal, auth)) {
+            throw new org.springframework.security.access.AccessDeniedException("Admin access required");
+        }
+        return ApiResponse.ok(scheduleService.getTrainerAudienceSchedules());
     }
 }

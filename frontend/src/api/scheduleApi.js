@@ -132,3 +132,16 @@ export const joinSchedule = async (id) => {
   return res;
 };
 
+export const startSchedule = async (id) => {
+  if (!id) {
+    return apiResponse(null, false, 'Schedule ID is required');
+  }
+  const res = await apiPost(`/schedules/${encodeURIComponent(id)}/start`);
+  return res;
+};
+
+export const getAdminTrainerSessions = async () => {
+  const res = await apiGet('/schedules/admin/trainer-sessions');
+  return res;
+};
+

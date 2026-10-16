@@ -1,82 +1,123 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 
 /**
  * Public Hero Background Component with 0, 1, or >1 image handling:
  * - 0 images: Neutral brand gradient (no stock/Unsplash photos)
- * - 1 image: Static cover background with dark overlay, no animation
- * - >1 images: Automatic carousel every 5s (current slides out left, next slides in right),
- *   small indicator dots, next image preloaded, paused when tab is hidden,
- *   reduced-motion fallback (simple fade).
+ * - 1 image: Static cover background with dark overlay, no animation/timer
+ * - >1 images: Automatic crossfade rotation every `intervalSeconds` (default 5s).
+ *   - Preloads all images; skips failed images automatically.
+ *   - Stable interval with functional updates (timer does NOT reset on every index change).
+ *   - Pauses on document.hidden, resumes and advances on document becoming visible.
+ *   - Pauses on hover, supports swipe on touch devices.
+ *   - Smooth crossfade (no flicker, no blank frames).
  */
-export default function HeroCarousel({ images = [], children }) {
-  const activeImages = (images || []).filter((img) => img && img.active !== false && img.url);
-  const count = activeImages.length;
+export default function HeroCarousel({
+  images = [],
+  intervalSeconds = 5,
+  randomStart = false,
+  children
+}) {
+  const [failedUrls, setFailedUrls] = useState(() => new Set());
 
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [prevIndex, setPrevIndex] = useState(null);
+  // Filter valid, active, non-failed images
+  const validImages = useMemo(() => {
+    return (images || []).filter(
+      (img) => img && img.active !== false && img.url && !failedUrls.has(img.url)
+    );
+  }, [images, failedUrls]);
+
+  const count = validImages.length;
+
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    if (count > 1 && randomStart) {
+      return Math.floor(Math.random() * count);
+    }
+    return 0;
+  });
+
   const [isPaused, setIsPaused] = useState(false);
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const touchStartXRef = useRef(null);
+  const countRef = useRef(count);
+  countRef.current = count;
+
+  // Preload all valid images on mount / list update and catch errors
+  useEffect(() => {
+    if (!images || images.length === 0) return;
+    images.forEach((img) => {
+      if (!img?.url || failedUrls.has(img.url)) return;
+      try {
+        const tester = new Image();
+        tester.src = img.url;
+        tester.onerror = () => {
+          setFailedUrls((prev) => {
+            const next = new Set(prev);
+            next.add(img.url);
+            return next;
+          });
+        };
+      } catch {
+        // ignore in non-browser env
+      }
+    });
+  }, [images, failedUrls]);
 
   // Clamp index if count changes
   useEffect(() => {
     if (count > 0 && currentIndex >= count) {
       setCurrentIndex(0);
-      setPrevIndex(null);
     }
   }, [count, currentIndex]);
 
-  // Reduced motion preference
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    try {
-      const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-      if (!mediaQuery) return;
-      setPrefersReducedMotion(Boolean(mediaQuery.matches));
-      const handleChange = (e) => setPrefersReducedMotion(Boolean(e?.matches));
-      if (mediaQuery.addEventListener) {
-        mediaQuery.addEventListener('change', handleChange);
-        return () => mediaQuery.removeEventListener('change', handleChange);
-      }
-    } catch {
-      // ignore
-    }
+  // Stable next slide transition
+  const nextSlide = useCallback(() => {
+    setCurrentIndex((prev) => {
+      const c = countRef.current;
+      if (c <= 1) return 0;
+      return (prev + 1) % c;
+    });
   }, []);
 
-  // Preload next image
-  useEffect(() => {
-    if (count <= 1) return;
-    const nextIdx = (currentIndex + 1) % count;
-    const nextUrl = activeImages[nextIdx]?.url;
-    if (nextUrl) {
-      const preload = new Image();
-      preload.src = nextUrl;
-    }
-  }, [currentIndex, count, activeImages]);
-
-  // Pause carousel while tab is hidden
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const handleVisibilityChange = () => {
-      setIsPaused(document.hidden);
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  const prevSlide = useCallback(() => {
+    setCurrentIndex((prev) => {
+      const c = countRef.current;
+      if (c <= 1) return 0;
+      return (prev - 1 + c) % c;
+    });
   }, []);
 
-  // 5-second automatic rotation
+  // Stable timer that does NOT depend on currentIndex!
   useEffect(() => {
     if (count <= 1 || isPaused) return;
 
+    const ms = Math.max(1, intervalSeconds) * 1000;
     const interval = setInterval(() => {
-      setPrevIndex(currentIndex);
-      setCurrentIndex((curr) => (curr + 1) % count);
-    }, 5000);
+      nextSlide();
+    }, ms);
 
     return () => clearInterval(interval);
-  }, [count, currentIndex, isPaused]);
+  }, [count, isPaused, intervalSeconds, nextSlide]);
 
-  // Handle touch swipes on mobile
+  // Pause carousel when document is hidden; resume AND advance immediately on visibilitychange
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setIsPaused(true);
+      } else {
+        setIsPaused(false);
+        // Resume and advance immediately on tab focus
+        if (countRef.current > 1) {
+          nextSlide();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [nextSlide]);
+
+  // Touch swipe handling
   const handleTouchStart = (e) => {
     if (e.touches && e.touches[0]) {
       touchStartXRef.current = e.touches[0].clientX;
@@ -85,17 +126,13 @@ export default function HeroCarousel({ images = [], children }) {
 
   const handleTouchEnd = (e) => {
     if (touchStartXRef.current === null || count <= 1) return;
-    const touchEndX = e.changedTouches[0]?.clientX;
+    const touchEndX = e.changedTouches?.[0]?.clientX;
     if (touchEndX !== undefined) {
       const diff = touchStartXRef.current - touchEndX;
       if (diff > 50) {
-        // Swiped left -> next
-        setPrevIndex(currentIndex);
-        setCurrentIndex((curr) => (curr + 1) % count);
+        nextSlide();
       } else if (diff < -50) {
-        // Swiped right -> prev
-        setPrevIndex(currentIndex);
-        setCurrentIndex((curr) => (curr - 1 + count) % count);
+        prevSlide();
       }
     }
     touchStartXRef.current = null;
@@ -105,15 +142,15 @@ export default function HeroCarousel({ images = [], children }) {
   if (count === 0) {
     return (
       <section className="relative text-white overflow-hidden py-16 md:py-24 min-h-[500px] flex items-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/30"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/30" />
         <div className="relative z-10 w-full">{children}</div>
       </section>
     );
   }
 
-  // Case 1: Exactly 1 image -> Static background, no animation
+  // Case 1: Exactly 1 image -> Static cover background, no animation, no indicator dots
   if (count === 1) {
-    const single = activeImages[0];
+    const single = validImages[0];
     return (
       <section className="relative text-white overflow-hidden py-16 md:py-24 min-h-[500px] flex items-center">
         <div className="absolute inset-0 z-0 overflow-hidden">
@@ -123,13 +160,13 @@ export default function HeroCarousel({ images = [], children }) {
             className="w-full h-full object-cover object-center"
           />
         </div>
-        <div className="absolute inset-0 z-10 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/30"></div>
+        <div className="absolute inset-0 z-10 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/30" />
         <div className="relative z-10 w-full">{children}</div>
       </section>
     );
   }
 
-  // Case > 1: Carousel
+  // Case > 1: Crossfade Carousel
   return (
     <section
       className="relative text-white overflow-hidden py-16 md:py-24 min-h-[500px] flex items-center select-none"
@@ -137,38 +174,27 @@ export default function HeroCarousel({ images = [], children }) {
       onTouchEnd={handleTouchEnd}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
+      data-testid="hero-carousel-section"
+      data-current-index={currentIndex}
     >
-      {/* Background Slides */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-        {activeImages.map((image, idx) => {
+      {/* Background Slides with Crossfade */}
+      <div className="absolute inset-0 z-0 overflow-hidden bg-slate-950">
+        {validImages.map((image, idx) => {
           const isCurrent = idx === currentIndex;
-          const isPrev = idx === prevIndex;
-
-          let transformClass = 'translate-x-full opacity-0 pointer-events-none';
-          if (prefersReducedMotion) {
-            transformClass = isCurrent
-              ? 'opacity-100 transition-opacity duration-700 ease-in-out'
-              : 'opacity-0 transition-opacity duration-700 ease-in-out pointer-events-none';
-          } else {
-            if (isCurrent) {
-              transformClass = 'translate-x-0 opacity-100 transition-transform duration-700 ease-in-out';
-            } else if (isPrev) {
-              transformClass = '-translate-x-full opacity-100 transition-transform duration-700 ease-in-out';
-            } else {
-              transformClass = 'translate-x-full opacity-0 pointer-events-none';
-            }
-          }
-
           return (
             <div
-              key={image.id || idx}
-              className={`absolute inset-0 w-full h-full ${transformClass}`}
+              key={image.id || image.url || idx}
+              data-testid={`hero-slide-${idx}`}
+              className={`absolute inset-0 w-full h-full transition-opacity duration-1000 ease-in-out ${
+                isCurrent ? 'opacity-100 z-1' : 'opacity-0 z-0 pointer-events-none'
+              }`}
               aria-hidden={!isCurrent}
             >
               <img
                 src={image.url}
                 alt={image.altText || `Zoro Academy Hero Slide ${idx + 1}`}
                 className="w-full h-full object-cover object-center"
+                loading={idx === 0 ? 'eager' : 'lazy'}
               />
             </div>
           );
@@ -176,23 +202,20 @@ export default function HeroCarousel({ images = [], children }) {
       </div>
 
       {/* Dark gradient overlay keeping typography readable */}
-      <div className="absolute inset-0 z-10 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/30"></div>
+      <div className="absolute inset-0 z-10 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/30" />
 
       {/* Hero content */}
       <div className="relative z-10 w-full">{children}</div>
 
       {/* Small Indicator Dots */}
       <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center items-center gap-2">
-        {activeImages.map((image, idx) => {
+        {validImages.map((image, idx) => {
           const isSelected = idx === currentIndex;
           return (
             <button
-              key={image.id || idx}
+              key={image.id || image.url || idx}
               type="button"
-              onClick={() => {
-                setPrevIndex(currentIndex);
-                setCurrentIndex(idx);
-              }}
+              onClick={() => setCurrentIndex(idx)}
               aria-label={`Jump to hero slide ${idx + 1}`}
               className={`transition-all rounded-full cursor-pointer h-2 ${
                 isSelected ? 'w-6 bg-blue-500 shadow-sm' : 'w-2 bg-white/50 hover:bg-white/80'
