@@ -178,8 +178,13 @@ export async function openFileWithSignedLink(fileUrlOrId, fileName = '') {
     } else if (err?.code === 'NOT_ENROLLED') {
       msg = 'You are not enrolled in this course.';
     }
-    if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-      window.alert(msg.replace(/^Error:\s*/, ''));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('api:error', {
+        detail: {
+          message: msg.replace(/^Error:\s*/, ''),
+          code: err?.code || 'FILE_ACCESS_DENIED'
+        }
+      }));
     }
   }
 }

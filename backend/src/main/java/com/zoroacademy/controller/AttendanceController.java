@@ -114,6 +114,22 @@ public class AttendanceController {
         return ApiResponse.ok(updated, "Trainer remark updated successfully");
     }
 
+    @PutMapping("/correction")
+    public ApiResponse<AttendanceRecord> correctStudentAttendance(
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal com.zoroacademy.security.UserPrincipal principal) {
+        String scheduleId = (String) body.get("scheduleId");
+        String studentId = (String) body.get("studentId");
+        String status = (String) body.get("status");
+        String remark = (String) body.get("remark");
+        if (remark == null) {
+            remark = (String) body.get("remarks");
+        }
+        String author = principal != null && principal.getName() != null ? principal.getName() : "Trainer";
+        AttendanceRecord updated = attendanceService.correctStudentAttendance(scheduleId, studentId, status, remark, author);
+        return ApiResponse.ok(updated, "Attendance corrected successfully");
+    }
+
     @PostMapping
     public ApiResponse<AttendanceRecord> recordAttendance(@RequestBody Object record) {
         throw new ResponseStatusException(

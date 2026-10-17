@@ -55,6 +55,15 @@ public class AttendanceRecord {
     @Column(name = "joined_at")
     private LocalDateTime joinedAt;
 
+    @Column(name = "original_status", length = 50)
+    private String originalStatus;
+
+    @Column(name = "status_changed_by", length = 128)
+    private String statusChangedBy;
+
+    @Column(name = "status_changed_at")
+    private LocalDateTime statusChangedAt;
+
     @Transient
     private String course;
 
@@ -229,6 +238,30 @@ public class AttendanceRecord {
         this.trainer = trainer;
     }
 
+    public String getOriginalStatus() {
+        return originalStatus;
+    }
+
+    public void setOriginalStatus(String originalStatus) {
+        this.originalStatus = originalStatus;
+    }
+
+    public String getStatusChangedBy() {
+        return statusChangedBy;
+    }
+
+    public void setStatusChangedBy(String statusChangedBy) {
+        this.statusChangedBy = statusChangedBy;
+    }
+
+    public LocalDateTime getStatusChangedAt() {
+        return statusChangedAt;
+    }
+
+    public void setStatusChangedAt(LocalDateTime statusChangedAt) {
+        this.statusChangedAt = statusChangedAt;
+    }
+
     public String getTime() {
         return time;
     }
@@ -256,6 +289,9 @@ public class AttendanceRecord {
         private String recordedBy;
         private LocalDateTime createdAt;
         private LocalDateTime joinedAt;
+        private String originalStatus;
+        private String statusChangedBy;
+        private LocalDateTime statusChangedAt;
 
         public Builder id(String id) {
             this.id = id;
@@ -317,12 +353,27 @@ public class AttendanceRecord {
             this.joinedAt = joinedAt;
             return this;
         }
+        public Builder originalStatus(String originalStatus) {
+            this.originalStatus = originalStatus;
+            return this;
+        }
+        public Builder statusChangedBy(String statusChangedBy) {
+            this.statusChangedBy = statusChangedBy;
+            return this;
+        }
+        public Builder statusChangedAt(LocalDateTime statusChangedAt) {
+            this.statusChangedAt = statusChangedAt;
+            return this;
+        }
 
         public AttendanceRecord build() {
             AttendanceRecord r = new AttendanceRecord(id, scheduleId, studentId, studentName, courseId, batchId, date, status, remarks, recordedBy, createdAt);
             r.setJoinedAt(joinedAt);
             r.setRemarkBy(remarkBy);
             r.setRemarkAt(remarkAt);
+            r.setOriginalStatus(originalStatus);
+            r.setStatusChangedBy(statusChangedBy);
+            r.setStatusChangedAt(statusChangedAt);
             return r;
         }
     }

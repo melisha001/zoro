@@ -9,7 +9,7 @@ import { useDialog } from '../../context/DialogContext';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
 export default function AdminSettingsPage() {
-  const { showSuccess, showError } = useDialog();
+  const { showSuccess, showError, confirm } = useDialog();
   const { isOfflineFallback, offlineMessage, reloadSettings } = useWebsiteSettings();
   const [activeTab, setActiveTab] = useState('landing_content');
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -298,7 +298,13 @@ export default function AdminSettingsPage() {
   };
 
   const handleDeleteHero = async (image) => {
-    if (!window.confirm('Delete this hero background image? This removes the database record and permanently purges the file from Bunny Storage.')) {
+    const isConfirmed = await confirm({
+      title: 'Delete Hero Image',
+      message: 'Delete this hero background image? This removes the database record and permanently purges the file from Bunny Storage.',
+      confirmText: 'Delete',
+      danger: true
+    });
+    if (!isConfirmed) {
       return;
     }
     try {

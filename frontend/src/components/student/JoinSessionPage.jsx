@@ -6,10 +6,12 @@ import {
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { getSchedules, joinSchedule } from '../../api/scheduleApi';
 import { useAuth } from '../../context/AuthContext';
+import { useDialog } from '../../context/DialogContext';
 import { getScheduleJoinState, syncServerTime } from '../../utils/scheduleSortUtil';
 
 export default function JoinSessionPage({ setActiveScreen }) {
   const { user } = useAuth();
+  const { showError } = useDialog();
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [isJoined, setIsJoined] = useState(false);
@@ -70,11 +72,11 @@ export default function JoinSessionPage({ setActiveScreen }) {
           window.open(url, '_blank');
         }
       } else {
-        alert(res?.message || 'Failed to join session');
+        showError(res?.message || 'Failed to join session', 'Join Failed');
       }
     } catch (e) {
       console.error('Attendance recording error:', e);
-      alert(e?.message || 'Error joining session');
+      showError(e?.message || 'Error joining session', 'Join Error');
     }
   };
 

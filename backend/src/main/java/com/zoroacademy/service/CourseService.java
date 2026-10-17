@@ -167,6 +167,65 @@ public class CourseService {
         return copy;
     }
 
+    private boolean isModuleCompleted(CourseModule m, String courseId, String studentId, String studentEmail) {
+        String effectiveStudentId = studentId;
+        String effectiveEmail = studentEmail;
+        if (effectiveStudentId != null && effectiveStudentId.contains("@") && effectiveEmail == null) {
+            effectiveEmail = effectiveStudentId;
+        }
+        if ((effectiveStudentId == null || effectiveStudentId.contains("@")) && effectiveEmail != null && userRepository != null) {
+            effectiveStudentId = userRepository.findByEmailIgnoreCase(effectiveEmail)
+                    .map(com.zoroacademy.entity.User::getId)
+                    .orElse(effectiveStudentId);
+        }
+
+        boolean hasVideo = (m.getVideoStorageRef() != null && !m.getVideoStorageRef().isBlank() && !"null".equalsIgnoreCase(m.getVideoStorageRef().trim()) && !"{}".equals(m.getVideoStorageRef().trim()))
+                || (videoRepository != null && !videoRepository.findByModuleId(m.getId()).isEmpty());
+
+        boolean videoDone = !hasVideo;
+        if (hasVideo) {
+            if (effectiveStudentId != null && studentModuleProgressRepository != null) {
+                java.util.Optional<com.zoroacademy.entity.StudentModuleProgress> smpOpt = studentModuleProgressRepository.findByStudentIdAndModuleId(effectiveStudentId, m.getId());
+                if (smpOpt.isPresent()) {
+                    com.zoroacademy.entity.StudentModuleProgress smp = smpOpt.get();
+                    if (Boolean.TRUE.equals(smp.getVideoCompleted()) || Boolean.TRUE.equals(smp.getCompleted())) {
+                        videoDone = true;
+                    } else if (smp.getWatchedSeconds() != null && smp.getDurationSeconds() != null && smp.getDurationSeconds() > 0) {
+                        int threshold = (int) Math.ceil(smp.getDurationSeconds() * 0.95);
+                        if (smp.getWatchedSeconds() >= threshold) {
+                            videoDone = true;
+                        }
+                    }
+                }
+            }
+            if (!videoDone && effectiveStudentId != null && studentProgressRepository != null) {
+                videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(effectiveStudentId, courseId, m.getId())
+                        .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
+            }
+            if (!videoDone && effectiveEmail != null && studentProgressRepository != null) {
+                videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(effectiveEmail, courseId, m.getId())
+                        .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
+            }
+        }
+
+        boolean hasAssignment = (m.getAssignmentFileUrl() != null && !m.getAssignmentFileUrl().isBlank())
+                || (m.getAssignmentFileName() != null && !m.getAssignmentFileName().isBlank());
+
+        boolean assignmentDone = !hasAssignment;
+        if (hasAssignment) {
+            if (submissionRepository != null) {
+                if (effectiveStudentId != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentId("module", m.getId(), effectiveStudentId).isEmpty()) {
+                    assignmentDone = true;
+                }
+                if (!assignmentDone && effectiveEmail != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentEmailIgnoreCase("module", m.getId(), effectiveEmail).isEmpty()) {
+                    assignmentDone = true;
+                }
+            }
+        }
+
+        return videoDone && assignmentDone;
+    }
+
     public boolean isModuleLockedForStudent(String courseId, String moduleId, String studentId, String studentEmail) {
         if (moduleId == null || courseId == null) return false;
         java.util.List<CourseModule> modules = moduleRepository.findByCourseIdOrderByModuleOrderAsc(courseId);
@@ -184,39 +243,8 @@ public class CourseService {
                 return !prevCompleted;
             }
 
-            boolean hasAssignment = (m.getAssignmentFileUrl() != null && !m.getAssignmentFileUrl().isBlank())
-                    || (m.getAssignmentFileName() != null && !m.getAssignmentFileName().isBlank());
-
-            if (hasAssignment) {
-                boolean submitted = false;
-                if (submissionRepository != null) {
-                    if (studentId != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentId("module", m.getId(), studentId).isEmpty()) {
-                        submitted = true;
-                    }
-                    if (!submitted && studentEmail != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentEmailIgnoreCase("module", m.getId(), studentEmail).isEmpty()) {
-                        submitted = true;
-                    }
-                }
-                if (!submitted) {
-                    prevCompleted = false;
-                }
-            } else {
-                boolean videoDone = false;
-                if (studentId != null && studentModuleProgressRepository != null) {
-                    videoDone = studentModuleProgressRepository.findByStudentIdAndModuleId(studentId, m.getId())
-                            .map(smp -> Boolean.TRUE.equals(smp.getCompleted())).orElse(false);
-                }
-                if (!videoDone && studentId != null && studentProgressRepository != null) {
-                    videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(studentId, courseId, m.getId())
-                            .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
-                }
-                if (!videoDone && studentEmail != null && studentProgressRepository != null) {
-                    videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(studentEmail, courseId, m.getId())
-                            .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
-                }
-                if (!videoDone) {
-                    prevCompleted = false;
-                }
+            if (!isModuleCompleted(m, courseId, studentId, studentEmail)) {
+                prevCompleted = false;
             }
 
             if (!prevCompleted) {
@@ -297,39 +325,8 @@ public class CourseService {
                     m.setVideoStorageRef(orig.getVideoStorageRef());
 
                     // Check if current unlocked module is completed for next module's unlock
-                    boolean hasAssignment = (orig.getAssignmentFileUrl() != null && !orig.getAssignmentFileUrl().isBlank())
-                            || (orig.getAssignmentFileName() != null && !orig.getAssignmentFileName().isBlank());
-
-                    if (hasAssignment) {
-                        boolean submitted = false;
-                        if (submissionRepository != null) {
-                            if (studentId != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentId("module", orig.getId(), studentId).isEmpty()) {
-                                submitted = true;
-                            }
-                            if (!submitted && studentEmail != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentEmailIgnoreCase("module", orig.getId(), studentEmail).isEmpty()) {
-                                submitted = true;
-                            }
-                        }
-                        if (!submitted) {
-                            prevCompleted = false;
-                        }
-                    } else {
-                        boolean videoDone = false;
-                        if (studentId != null && studentModuleProgressRepository != null) {
-                            videoDone = studentModuleProgressRepository.findByStudentIdAndModuleId(studentId, orig.getId())
-                                    .map(smp -> Boolean.TRUE.equals(smp.getCompleted())).orElse(false);
-                        }
-                        if (!videoDone && studentId != null && studentProgressRepository != null) {
-                            videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(studentId, course.getId(), orig.getId())
-                                    .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
-                        }
-                        if (!videoDone && studentEmail != null && studentProgressRepository != null) {
-                            videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(studentEmail, course.getId(), orig.getId())
-                                    .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
-                        }
-                        if (!videoDone) {
-                            prevCompleted = false;
-                        }
+                    if (!isModuleCompleted(orig, course.getId(), studentId, studentEmail)) {
+                        prevCompleted = false;
                     }
                 }
                 resultModules.add(m);
@@ -345,8 +342,9 @@ public class CourseService {
         CourseModule module = moduleRepository.findById(moduleId)
                 .orElseThrow(() -> new IllegalArgumentException("Module not found: " + moduleId));
 
-        boolean isStaff = "ADMIN".equalsIgnoreCase(userRole) || "SUPER_ADMIN".equalsIgnoreCase(userRole) || "TRAINER".equalsIgnoreCase(userRole);
-        if (!isStaff) {
+        Course course = courseRepository.findById(courseId).orElse(null);
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(userRole) || "SUPER_ADMIN".equalsIgnoreCase(userRole);
+        if (!isAdmin) {
             if (isModuleLockedForStudent(courseId, moduleId, userId, userEmail)) {
                 throw new org.springframework.security.access.AccessDeniedException("Module is locked. Complete previous module assignment to unlock.");
             }

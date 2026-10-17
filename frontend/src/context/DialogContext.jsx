@@ -88,6 +88,18 @@ export function DialogProvider({ children }) {
   }, [openDialog]);
 
   const confirm = useCallback((message, title = 'Please Confirm', options = {}) => {
+    if (typeof message === 'object' && message !== null) {
+      const opts = message;
+      return openDialog({
+        type: 'confirm',
+        title: opts.title || 'Please Confirm',
+        message: opts.message || '',
+        confirmText: opts.confirmText || 'Confirm',
+        cancelText: opts.cancelText || 'Cancel',
+        danger: opts.danger !== undefined ? opts.danger : false,
+        ...opts
+      });
+    }
     return openDialog({
       type: 'confirm',
       title,

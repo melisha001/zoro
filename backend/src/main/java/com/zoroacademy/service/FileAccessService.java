@@ -212,11 +212,17 @@ public class FileAccessService {
 
             // Modules: courses they teach or approved trainer learning
             if (!modules.isEmpty()) {
-                boolean authorized = modules.stream().anyMatch(m ->
-                        isTrainerAuthorizedForCourse(userId, userEmail, trainerUsername, m.getCourse())
-                );
-                if (!authorized) {
-                    return FileAccessResult.forbidden("You are not assigned to teach or enrolled in this course");
+                for (CourseModule mod : modules) {
+                    Course course = mod.getCourse();
+                    if (!isTrainerAuthorizedForCourse(userId, userEmail, trainerUsername, course)) {
+                        return FileAccessResult.forbidden("You are not assigned to teach or enrolled in this course");
+                    }
+                    if (course != null && "trainer".equalsIgnoreCase(course.getAudience())) {
+                        if (courseService != null && courseService.isModuleLockedForStudent(course.getId(), mod.getId(), userId, userEmail)) {
+                            int modNum = (mod.getModuleOrder() != null && mod.getModuleOrder() > 1) ? (mod.getModuleOrder() - 1) : 1;
+                            return FileAccessResult.lockedModule("Complete Module " + modNum + " to unlock this resource");
+                        }
+                    }
                 }
             }
 

@@ -88,7 +88,7 @@ function getBatchTrainers(batch, allTrainers = []) {
 }
 
 export default function AdminSchedulePage() {
-  const { showSuccess, showError, showWarning } = useDialog();
+  const { showSuccess, showError, showWarning, confirm } = useDialog();
   const [activeScheduleTab, setActiveScheduleTab] = useState('student'); // 'student' | 'trainer'
   const [selectedDateFilter, setSelectedDateFilter] = useState('');
   const [selectedBatchFilter, setSelectedBatchFilter] = useState('All');
@@ -446,7 +446,11 @@ export default function AdminSchedulePage() {
 
     // 5. Warning if above 3 hours
     if (dur > 180) {
-      const confirmLong = window.confirm(`This session duration is ${Math.floor(dur / 60)}h ${dur % 60}m (over 3 hours). Are you sure you want to proceed?`);
+      const confirmLong = await confirm({
+        title: 'Long Session Duration',
+        message: `This session duration is ${Math.floor(dur / 60)}h ${dur % 60}m (over 3 hours). Are you sure you want to proceed?`,
+        confirmText: 'Proceed'
+      });
       if (!confirmLong) return;
     }
 
@@ -571,7 +575,11 @@ export default function AdminSchedulePage() {
       return;
     }
     if (rdur > 180) {
-      const confirmLong = window.confirm(`This session duration is ${Math.floor(rdur / 60)}h ${rdur % 60}m (over 3 hours). Are you sure you want to proceed?`);
+      const confirmLong = await confirm({
+        title: 'Long Session Duration',
+        message: `This session duration is ${Math.floor(rdur / 60)}h ${rdur % 60}m (over 3 hours). Are you sure you want to proceed?`,
+        confirmText: 'Proceed'
+      });
       if (!confirmLong) return;
     }
 

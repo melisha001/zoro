@@ -73,3 +73,6 @@ springdoc:
 
 notifications:
   retention-days: 30
+
+attendance:
+  correction-window-minutes: ${ATTENDANCE_CORRECTION_WINDOW_MINUTES:60}

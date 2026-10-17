@@ -110,8 +110,8 @@ function getActiveScreenFromPath(path) {
   if (path === '/trainer' || path === '/trainer/') return 'trainer-dash';
   if (path === '/trainer/courses') return 'trainer-courses';
   if (path === '/trainer/students') return 'trainer-students';
-  if (path === '/trainer/schedules') return 'trainer-schedule';
-  if (path === '/trainer/sessions') return 'trainer-sessions';
+  if (path === '/trainer/schedules' || path === '/trainer/schedule') return 'trainer-schedule';
+  if (path === '/trainer/sessions' || path === '/trainer/session') return 'trainer-sessions';
   if (path === '/trainer/assignments') return 'trainer-assignments';
   if (path === '/trainer/submissions') return 'trainer-submissions';
   if (path === '/trainer/doubts') return 'trainer-doubts';
@@ -515,7 +515,9 @@ function AppRoutes() {
           <Route path="courses" element={<TrainerCoursesPage />} />
           <Route path="students" element={<TrainerStudentsPage />} />
           <Route path="schedules" element={<TrainerSchedulePage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
+          <Route path="schedule" element={<TrainerSchedulePage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="sessions" element={<TrainerSessionsPage />} />
+          <Route path="session" element={<TrainerSessionsPage />} />
           <Route path="assignments" element={<TrainerAssignmentsPage />} />
           <Route path="submissions" element={<TrainerSubmissionsPage />} />
           <Route path="doubts" element={<TrainerDoubtsPage />} />

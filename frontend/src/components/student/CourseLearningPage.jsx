@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, Play, FileText, BookOpen, PlusCircle, Sparkles, ExternalLink, Calendar, Clock, Video, Lock, Unlock, Layers, CheckCircle2, Eye, Send, Award, Download } from 'lucide-react';
-import { getCourses, getCourseById } from '../../api/courseApi';
+import { getCourses, getCourseById, getTrainerCourseRequests } from '../../api/courseApi';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { createEnquiry, getMyEnquiries } from '../../api/enquiryApi';
 import { getStudentProgress, getStudentModuleProgress, authorizeVideoPlayback } from '../../api/progressApi';
@@ -73,23 +73,18 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
 
   useEffect(() => {
     if (activeModule?.id && selectedCourse?.id && studentIdentifier) {
-      if (isTrainer) {
-        setIsAuthorized(true);
-        setPlaybackData({ videoUrl: activeModule.videoUrl, streamId: activeModule.videoStreamId });
-      } else {
-        authorizeVideoPlayback(studentIdentifier, selectedCourse.id, activeModule.id).then(res => {
-          if (res.success && res.data) {
-            setIsAuthorized(true);
-            setPlaybackData(res.data);
-          } else {
-            setIsAuthorized(false);
-            setAuthMsg(res.message || 'Access Denied: You are not enrolled in this course.');
-            setPlaybackData(null);
-          }
-        });
-      }
+      authorizeVideoPlayback(studentIdentifier, selectedCourse.id, activeModule.id).then(res => {
+        if (res.success && res.data) {
+          setIsAuthorized(true);
+          setPlaybackData(res.data);
+        } else {
+          setIsAuthorized(false);
+          setAuthMsg(res.message || 'Access Denied: You are not enrolled in this course.');
+          setPlaybackData(null);
+        }
+      });
     }
-  }, [activeModule?.id, selectedCourse?.id, studentIdentifier, isTrainer]);
+  }, [activeModule?.id, selectedCourse?.id, studentIdentifier]);
 
   const loadAllData = async () => {
     try {
@@ -270,13 +265,14 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
     setSelectedCourse(fullCourse);
     
     // Check Enrollment Authorization
-    if (isTrainer) {
-      setIsAuthorized(true);
-      setAuthMsg('');
-    } else {
-      const authRes = await authorizeVideoPlayback(studentIdentifier, fullCourse.id, fullCourse.modules?.[0]?.id);
+    const firstModuleId = fullCourse.modules?.[0]?.id;
+    if (firstModuleId) {
+      const authRes = await authorizeVideoPlayback(studentIdentifier, fullCourse.id, firstModuleId);
       setIsAuthorized(authRes.success);
       setAuthMsg(authRes.message || '');
+    } else {
+      setIsAuthorized(true);
+      setAuthMsg('');
     }
 
     // Load progress and submissions for this course
@@ -321,16 +317,27 @@ export default function CourseLearningPage({ courseId: initialCourseId, _setActi
     if (mod?.isLocked !== undefined) return Boolean(mod.isLocked);
     const prevMod = modulesList[index - 1];
     if (!prevMod) return false;
-    const prevHasAssignment = Boolean(prevMod.assignmentFile || prevMod.assignmentFileUrl || prevMod.assignmentPdf);
+
+    // Check video completion (>= 95% watched)
+    const prevProg = studentProgressMap[prevMod.id];
+    const prevHasVideo = Boolean(prevMod.videoUrl || prevMod.videoStreamId || prevMod.videoStorageRef);
+    const isVideoDone = prevProg?.status === 'Completed' || Boolean(prevProg?.completed) || Boolean(prevProg?.videoCompleted);
+    if (prevHasVideo && !isVideoDone) {
+      return true;
+    }
+
+    // Check assignment submission
+    const prevHasAssignment = Boolean(prevMod.assignmentFile || prevMod.assignmentFileUrl || prevMod.assignmentPdf || prevMod.assignmentFileName);
     if (prevHasAssignment) {
       const submitted = studentSubmissions.some(s =>
         (s.sourceId === prevMod.id || (s.assignmentTitle && prevMod.title && s.assignmentTitle.toLowerCase().includes(prevMod.title.toLowerCase())))
       );
-      return !submitted;
+      if (!submitted) {
+        return true;
+      }
     }
-    const prevProg = studentProgressMap[prevMod.id];
-    const isDone = prevProg?.status === 'Completed' || Boolean(prevProg?.completed) || Boolean(prevProg?.videoCompleted);
-    return !isDone;
+
+    return false;
   };
 
   const getStudentEnquiryForCourse = (courseId, courseTitle) => {

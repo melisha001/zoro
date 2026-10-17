@@ -20,6 +20,12 @@ public class AttendanceService {
     private final com.zoroacademy.repository.StudentCourseBatchRepository studentCourseBatchRepository;
     private final com.zoroacademy.repository.CourseRepository courseRepository;
     private final com.zoroacademy.repository.BatchRepository batchRepository;
+    private final com.zoroacademy.repository.AttendanceChangeRepository attendanceChangeRepository;
+
+    @org.springframework.beans.factory.annotation.Value("${attendance.correction-window-minutes:60}")
+    private int correctionWindowMinutes = 60;
+
+    private java.time.Clock clock = java.time.Clock.system(com.zoroacademy.util.ScheduleTimeUtil.KOLKATA_ZONE);
 
     @org.springframework.beans.factory.annotation.Autowired
     public AttendanceService(AttendanceRecordRepository attendanceRepository,
@@ -28,7 +34,8 @@ public class AttendanceService {
                              com.zoroacademy.repository.ScheduleRepository scheduleRepository,
                              @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.StudentCourseBatchRepository studentCourseBatchRepository,
                              @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.CourseRepository courseRepository,
-                             @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.BatchRepository batchRepository) {
+                             @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.BatchRepository batchRepository,
+                             @org.springframework.beans.factory.annotation.Autowired(required = false) com.zoroacademy.repository.AttendanceChangeRepository attendanceChangeRepository) {
         this.attendanceRepository = attendanceRepository;
         this.trainerAttendanceRepository = trainerAttendanceRepository;
         this.userRepository = userRepository;
@@ -36,12 +43,29 @@ public class AttendanceService {
         this.studentCourseBatchRepository = studentCourseBatchRepository;
         this.courseRepository = courseRepository;
         this.batchRepository = batchRepository;
+        this.attendanceChangeRepository = attendanceChangeRepository;
     }
 
     public AttendanceService(AttendanceRecordRepository attendanceRepository,
                              com.zoroacademy.repository.UserRepository userRepository,
                              com.zoroacademy.repository.ScheduleRepository scheduleRepository) {
-        this(attendanceRepository, null, userRepository, scheduleRepository, null, null, null);
+        this(attendanceRepository, null, userRepository, scheduleRepository, null, null, null, null);
+    }
+
+    public void setClock(java.time.Clock clock) {
+        this.clock = clock;
+    }
+
+    public java.time.Clock getClock() {
+        return this.clock;
+    }
+
+    public void setCorrectionWindowMinutes(int minutes) {
+        this.correctionWindowMinutes = minutes;
+    }
+
+    public int getCorrectionWindowMinutes() {
+        return this.correctionWindowMinutes;
     }
 
     public void enrichAttendanceRecord(AttendanceRecord r) {
@@ -430,6 +454,107 @@ public class AttendanceService {
         record.setUpdatedAt(java.time.LocalDateTime.now());
         TrainerAttendanceRecord saved = trainerAttendanceRepository.save(record);
         enrichTrainerAttendanceRecord(saved);
+        return saved;
+    }
+
+    @Transactional
+    public AttendanceRecord correctStudentAttendance(String scheduleId, String studentId, String newStatus, String remark, String changedBy) {
+        if (scheduleId == null || scheduleId.isBlank()) {
+            throw new com.zoroacademy.exception.BadRequestException("Schedule ID is required");
+        }
+        if (studentId == null || studentId.isBlank()) {
+            throw new com.zoroacademy.exception.BadRequestException("Student ID is required");
+        }
+        if (newStatus == null || (!newStatus.equalsIgnoreCase("Present") && !newStatus.equalsIgnoreCase("Absent"))) {
+            throw new com.zoroacademy.exception.BadRequestException("Status must be either 'Present' or 'Absent'");
+        }
+        if (remark == null || remark.trim().isBlank()) {
+            throw new com.zoroacademy.exception.BadRequestException("Remark is mandatory when correcting attendance status");
+        }
+        if (scheduleRepository == null) {
+            throw new IllegalStateException("Schedule repository is not configured");
+        }
+
+        com.zoroacademy.entity.Schedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new com.zoroacademy.exception.BadRequestException("Schedule not found: " + scheduleId));
+
+        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(this.clock.withZone(com.zoroacademy.util.ScheduleTimeUtil.KOLKATA_ZONE));
+        java.time.ZonedDateTime end = com.zoroacademy.util.ScheduleTimeUtil.getSessionEnd(schedule.getDate(), schedule.getTime());
+
+        if (end == null) {
+            throw new com.zoroacademy.exception.BadRequestException("Unable to determine session end time for schedule: " + scheduleId);
+        }
+
+        if (now.isBefore(end)) {
+            throw new com.zoroacademy.exception.BadRequestException("Correction window opens only after the session has ended");
+        }
+
+        java.time.ZonedDateTime windowEnd = end.plusMinutes(this.correctionWindowMinutes);
+        if (now.isAfter(windowEnd)) {
+            throw new com.zoroacademy.exception.BadRequestException("Correction window of " + this.correctionWindowMinutes + " minutes has expired");
+        }
+
+        String normalizedStatus = newStatus.substring(0, 1).toUpperCase() + newStatus.substring(1).toLowerCase();
+        java.time.LocalDateTime nowLocal = java.time.LocalDateTime.now(this.clock.withZone(com.zoroacademy.util.ScheduleTimeUtil.KOLKATA_ZONE));
+
+        AttendanceRecord record = attendanceRepository.findByStudentIdAndScheduleId(studentId, scheduleId).orElse(null);
+        String originalStatus;
+
+        if (record != null) {
+            originalStatus = record.getOriginalStatus() != null ? record.getOriginalStatus() : record.getStatus();
+            if (record.getOriginalStatus() == null) {
+                record.setOriginalStatus(record.getStatus());
+            }
+            record.setStatus(normalizedStatus);
+            record.setRemarks(remark.trim());
+            record.setRemarkBy(changedBy != null ? changedBy : "Trainer");
+            record.setRemarkAt(nowLocal);
+            record.setStatusChangedBy(changedBy != null ? changedBy : "Trainer");
+            record.setStatusChangedAt(nowLocal);
+        } else {
+            originalStatus = "Absent";
+            String stName = userRepository != null
+                    ? userRepository.findById(studentId).map(com.zoroacademy.entity.User::getName).orElse("Student")
+                    : "Student";
+
+            record = AttendanceRecord.builder()
+                    .id("att_" + java.util.UUID.randomUUID())
+                    .scheduleId(schedule.getId())
+                    .studentId(studentId)
+                    .studentName(stName)
+                    .courseId(schedule.getCourseId())
+                    .batchId(schedule.getBatchId())
+                    .date(schedule.getDate())
+                    .status(normalizedStatus)
+                    .originalStatus("Absent")
+                    .remarks(remark.trim())
+                    .remarkBy(changedBy != null ? changedBy : "Trainer")
+                    .remarkAt(nowLocal)
+                    .statusChangedBy(changedBy != null ? changedBy : "Trainer")
+                    .statusChangedAt(nowLocal)
+                    .recordedBy("TRAINER_CORRECTION")
+                    .createdAt(nowLocal)
+                    .build();
+        }
+
+        AttendanceRecord saved = attendanceRepository.save(record);
+
+        if (attendanceChangeRepository != null) {
+            com.zoroacademy.entity.AttendanceChange change = com.zoroacademy.entity.AttendanceChange.builder()
+                    .id("attchg_" + java.util.UUID.randomUUID())
+                    .attendanceId(saved.getId())
+                    .scheduleId(scheduleId)
+                    .studentId(studentId)
+                    .originalStatus(originalStatus)
+                    .newStatus(normalizedStatus)
+                    .changedBy(changedBy != null ? changedBy : "Trainer")
+                    .changedAt(nowLocal)
+                    .remark(remark.trim())
+                    .build();
+            attendanceChangeRepository.save(change);
+        }
+
+        enrichAttendanceRecord(saved);
         return saved;
     }
 }

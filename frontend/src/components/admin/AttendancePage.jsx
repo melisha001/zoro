@@ -249,15 +249,68 @@ export default function AdminAttendancePage({ setActiveScreen }) {
     }, 800);
   };
 
-  // Batches filtered by selected course
+  // Filter courses by active tab audience:
+  // Students tab lists ONLY courses whose audience is Student and whose mode is Online or Hybrid;
+  // Trainers tab lists ONLY courses whose audience is Trainer and whose mode is Online or Hybrid.
+  // Recorded courses never appear in either list (filtered out during loadData).
+  const displayedCourses = useMemo(() => {
+    return courses.filter(c => {
+      const aud = (c.audience || 'student').toLowerCase();
+      if (activeTab === 'students') {
+        return aud === 'student';
+      } else {
+        return aud === 'trainer';
+      }
+    });
+  }, [courses, activeTab]);
+
+  // Tab switch handler resets selected course, batch, and search so other audience values never linger
+  const handleTabSwitch = (tab) => {
+    if (tab === activeTab) return;
+    setActiveTab(tab);
+    setSelectedCourse('');
+    setSelectedBatch('');
+    setSearchSchedule('');
+  };
+
+  // Batches of the chosen course for the Students tab
   const availableBatches = useMemo(() => {
-    if (!selectedCourse) return batches;
-    return batches.filter(b => b.courseName === selectedCourse || b.courseId === selectedCourse);
-  }, [batches, selectedCourse]);
+    if (!selectedCourse) return [];
+    const selC = courses.find(c => c.title === selectedCourse || c.id === selectedCourse);
+    return batches.filter(b => 
+      (selC && b.courseId === selC.id) || 
+      b.courseName === selectedCourse || 
+      b.courseId === selectedCourse
+    );
+  }, [batches, courses, selectedCourse]);
+
+  // All student batches for grouping when no specific course is selected
+  const studentBatches = useMemo(() => {
+    const studentCourseIds = new Set(courses.filter(c => (c.audience || 'student').toLowerCase() === 'student').map(c => c.id));
+    const studentCourseTitles = new Set(courses.filter(c => (c.audience || 'student').toLowerCase() === 'student').map(c => (c.title || '').toLowerCase().trim()));
+    return batches.filter(b => 
+      (b.courseId && studentCourseIds.has(b.courseId)) ||
+      (b.courseName && studentCourseTitles.has((b.courseName || '').toLowerCase().trim()))
+    );
+  }, [batches, courses]);
 
   // Schedules matching filters
   const filteredSchedules = useMemo(() => {
+    const validCourseIds = new Set(displayedCourses.map(c => c.id));
+    const validCourseTitles = new Set(displayedCourses.map(c => (c.title || '').toLowerCase().trim()));
+
     return schedules.filter(sch => {
+      // Must match audience of active tab
+      const isTrainerSch = (sch.audience || '').toUpperCase() === 'TRAINER';
+      if (activeTab === 'students' && isTrainerSch) return false;
+      if (activeTab === 'trainers' && !isTrainerSch) return false;
+
+      // Must belong to one of the displayed courses
+      const matchesCourse = 
+        (sch.courseId && validCourseIds.has(sch.courseId)) ||
+        (sch.course && validCourseTitles.has((sch.course || '').toLowerCase().trim()));
+      if (!matchesCourse) return false;
+
       if (!filterAllDates && selectedDate && sch.date !== selectedDate) {
         return false;
       }
@@ -272,7 +325,7 @@ export default function AdminAttendancePage({ setActiveScreen }) {
       }
       return true;
     });
-  }, [schedules, filterAllDates, selectedDate, selectedCourse, selectedBatch, searchSchedule]);
+  }, [schedules, displayedCourses, activeTab, filterAllDates, selectedDate, selectedCourse, selectedBatch, searchSchedule]);
 
   // A) STUDENTS ATTENDANCE TAB: Group BATCH-wise (Requirement P2.A.1)
   const batchWiseGroups = useMemo(() => {
@@ -280,7 +333,7 @@ export default function AdminAttendancePage({ setActiveScreen }) {
     // Batches to consider:
     const targetBatches = selectedBatch 
       ? availableBatches.filter(b => b.name === selectedBatch || b.id === selectedBatch)
-      : availableBatches;
+      : (selectedCourse ? availableBatches : studentBatches);
 
     targetBatches.forEach(batch => {
       // Find sessions for this batch
@@ -310,14 +363,14 @@ export default function AdminAttendancePage({ setActiveScreen }) {
     });
 
     return groups;
-  }, [availableBatches, filteredSchedules, selectedBatch, students]);
+  }, [availableBatches, studentBatches, filteredSchedules, selectedBatch, selectedCourse, students]);
 
   // B) TRAINERS ATTENDANCE TAB: Group COURSE-wise (Requirement P2.B.1)
   const courseWiseGroups = useMemo(() => {
     const groups = [];
     const targetCourses = selectedCourse
-      ? courses.filter(c => c.title === selectedCourse || c.id === selectedCourse)
-      : courses;
+      ? displayedCourses.filter(c => c.title === selectedCourse || c.id === selectedCourse)
+      : displayedCourses;
 
     targetCourses.forEach(course => {
       const courseSchedules = filteredSchedules.filter(sch =>
@@ -333,7 +386,7 @@ export default function AdminAttendancePage({ setActiveScreen }) {
     });
 
     return groups;
-  }, [courses, filteredSchedules, selectedCourse]);
+  }, [displayedCourses, filteredSchedules, selectedCourse]);
 
   // Summary Metrics: Students
   const studentMetrics = useMemo(() => {
@@ -484,7 +537,7 @@ export default function AdminAttendancePage({ setActiveScreen }) {
       {/* TOP SWITCH: [Students Attendance | Trainers Attendance] */}
       <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs flex max-w-md">
         <button
-          onClick={() => setActiveTab('students')}
+          onClick={() => handleTabSwitch('students')}
           className={`flex-1 py-3 px-6 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 cursor-pointer ${
             activeTab === 'students'
               ? 'bg-[#0F52BA] text-white shadow-md'
@@ -496,7 +549,7 @@ export default function AdminAttendancePage({ setActiveScreen }) {
         </button>
 
         <button
-          onClick={() => setActiveTab('trainers')}
+          onClick={() => handleTabSwitch('trainers')}
           className={`flex-1 py-3 px-6 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 cursor-pointer ${
             activeTab === 'trainers'
               ? 'bg-[#0F52BA] text-white shadow-md'
@@ -548,8 +601,8 @@ export default function AdminAttendancePage({ setActiveScreen }) {
             }}
             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
           >
-            <option value="">All Online & Hybrid Courses</option>
-            {courses.map(c => (
+            <option value="">{activeTab === 'students' ? 'All Student Courses (Online & Hybrid)' : 'All Trainer Courses (Online & Hybrid)'}</option>
+            {displayedCourses.map(c => (
               <option key={c.id} value={c.title}>{c.title} ({c.mode})</option>
             ))}
           </select>
@@ -563,10 +616,13 @@ export default function AdminAttendancePage({ setActiveScreen }) {
             </label>
             <select
               value={selectedBatch}
+              disabled={!selectedCourse}
               onChange={(e) => setSelectedBatch(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 cursor-pointer"
+              className={`w-full px-3.5 py-2.5 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 ${
+                !selectedCourse ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-50 cursor-pointer'
+              }`}
             >
-              <option value="">All Batches</option>
+              <option value="">{selectedCourse ? 'All Batches of this Course' : 'Select a course first'}</option>
               {availableBatches.map(b => (
                 <option key={b.id} value={b.name}>{b.name} ({b.courseName})</option>
               ))}
@@ -745,6 +801,11 @@ export default function AdminAttendancePage({ setActiveScreen }) {
                                             <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 rounded-full text-[10px] font-black uppercase">
                                               <span>Upcoming</span>
                                             </span>
+                                          )}
+                                          {info.record?.statusChangedBy && (
+                                            <div className="text-[10px] text-amber-700 font-bold mt-1">
+                                              Changed by trainer{info.record?.originalStatus ? ` (originally ${info.record.originalStatus})` : ''}
+                                            </div>
                                           )}
                                         </td>
                                         <td className="py-3 px-3">

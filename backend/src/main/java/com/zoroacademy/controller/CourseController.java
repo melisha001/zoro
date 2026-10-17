@@ -63,6 +63,23 @@ public class CourseController {
     public ApiResponse<Course> getCourseById(@PathVariable String id,
                                              @org.springframework.security.core.annotation.AuthenticationPrincipal com.zoroacademy.security.UserPrincipal principal) {
         Course course = courseService.getCourseById(id);
+        boolean isTrainerAudience = course != null && "trainer".equalsIgnoreCase(course.getAudience());
+        boolean isAdmin = principal != null && ("ADMIN".equalsIgnoreCase(principal.getRole()) || "SUPER_ADMIN".equalsIgnoreCase(principal.getRole()));
+
+        if (isAdmin) {
+            if (course.getModules() != null) {
+                course.getModules().forEach(m -> m.setLocked(false));
+            }
+            return ApiResponse.ok(course);
+        }
+
+        if (isTrainerAudience) {
+            String trainerId = principal != null ? principal.getId() : null;
+            String trainerEmail = principal != null ? principal.getEmail() : null;
+            Course trainerCourse = courseService.getCourseForStudent(course.getId(), trainerId, trainerEmail);
+            return ApiResponse.ok(trainerCourse);
+        }
+
         boolean isStaff = isStaffUser();
         boolean isEnrolled = isEnrolledStudent(course.getId());
 

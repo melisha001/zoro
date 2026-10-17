@@ -8,8 +8,10 @@ import { getCourses } from '../../api/courseApi';
 import { getTrainers } from '../../api/userApi';
 import { uploadFile, openFileWithSignedLink } from '../../api/fileApi';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import { useDialog } from '../../context/DialogContext';
 
 export default function AdminTrainerAssignmentsPage() {
+  const { showError } = useDialog();
   const [submissions, setSubmissions] = useState([]);
   const [courses, setCourses] = useState([]);
   const [trainers, setTrainers] = useState([]);
@@ -79,7 +81,7 @@ export default function AdminTrainerAssignmentsPage() {
       });
     } catch (err) {
       console.error('File upload failed:', err);
-      alert('Failed to upload corrected file: ' + (err.message || 'Unknown error'));
+      showError('Failed to upload corrected file: ' + (err.message || 'Unknown error'), 'Upload Error');
     } finally {
       setUploadingCorrection(false);
     }
@@ -106,11 +108,11 @@ export default function AdminTrainerAssignmentsPage() {
         closeReviewModal();
         await loadData();
       } else {
-        alert(res.message || 'Failed to submit review');
+        showError(res.message || 'Failed to submit review', 'Review Failed');
       }
     } catch (err) {
       console.error('Review submission error:', err);
-      alert('Error saving review: ' + (err.message || 'Unknown error'));
+      showError('Error saving review: ' + (err.message || 'Unknown error'), 'Save Error');
     } finally {
       setSubmittingReview(false);
     }

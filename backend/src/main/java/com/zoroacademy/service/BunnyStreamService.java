@@ -7,6 +7,7 @@ import com.zoroacademy.dto.BunnyWebhookPayload;
 import com.zoroacademy.dto.VideoPlaybackResponse;
 import com.zoroacademy.dto.VideoUploadRequest;
 import com.zoroacademy.dto.VideoUploadResponse;
+import com.zoroacademy.entity.Course;
 import com.zoroacademy.entity.CourseModule;
 import com.zoroacademy.entity.Video;
 import com.zoroacademy.repository.CourseModuleRepository;
@@ -34,6 +35,15 @@ public class BunnyStreamService {
     private final com.zoroacademy.repository.AssignmentSubmissionRepository submissionRepository;
     private final com.zoroacademy.repository.StudentModuleProgressRepository studentModuleProgressRepository;
     private final com.zoroacademy.repository.StudentProgressRepository studentProgressRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.zoroacademy.repository.CourseRepository courseRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.zoroacademy.repository.TrainerCourseRequestRepository trainerCourseRequestRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.zoroacademy.repository.UserRepository userRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     public BunnyStreamService(BunnyStreamProperties properties,
@@ -297,8 +307,46 @@ public class BunnyStreamService {
         boolean isAuthorized = false;
         String authMessage = "Authorized";
 
-        if ("ADMIN".equalsIgnoreCase(userRole) || "TRAINER".equalsIgnoreCase(userRole)) {
+        if ("ADMIN".equalsIgnoreCase(userRole) || "SUPER_ADMIN".equalsIgnoreCase(userRole)) {
             isAuthorized = true;
+        } else if ("TRAINER".equalsIgnoreCase(userRole)) {
+            Course course = courseRepository != null ? courseRepository.findById(courseId).orElse(null) : null;
+            boolean isTrainerAudience = course != null && "trainer".equalsIgnoreCase(course.getAudience());
+            if (isTrainerAudience) {
+                // Trainer is a learner on this course: verify approved access/enrollment and sequential lock
+                boolean approved = false;
+                if (authenticatedUserId != null && !authenticatedUserId.isBlank()) {
+                    if (trainerCourseRequestRepository != null) {
+                        approved = trainerCourseRequestRepository.findByTrainerIdAndCourseIdAndStatusIgnoreCase(authenticatedUserId, courseId, "Approved").isPresent();
+                        if (!approved && userEmail != null) {
+                            approved = trainerCourseRequestRepository.findByCourseId(courseId).stream()
+                                    .anyMatch(r -> userEmail.equalsIgnoreCase(r.getTrainerEmail()) && "Approved".equalsIgnoreCase(r.getStatus()));
+                        }
+                    }
+                    if (!approved && course != null && course.getTrainerId() != null && course.getTrainerId().equals(authenticatedUserId)) {
+                        approved = true;
+                    }
+                    if (!approved && enrollmentRepository != null) {
+                        approved = enrollmentRepository.existsByStudentIdAndCourseId(authenticatedUserId, courseId)
+                                || (userEmail != null && enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(userEmail, courseId))
+                                || enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(authenticatedUserId, courseId);
+                    }
+                }
+                if (approved) {
+                    if (moduleId != null && isModuleLocked(courseId, moduleId, authenticatedUserId, userEmail)) {
+                        isAuthorized = false;
+                        authMessage = "Access Denied: Complete previous module assignment to unlock.";
+                    } else {
+                        isAuthorized = true;
+                    }
+                } else {
+                    isAuthorized = false;
+                    authMessage = "Access Denied: You do not have approved access to this trainer course.";
+                }
+            } else {
+                // Teaching student-audience course
+                isAuthorized = true;
+            }
         } else if (authenticatedUserId != null && !authenticatedUserId.isBlank()) {
             boolean enrolled = enrollmentRepository.existsByStudentIdAndCourseId(authenticatedUserId, courseId)
                     || (userEmail != null && enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(userEmail, courseId))
@@ -404,6 +452,65 @@ public class BunnyStreamService {
         };
     }
 
+    private boolean isModuleCompleted(CourseModule m, String courseId, String studentId, String studentEmail) {
+        String effectiveStudentId = studentId;
+        String effectiveEmail = studentEmail;
+        if (effectiveStudentId != null && effectiveStudentId.contains("@") && effectiveEmail == null) {
+            effectiveEmail = effectiveStudentId;
+        }
+        if ((effectiveStudentId == null || effectiveStudentId.contains("@")) && effectiveEmail != null && userRepository != null) {
+            effectiveStudentId = userRepository.findByEmailIgnoreCase(effectiveEmail)
+                    .map(com.zoroacademy.entity.User::getId)
+                    .orElse(effectiveStudentId);
+        }
+
+        boolean hasVideo = (m.getVideoStorageRef() != null && !m.getVideoStorageRef().isBlank() && !"null".equalsIgnoreCase(m.getVideoStorageRef().trim()) && !"{}".equals(m.getVideoStorageRef().trim()))
+                || (videoRepository != null && !videoRepository.findByModuleId(m.getId()).isEmpty());
+
+        boolean videoDone = !hasVideo;
+        if (hasVideo) {
+            if (effectiveStudentId != null && studentModuleProgressRepository != null) {
+                java.util.Optional<com.zoroacademy.entity.StudentModuleProgress> smpOpt = studentModuleProgressRepository.findByStudentIdAndModuleId(effectiveStudentId, m.getId());
+                if (smpOpt.isPresent()) {
+                    com.zoroacademy.entity.StudentModuleProgress smp = smpOpt.get();
+                    if (Boolean.TRUE.equals(smp.getVideoCompleted()) || Boolean.TRUE.equals(smp.getCompleted())) {
+                        videoDone = true;
+                    } else if (smp.getWatchedSeconds() != null && smp.getDurationSeconds() != null && smp.getDurationSeconds() > 0) {
+                        int threshold = (int) Math.ceil(smp.getDurationSeconds() * 0.95);
+                        if (smp.getWatchedSeconds() >= threshold) {
+                            videoDone = true;
+                        }
+                    }
+                }
+            }
+            if (!videoDone && effectiveStudentId != null && studentProgressRepository != null) {
+                videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(effectiveStudentId, courseId, m.getId())
+                        .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
+            }
+            if (!videoDone && effectiveEmail != null && studentProgressRepository != null) {
+                videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(effectiveEmail, courseId, m.getId())
+                        .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
+            }
+        }
+
+        boolean hasAssignment = (m.getAssignmentFileUrl() != null && !m.getAssignmentFileUrl().isBlank())
+                || (m.getAssignmentFileName() != null && !m.getAssignmentFileName().isBlank());
+
+        boolean assignmentDone = !hasAssignment;
+        if (hasAssignment) {
+            if (submissionRepository != null) {
+                if (effectiveStudentId != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentId("module", m.getId(), effectiveStudentId).isEmpty()) {
+                    assignmentDone = true;
+                }
+                if (!assignmentDone && effectiveEmail != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentEmailIgnoreCase("module", m.getId(), effectiveEmail).isEmpty()) {
+                    assignmentDone = true;
+                }
+            }
+        }
+
+        return videoDone && assignmentDone;
+    }
+
     private boolean isModuleLocked(String courseId, String moduleId, String studentId, String studentEmail) {
         if (moduleId == null || courseId == null) return false;
         List<CourseModule> modules = courseModuleRepository.findByCourseIdOrderByModuleOrderAsc(courseId);
@@ -421,39 +528,8 @@ public class BunnyStreamService {
                 return !prevCompleted;
             }
 
-            boolean hasAssignment = (m.getAssignmentFileUrl() != null && !m.getAssignmentFileUrl().isBlank())
-                    || (m.getAssignmentFileName() != null && !m.getAssignmentFileName().isBlank());
-
-            if (hasAssignment) {
-                boolean submitted = false;
-                if (submissionRepository != null) {
-                    if (studentId != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentId("module", m.getId(), studentId).isEmpty()) {
-                        submitted = true;
-                    }
-                    if (!submitted && studentEmail != null && !submissionRepository.findBySourceTypeAndSourceIdAndStudentEmailIgnoreCase("module", m.getId(), studentEmail).isEmpty()) {
-                        submitted = true;
-                    }
-                }
-                if (!submitted) {
-                    prevCompleted = false;
-                }
-            } else {
-                boolean videoDone = false;
-                if (studentId != null && studentModuleProgressRepository != null) {
-                    videoDone = studentModuleProgressRepository.findByStudentIdAndModuleId(studentId, m.getId())
-                            .map(smp -> Boolean.TRUE.equals(smp.getCompleted())).orElse(false);
-                }
-                if (!videoDone && studentId != null && studentProgressRepository != null) {
-                    videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(studentId, courseId, m.getId())
-                            .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
-                }
-                if (!videoDone && studentEmail != null && studentProgressRepository != null) {
-                    videoDone = studentProgressRepository.findByStudentIdIgnoreCaseAndCourseIdAndModuleId(studentEmail, courseId, m.getId())
-                            .map(sp -> "Completed".equalsIgnoreCase(sp.getStatus())).orElse(false);
-                }
-                if (!videoDone) {
-                    prevCompleted = false;
-                }
+            if (!isModuleCompleted(m, courseId, studentId, studentEmail)) {
+                prevCompleted = false;
             }
 
             if (!prevCompleted) {

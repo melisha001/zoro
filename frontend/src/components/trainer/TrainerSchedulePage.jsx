@@ -13,6 +13,7 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
   const [viewerFile, setViewerFile] = useState(null);
   const [actionMsg, setActionMsg] = useState('');
   const [actionError, setActionError] = useState('');
+  const [selectedCourse, setSelectedCourse] = useState('');
   const [, setTimerTick] = useState(0);
 
   const trainerName = user?.name || '';
@@ -41,7 +42,23 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
     setTimerTick(prev => prev + 1);
   }, 15000);
 
-  const sortedSchedules = sortSchedulesChronologically(schedules);
+  // Show ONLY sessions the trainer teaches (student-audience sessions whose trainerId is this trainer)
+  const taughtSchedules = schedules.filter(item => {
+    const aud = (item.audience || 'STUDENT').toUpperCase();
+    if (aud !== 'STUDENT') return false;
+
+    const isInstructor = (item.trainerId && item.trainerId === trainerId) ||
+                         (item.trainer && item.trainer.toLowerCase().trim() === trainerName.toLowerCase().trim());
+    return isInstructor;
+  });
+
+  const availableCourses = Array.from(new Set(taughtSchedules.map(s => s.course).filter(Boolean)));
+
+  const filteredSchedules = selectedCourse
+    ? taughtSchedules.filter(s => s.course === selectedCourse)
+    : taughtSchedules;
+
+  const sortedSchedules = sortSchedulesChronologically(filteredSchedules);
 
   const getAttachedResource = (item, type) => {
     if (type === 'assignment') {
@@ -71,11 +88,11 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
     return null;
   };
 
-  const handleStartOrJoin = async (item, isAttendee) => {
+  const handleStartSession = async (item) => {
     setActionMsg('');
     setActionError('');
     try {
-      const res = isAttendee ? await joinSchedule(item.id) : await startSchedule(item.id);
+      const res = await startSchedule(item.id);
       if (res && res.success) {
         const finalUrl = res.data?.meetUrl || res.meetUrl || item.meetLink || item.googleMeetUrl;
         setActionMsg(`Session launched! Attendance automatically recorded as PRESENT.`);
@@ -85,11 +102,11 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
         }
         await loadSchedules();
       } else {
-        setActionError(res?.message || 'Unable to start or join session');
+        setActionError(res?.message || 'Unable to start session');
         setTimeout(() => setActionError(''), 5000);
       }
     } catch (err) {
-      setActionError(err?.message || 'Error occurred while starting/joining session');
+      setActionError(err?.message || 'Error occurred while starting session');
       setTimeout(() => setActionError(''), 5000);
     }
   };
@@ -100,8 +117,23 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">My Schedule</h1>
-          <p className="text-xs text-slate-500 font-semibold">Assigned teaching sessions and legitimate trainer program classes for {trainerName}.</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">My Teaching Schedule</h1>
+          <p className="text-xs text-slate-500 font-semibold">Live teaching sessions and classroom resources assigned to {trainerName}.</p>
+        </div>
+
+        {/* Course Filter */}
+        <div className="flex items-center space-x-2">
+          <BookOpen className="w-4 h-4 text-purple-700 shrink-0" />
+          <select
+            value={selectedCourse}
+            onChange={(e) => setSelectedCourse(e.target.value)}
+            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:border-purple-600 cursor-pointer"
+          >
+            <option value="">All Taught Courses ({taughtSchedules.length})</option>
+            {availableCourses.map(cName => (
+              <option key={cName} value={cName}>{cName}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -127,8 +159,16 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div className="flex items-center space-x-3">
             <CalendarIcon className="w-5 h-5 text-purple-700" />
-            <h3 className="text-base font-black text-slate-900">Timetable & Session Resources</h3>
+            <h3 className="text-base font-black text-slate-900">Assigned Classes & Resources</h3>
           </div>
+          {selectedCourse && (
+            <button
+              onClick={() => setSelectedCourse('')}
+              className="text-xs text-purple-700 font-extrabold hover:underline"
+            >
+              Clear Filter
+            </button>
+          )}
         </div>
 
         {/* Schedule Cards List */}
@@ -139,7 +179,7 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
             <div className="p-12 text-center text-xs font-bold text-slate-400">Loading assigned schedules...</div>
           ) : sortedSchedules.length === 0 ? (
             <div className="p-12 text-center text-xs font-bold text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
-              No sessions currently scheduled for {trainerName}.
+              No teaching sessions currently scheduled for {trainerName}{selectedCourse ? ` in ${selectedCourse}` : ''}.
             </div>
           ) : (
             sortedSchedules.map((item) => {
@@ -147,11 +187,6 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
               const ws = getAttachedResource(item, 'worksheet');
               const notes = getAttachedResource(item, 'notes');
               const hasResources = Boolean(asg || ws || notes);
-
-              const isTrainerAudience = (item.audience || '').toUpperCase() === 'TRAINER';
-              const isInstructor = (item.trainerId && item.trainerId === trainerId) ||
-                                   (item.trainer && item.trainer.toLowerCase().trim() === trainerName.toLowerCase().trim());
-              const isAttendee = isTrainerAudience && !isInstructor;
 
               const joinState = getScheduleJoinState(item);
 
@@ -171,10 +206,8 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
                             {item.date}
                           </span>
                         )}
-                        <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase border ${
-                          isAttendee ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-blue-50 text-blue-800 border-blue-200'
-                        }`}>
-                          {isAttendee ? 'Trainer Course (Learner)' : 'Teaching Session'}
+                        <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase border bg-blue-50 text-blue-800 border-blue-200">
+                          Teaching Session
                         </span>
                       </div>
                       <h5 className="text-base font-black text-slate-900 pt-1">{item.title}</h5>
@@ -186,18 +219,16 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
                       </p>
                     </div>
 
-                    {/* Action Button: Start Session vs Join Session */}
-                    <div className="self-start sm:self-auto min-w-[180px]">
+                    {/* Action Button: Start Session (enabled only inside window, disabled after end) */}
+                    <div className="self-start sm:self-auto min-w-[200px]">
                       {joinState.enabled ? (
                         <button 
                           type="button"
-                          onClick={() => handleStartOrJoin(item, isAttendee)}
-                          className={`w-full py-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-2 shadow-sm transition-transform active:scale-95 cursor-pointer text-white ${
-                            isAttendee ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-purple-700 hover:bg-purple-800'
-                          }`}
+                          onClick={() => handleStartSession(item)}
+                          className="w-full py-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-2 shadow-sm transition-transform active:scale-95 cursor-pointer text-white bg-purple-700 hover:bg-purple-800"
                         >
                           <Video className="w-4 h-4 fill-current" />
-                          <span>{isAttendee ? 'Join Session' : 'Start Session'}</span>
+                          <span>Start Session (Google Meet)</span>
                         </button>
                       ) : (
                         <button 
@@ -206,7 +237,7 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
                           className="w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 bg-slate-200/80 text-slate-400 border border-slate-300 cursor-not-allowed"
                         >
                           <Lock className="w-3.5 h-3.5" />
-                          <span className="truncate">{joinState.label.replace('Join opens at', isAttendee ? 'Join opens at' : 'Starts at')}</span>
+                          <span className="truncate">{joinState.label.replace('Join opens at', 'Starts at')}</span>
                         </button>
                       )}
                     </div>

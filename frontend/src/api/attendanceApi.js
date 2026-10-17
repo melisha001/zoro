@@ -59,6 +59,23 @@ export const updateStudentRemark = async ({ scheduleId, studentId, remark, id })
   return apiResponse(null, false, res?.message || 'Failed to update student remark');
 };
 
+export const correctStudentAttendance = async ({ scheduleId, studentId, status, remark }) => {
+  if (!scheduleId) {
+    return apiResponse(null, false, 'Schedule ID is required');
+  }
+  if (!studentId) {
+    return apiResponse(null, false, 'Student ID is required');
+  }
+  if (!remark || !remark.trim()) {
+    return apiResponse(null, false, 'Remark is mandatory when correcting attendance status');
+  }
+  const res = await apiPut('/attendance/correction', { scheduleId, studentId, status, remark });
+  if (res.success && res.data) {
+    return apiResponse(res.data, true, 'Attendance corrected successfully');
+  }
+  return apiResponse(null, false, res?.message || 'Failed to correct attendance');
+};
+
 export const updateTrainerRemark = async ({ scheduleId, trainerId, remark, id }) => {
   if (!trainerId) {
     return apiResponse(null, false, 'Trainer ID is required');
