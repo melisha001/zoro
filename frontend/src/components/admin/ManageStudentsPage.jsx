@@ -12,6 +12,7 @@ import { exportToExcel } from '../../utils/excelExporter';
 import { sanitizePhone, validatePhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
 import PhoneInput from '../common/PhoneInput';
 import ConfirmModal from '../common/ConfirmModal';
+import PageLoader from '../common/PageLoader';
 import { useDialog } from '../../context/DialogContext';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
@@ -1114,8 +1115,8 @@ export default function ManageStudentsPage() {
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                   {loadingRecordedStudents ? (
                     <tr>
-                      <td colSpan="7" className="py-10 text-center text-slate-400 font-bold text-xs">
-                        Loading enrolled students...
+                      <td colSpan="7" className="py-8 text-center">
+                        <PageLoader message="Loading enrolled students..." />
                       </td>
                     </tr>
                   ) : filteredRecordedStudents.length > 0 ? (

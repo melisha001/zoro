@@ -241,6 +241,28 @@ export const updateTrainerCourseRequestStatus = async (requestId, status) => {
   return apiResponse(false, false, res?.message || 'Failed to update status');
 };
 
+export const deleteTrainerCourseRequest = async (requestId) => {
+  if (!requestId) {
+    return apiResponse(false, false, 'Request ID is required');
+  }
+  const res = await apiDelete(`/trainer-course-requests/${encodeURIComponent(requestId)}`);
+  if (res.success) {
+    return apiResponse(true, true, res.message || 'Request deleted successfully');
+  }
+  return apiResponse(false, false, res?.message || 'Failed to delete request');
+};
+
+export const getCourseDeletionImpact = async (courseId) => {
+  if (!courseId) {
+    return apiResponse(null, false, 'Course ID is required');
+  }
+  const res = await apiGet(`/courses/${encodeURIComponent(courseId)}/deletion-impact`);
+  if (res.success && res.data) {
+    return apiResponse(res.data);
+  }
+  return apiResponse({ canDelete: false, blockingReasons: [res?.message || 'Failed to check deletion impact'] }, false, res?.message);
+};
+
 export const getCourseStudents = async (courseId) => {
   if (!courseId) {
     return apiResponse([], false, 'Course ID is required');

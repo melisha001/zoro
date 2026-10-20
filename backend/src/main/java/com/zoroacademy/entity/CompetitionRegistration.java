@@ -112,6 +112,10 @@ public class CompetitionRegistration {
         return competition;
     }
 
+    public String getCompetitionId() {
+        return competition != null ? competition.getId() : null;
+    }
+
     public void setCompetition(Competition competition) {
         this.competition = competition;
     }

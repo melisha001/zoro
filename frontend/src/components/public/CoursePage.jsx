@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Layers } from 'lucide-react';
+import { Play, Layers, BookOpen } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
 import { resolveFileUrl } from '../../api/fileApi';
 import SafeImage from '../common/SafeImage';
@@ -68,8 +68,27 @@ export default function CoursePage({ onOpenEnquire }) {
     <div className="bg-slate-50 min-h-screen py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Main Grid: Left Sidebar + Right Course Details */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {courses.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-16 text-center max-w-lg mx-auto shadow-sm my-12">
+            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
+              <BookOpen className="w-10 h-10" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">No courses available right now</h2>
+            <p className="text-sm text-slate-500 max-w-sm mx-auto">
+              We are currently updating our course catalog. Please check back later or get in touch with us!
+            </p>
+            {onOpenEnquire && (
+              <button
+                onClick={onOpenEnquire}
+                className="mt-6 inline-flex items-center justify-center px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                Contact Us
+              </button>
+            )}
+          </div>
+        ) : (
+          /* Main Grid: Left Sidebar + Right Course Details */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* Left Course Selector Sidebar */}
           <div className="lg:col-span-3 space-y-2">
@@ -226,6 +245,7 @@ export default function CoursePage({ onOpenEnquire }) {
           </div>
 
         </div>
+        )}
 
       </div>
     </div>

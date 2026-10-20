@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getSchedules, startSchedule, joinSchedule } from '../../api/scheduleApi';
 import { sortSchedulesChronologically, getScheduleJoinState, syncServerTime, getNowInKolkata } from '../../utils/scheduleSortUtil';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import PageLoader from '../common/PageLoader';
 import { usePolling } from '../../hooks/usePolling';
 
 export default function TrainerSchedulePage({ setActiveScreen }) {
@@ -176,7 +177,9 @@ export default function TrainerSchedulePage({ setActiveScreen }) {
           <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Assigned Classes (Time Slot Ascending)</h4>
           
           {loading ? (
-            <div className="p-12 text-center text-xs font-bold text-slate-400">Loading assigned schedules...</div>
+            <div className="bg-white p-8 rounded-3xl border border-slate-200">
+              <PageLoader message="Loading assigned schedules..." />
+            </div>
           ) : sortedSchedules.length === 0 ? (
             <div className="p-12 text-center text-xs font-bold text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
               No teaching sessions currently scheduled for {trainerName}{selectedCourse ? ` in ${selectedCourse}` : ''}.

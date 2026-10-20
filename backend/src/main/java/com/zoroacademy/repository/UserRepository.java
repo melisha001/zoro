@@ -26,4 +26,10 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     @org.springframework.data.jpa.repository.Query("SELECT COUNT(u) FROM User u JOIN StudentCourseBatch scb ON scb.studentId = u.id WHERE scb.batchId = :batchId AND UPPER(u.role) = 'STUDENT'")
     long countStudentsByBatchId(@org.springframework.data.repository.query.Param("batchId") String batchId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT u FROM User u WHERE UPPER(u.role) = 'STUDENT' AND (u.origin IS NULL OR u.origin != 'COMPETITION' OR EXISTS (SELECT e FROM Enrollment e WHERE e.studentId = u.id AND UPPER(e.status) = 'ACTIVE'))")
+    List<User> findLearningStudents();
+
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(u) FROM User u WHERE UPPER(u.role) = 'STUDENT' AND (u.origin IS NULL OR u.origin != 'COMPETITION' OR EXISTS (SELECT e FROM Enrollment e WHERE e.studentId = u.id AND UPPER(e.status) = 'ACTIVE'))")
+    long countLearningStudents();
 }

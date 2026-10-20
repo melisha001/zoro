@@ -3,6 +3,7 @@ import { X, LogIn, Lock, Mail, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 import { authenticateUser } from '../../api/userApi';
+import ButtonSpinner from '../common/ButtonSpinner';
 
 export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   const { login, authNotice, clearAuthNotice } = useAuth();
@@ -142,14 +143,14 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
             </div>
           </div>
 
-          <button
+          <ButtonSpinner
             type="submit"
-            disabled={loading}
+            loading={loading}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3.5 rounded-xl shadow-lg transition-transform transform active:scale-95 flex items-center justify-center space-x-2 text-sm mt-2 cursor-pointer"
           >
             <LogIn className="w-4 h-4" />
-            <span>{loading ? 'Authenticating...' : 'Sign In to Dashboard'}</span>
-          </button>
+            <span>Sign In to Dashboard</span>
+          </ButtonSpinner>
         </form>
 
         <div className="mt-4 pt-4 border-t border-slate-100 text-center text-xs text-slate-500">

@@ -36,10 +36,17 @@ public class TrainerCourseRequestController {
     @PutMapping("/{id}/status")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<TrainerCourseRequest> updateStatus(@PathVariable String id, @RequestBody Map<String, String> body) {
-        String status = body.get("status");
+        String status = body != null ? body.get("status") : null;
         if (status == null || status.isBlank()) {
             throw new IllegalArgumentException("Status is required");
         }
         return ApiResponse.ok(requestService.updateStatus(id, status), "Request status updated successfully");
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<Boolean> deleteRequest(@PathVariable String id) {
+        requestService.deleteRequest(id);
+        return ApiResponse.ok(true, "Trainer course request deleted successfully");
     }
 }

@@ -115,7 +115,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 1. Strictly Public Endpoints
                         .requestMatchers("/error").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/time").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/time", "/api/auth/check-email").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/enquiries", "/api/enquiries/").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/courses/*/students").hasAnyRole("ADMIN", "SUPER_ADMIN", "TRAINER")
@@ -151,7 +151,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/batches/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/batches/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/batches/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/competitions").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/competitions", "/api/competitions/*/modules", "/api/competitions/*/syllabus", "/api/competitions/*/guidance-videos", "/api/competitions/*/study-materials", "/api/competitions/assessments/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/competitions/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/competitions/**").hasRole("ADMIN")
                         .requestMatchers("/api/competitions/registrations", "/api/competitions/registrations/**").hasRole("ADMIN")

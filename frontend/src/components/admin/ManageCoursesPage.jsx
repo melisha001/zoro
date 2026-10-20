@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, BookOpen, Edit, Layers, Trash2, User, Search } from 'lucide-react';
-import { getCourses, deleteCourse } from '../../api/courseApi';
+import { getCourses, deleteCourse, getCourseDeletionImpact } from '../../api/courseApi';
 import ConfirmModal from '../common/ConfirmModal';
+import SkeletonList from '../common/SkeletonList';
 import { resolveFileUrl } from '../../api/fileApi';
 import { useDialog } from '../../context/DialogContext';
 
@@ -65,6 +66,34 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
   useEffect(() => {
     loadCourses();
   }, []);
+
+  const handleInitiateDeleteCourse = async (course) => {
+    try {
+      const impactRes = await getCourseDeletionImpact(course.id);
+      if (impactRes && impactRes.data) {
+        setDeleteModalData({
+          id: course.id,
+          title: course.title,
+          canDelete: impactRes.data.canDelete,
+          blockingReasons: impactRes.data.blockingReasons || []
+        });
+      } else {
+        setDeleteModalData({
+          id: course.id,
+          title: course.title,
+          canDelete: true,
+          blockingReasons: []
+        });
+      }
+    } catch {
+      setDeleteModalData({
+        id: course.id,
+        title: course.title,
+        canDelete: true,
+        blockingReasons: []
+      });
+    }
+  };
 
   const handleConfirmDelete = async () => {
     if (deleteModalData) {
@@ -147,7 +176,7 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-xs font-bold text-slate-400">Loading courses...</div>
+        <SkeletonList count={6} lines={3} />
       ) : filteredCourses.length === 0 ? (
         <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 shadow-sm space-y-3">
           <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
@@ -167,6 +196,10 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
                       src={resolveFileUrl(course.thumbnail)} 
                       alt={course.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = '/assets/course-placeholder.svg';
+                      }}
                     />
                     <div className="absolute top-3 left-3 bg-slate-950/80 text-white text-[10px] font-black px-3 py-1 rounded-full shadow border border-slate-700">
                       {isTrainerCourse ? '🎓 For Trainers' : '👨‍🎓 For Students'}
@@ -240,7 +273,7 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
                     </button>
 
                     <button
-                      onClick={() => setDeleteModalData({ id: course.id, title: course.title })}
+                      onClick={() => handleInitiateDeleteCourse(course)}
                       className="text-xs font-bold text-rose-600 hover:text-rose-800 flex items-center space-x-1 border border-rose-200 bg-rose-50 px-3 py-1.5 rounded-lg hover:bg-rose-100 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -257,9 +290,14 @@ export default function ManageCoursesPage({ _setActiveScreen, setSelectedCourseI
       {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={Boolean(deleteModalData)}
-        title="Delete Course"
-        message={`Are you sure you want to delete course "${deleteModalData?.title}"? This action cannot be undone.`}
+        title={deleteModalData?.canDelete ? "Delete Course" : "Cannot Delete Course"}
+        message={
+          !deleteModalData?.canDelete && deleteModalData?.blockingReasons?.length > 0
+            ? deleteModalData.blockingReasons.join(' ')
+            : `Are you sure you want to delete course "${deleteModalData?.title}"? This action cannot be undone.`
+        }
         confirmText="Delete Course"
+        confirmDisabled={!deleteModalData?.canDelete}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteModalData(null)}
       />

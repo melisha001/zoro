@@ -45,6 +45,12 @@ public class UserService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.zoroacademy.repository.FeePaymentRepository feePaymentRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private TrainerCourseRequestRepository trainerCourseRequestRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AssignmentRepository assignmentRepository;
+
     @org.springframework.beans.factory.annotation.Autowired
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
@@ -189,7 +195,7 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public List<UserDto> getStudents() {
-        return userRepository.findByRoleIgnoreCase("STUDENT")
+        return userRepository.findLearningStudents()
                 .stream().map(this::convertUserToDto).collect(Collectors.toList());
     }
 
@@ -477,6 +483,84 @@ public class UserService {
                 courseMaps, batchMaps, schedMaps);
     }
 
+    @Transactional(readOnly = true)
+    public com.zoroacademy.dto.DeletionImpactDto getTrainerDeletionImpact(String trainerId) {
+        User trainer = userRepository.findById(trainerId)
+                .or(() -> userRepository.findByEmailIgnoreCase(trainerId))
+                .orElseThrow(() -> new com.zoroacademy.exception.ResourceNotFoundException("Trainer not found: " + trainerId));
+
+        boolean canDelete = true;
+        List<String> blockingReasons = new ArrayList<>();
+        Map<String, Long> counts = new HashMap<>();
+        Map<String, List<String>> names = new HashMap<>();
+
+        String tName = trainer.getName() != null ? trainer.getName() : "";
+        String tId = trainer.getId();
+
+        // 1. Courses (assigned trainer OR approved trainer course request)
+        List<Course> directCourses = courseRepository.findByTrainerIdOrAssignedTrainerIgnoreCase(tId, tName);
+        Set<String> courseTitles = directCourses.stream().map(Course::getTitle).filter(Objects::nonNull).collect(Collectors.toSet());
+        if (trainerCourseRequestRepository != null) {
+            List<TrainerCourseRequest> approvedReqs = trainerCourseRequestRepository.findByTrainerIdAndStatusIgnoreCase(tId, "Approved");
+            for (TrainerCourseRequest req : approvedReqs) {
+                if (req.getCourseTitle() != null && !req.getCourseTitle().isBlank()) {
+                    courseTitles.add(req.getCourseTitle());
+                } else {
+                    courseRepository.findById(req.getCourseId()).ifPresent(c -> courseTitles.add(c.getTitle()));
+                }
+            }
+        }
+        counts.put("courses", (long) courseTitles.size());
+        names.put("courses", new ArrayList<>(courseTitles));
+
+        // 2. Batches
+        List<Batch> batches = batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(tId, tName);
+        List<String> batchNames = batches.stream().map(Batch::getName).filter(Objects::nonNull).distinct().toList();
+        counts.put("batches", (long) batchNames.size());
+        names.put("batches", batchNames);
+
+        // 3. Schedules
+        List<Schedule> schedules = scheduleRepository.findByTrainerIdOrTrainerIgnoreCaseOrderByDateAsc(tId, tName);
+        List<String> scheduleTitles = schedules.stream().map(Schedule::getTitle).filter(Objects::nonNull).distinct().toList();
+        counts.put("schedules", (long) scheduleTitles.size());
+        names.put("schedules", scheduleTitles);
+
+        // 4. Doubt duty
+        List<Doubt> doubts = doubtRepository != null ? doubtRepository.findByTrainerId(tId) : Collections.emptyList();
+        List<Doubt> pendingDoubts = doubts.stream().filter(d -> !"Resolved".equalsIgnoreCase(d.getStatus())).toList();
+        counts.put("doubts", (long) pendingDoubts.size());
+
+        // 5. Assignment duty
+        List<Assignment> assignments = assignmentRepository != null ? assignmentRepository.findByTrainerId(tId) : Collections.emptyList();
+        List<String> assignmentTitles = assignments.stream().map(Assignment::getTitle).filter(Objects::nonNull).distinct().toList();
+        counts.put("assignments", (long) assignmentTitles.size());
+        names.put("assignments", assignmentTitles);
+
+        List<String> assignmentsList = new ArrayList<>();
+        if (!batchNames.isEmpty()) {
+            assignmentsList.add("batch(es) " + String.join(", ", batchNames));
+        }
+        if (!courseTitles.isEmpty()) {
+            assignmentsList.add("course(s) " + String.join(", ", courseTitles));
+        }
+        if (!scheduleTitles.isEmpty()) {
+            assignmentsList.add("schedule(s) " + String.join(", ", scheduleTitles));
+        }
+        if (!pendingDoubts.isEmpty()) {
+            assignmentsList.add(pendingDoubts.size() + " doubt duty");
+        }
+        if (!assignmentTitles.isEmpty()) {
+            assignmentsList.add("assignment(s) " + String.join(", ", assignmentTitles));
+        }
+
+        if (!assignmentsList.isEmpty()) {
+            canDelete = false;
+            blockingReasons.add("Assigned to " + String.join(" and ", assignmentsList) + ". Reassign them first.");
+        }
+
+        return new com.zoroacademy.dto.DeletionImpactDto(canDelete, blockingReasons, counts, names);
+    }
+
     @Transactional
     public boolean replaceTrainer(String oldTrainerId, TrainerReplacementRequest request) {
         User oldTrainer = userRepository.findById(oldTrainerId)
@@ -642,9 +726,9 @@ public class UserService {
 
         if (!force) {
             if ("TRAINER".equalsIgnoreCase(user.getRole())) {
-                TrainerDependencyDto dep = getTrainerDependencies(user.getId());
-                if (dep.isHasDependencies()) {
-                    throw new com.zoroacademy.exception.ConflictException("Cannot delete trainer with " + dep.getCourseCount() + " assigned courses, " + dep.getBatchCount() + " batches, and " + dep.getScheduleCount() + " schedules. Reassign them first.");
+                com.zoroacademy.dto.DeletionImpactDto impact = getTrainerDeletionImpact(user.getId());
+                if (!impact.isCanDelete()) {
+                    throw new com.zoroacademy.exception.ConflictException(String.join(" ", impact.getBlockingReasons()));
                 }
             }
 

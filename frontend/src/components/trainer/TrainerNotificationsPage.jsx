@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bell, Calendar, BookOpen, HelpCircle, AlertTriangle, Info, Wallet } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerNotifications } from '../../api/notificationApi';
+import PageLoader from '../common/PageLoader';
 
 export default function TrainerNotificationsPage() {
   const { user } = useAuth();
@@ -70,7 +71,7 @@ export default function TrainerNotificationsPage() {
       {/* Notifications List */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-xs font-bold text-slate-400">Loading notifications...</div>
+          <PageLoader message="Loading notifications..." />
         ) : filteredNotifications.length === 0 ? (
           <div className="p-8 text-center text-xs font-bold text-slate-400">No notifications found.</div>
         ) : (

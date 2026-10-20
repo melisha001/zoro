@@ -7,6 +7,7 @@ import { getBatches } from '../../api/batchApi';
 import { getSchedules } from '../../api/scheduleApi';
 import { exportToExcel } from '../../utils/excelExporter';
 import { getNowInKolkata, getSessionStartDateTime, getSessionEndDateTime, syncServerTime } from '../../utils/scheduleSortUtil';
+import PageLoader from '../common/PageLoader';
 
 export default function AdminAttendancePage({ setActiveScreen }) {
   const [activeTab, setActiveTab] = useState('students'); // 'students' | 'trainers'
@@ -688,8 +689,8 @@ export default function AdminAttendancePage({ setActiveScreen }) {
       {activeTab === 'students' && (
         <div className="space-y-6">
           {loading ? (
-            <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400">
-              Loading automatic student attendance records...
+            <div className="bg-white p-8 rounded-3xl border border-slate-200">
+              <PageLoader message="Loading automatic student attendance records..." />
             </div>
           ) : batchWiseGroups.length === 0 ? (
             <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400 space-y-2">
@@ -855,8 +856,8 @@ export default function AdminAttendancePage({ setActiveScreen }) {
       {activeTab === 'trainers' && (
         <div className="space-y-6">
           {loading ? (
-            <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400">
-              Loading automatic trainer attendance records...
+            <div className="bg-white p-8 rounded-3xl border border-slate-200">
+              <PageLoader message="Loading automatic trainer attendance records..." />
             </div>
           ) : courseWiseGroups.length === 0 ? (
             <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400 space-y-2">

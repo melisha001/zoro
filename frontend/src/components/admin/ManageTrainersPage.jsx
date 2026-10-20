@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Edit, Trash2, X, Plus, Search, Calendar, AlertTriangle, ArrowRight, ShieldAlert, CheckCircle2, Copy, Check, Key, Eye, EyeOff } from 'lucide-react';
-import { getTrainers, createTrainer, updateTrainer, deleteTrainer, updateUserStatus, getTrainerDependencies, replaceTrainer, getAdminVisiblePassword, setAdminUserPassword } from '../../api/userApi';
+import { getTrainers, createTrainer, updateTrainer, deleteTrainer, updateUserStatus, getTrainerDependencies, getTrainerDeletionImpact, replaceTrainer, getAdminVisiblePassword, setAdminUserPassword } from '../../api/userApi';
 import { logActivity } from '../../api/activityLogApi';
 import { sanitizePhone, validatePhone, formatPhone, SUBMIT_PHONE_ERROR } from '../../utils/phoneValidator';
 import ConfirmModal from '../common/ConfirmModal';
@@ -258,20 +258,26 @@ export default function ManageTrainersPage() {
   const handleInitiateDelete = async (trainer) => {
     setDeleteError(null);
     try {
-      const depRes = await getTrainerDependencies(trainer.id);
-      if (depRes.success && depRes.data?.hasDependencies) {
-        setTrainerDepModalData({
-          isOpen: true,
-          trainer,
-          dependencies: depRes.data,
-          action: 'DELETE',
-          replacementTrainerId: ''
+      const impactRes = await getTrainerDeletionImpact(trainer.id);
+      if (impactRes && impactRes.data && !impactRes.data.canDelete) {
+        setDeleteTrainerData({
+          ...trainer,
+          canDelete: false,
+          blockingReasons: impactRes.data.blockingReasons || []
         });
       } else {
-        setDeleteTrainerData(trainer);
+        setDeleteTrainerData({
+          ...trainer,
+          canDelete: true,
+          blockingReasons: []
+        });
       }
-    } catch (err) {
-      setDeleteTrainerData(trainer);
+    } catch {
+      setDeleteTrainerData({
+        ...trainer,
+        canDelete: true,
+        blockingReasons: []
+      });
     }
   };
 
@@ -775,12 +781,17 @@ export default function ManageTrainersPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal (Standard for zero dependencies) */}
+      {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={Boolean(deleteTrainerData)}
-        title="Delete Trainer Account"
-        message={`Are you sure you want to delete account for "${deleteTrainerData?.name}" (${deleteTrainerData?.email})?`}
+        title={deleteTrainerData?.canDelete ? "Delete Trainer Account" : "Cannot Delete Trainer"}
+        message={
+          !deleteTrainerData?.canDelete && deleteTrainerData?.blockingReasons?.length > 0
+            ? deleteTrainerData.blockingReasons.join(' ')
+            : `Are you sure you want to delete account for "${deleteTrainerData?.name}" (${deleteTrainerData?.email})?`
+        }
         confirmText="Delete Trainer"
+        confirmDisabled={!deleteTrainerData?.canDelete}
         error={deleteError}
         onConfirm={handleConfirmDelete}
         onCancel={() => {

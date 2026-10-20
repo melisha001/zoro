@@ -19,6 +19,7 @@ public class UserDto {
     private BigDecimal salaryAmount;
     private String salaryCreditDate;
     private String course;
+    private String origin = "LEARNING";
     @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
     private String password;
     private Boolean mustChangePassword = false;
@@ -80,6 +81,8 @@ public class UserDto {
     public void setMustChangePassword(Boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+    public String getOrigin() { return origin != null ? origin : "LEARNING"; }
+    public void setOrigin(String origin) { this.origin = origin != null ? origin : "LEARNING"; }
     public java.util.List<java.util.Map<String, Object>> getCourseBatches() { return courseBatches; }
     public void setCourseBatches(java.util.List<java.util.Map<String, Object>> courseBatches) { this.courseBatches = courseBatches; }
 
@@ -101,6 +104,7 @@ public class UserDto {
                 .salaryAmount(user.getSalaryAmount())
                 .salaryCreditDate(user.getSalaryCreditDate())
                 .course(user.getCourse())
+                .origin(user.getOrigin())
                 .mustChangePassword(user.getMustChangePassword())
                 .build();
     }
@@ -123,6 +127,7 @@ public class UserDto {
         private BigDecimal salaryAmount;
         private String salaryCreditDate;
         private String course;
+        private String origin = "LEARNING";
         private Boolean mustChangePassword = false;
         private String password;
 
@@ -141,12 +146,14 @@ public class UserDto {
         public Builder salaryAmount(BigDecimal salaryAmount) { this.salaryAmount = salaryAmount; return this; }
         public Builder salaryCreditDate(String salaryCreditDate) { this.salaryCreditDate = salaryCreditDate; return this; }
         public Builder course(String course) { this.course = course; return this; }
+        public Builder origin(String origin) { this.origin = origin != null ? origin : "LEARNING"; return this; }
         public Builder mustChangePassword(Boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; return this; }
         public Builder password(String password) { this.password = password; return this; }
 
         public UserDto build() {
             UserDto dto = new UserDto(id, email, username, name, role, phone, avatar, status, address, joinedOn, specialty, code, salaryAmount, salaryCreditDate, course);
             dto.setPassword(password);
+            dto.setOrigin(origin);
             dto.setMustChangePassword(mustChangePassword);
             return dto;
         }

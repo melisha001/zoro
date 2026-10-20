@@ -14,7 +14,14 @@ export function resolveFileUrl(urlOrPath) {
   if (typeof urlOrPath !== 'string') return '';
 
   const trimmed = urlOrPath.trim();
-  if (!trimmed) return '';
+  // Intercept Bunny CDN URLs (e.g. zoro-academy-files-cdn.b-cdn.net) that contain a file UUID
+  // and resolve them via the reliable backend /api/files/{id} endpoint
+  if (trimmed.includes('.b-cdn.net')) {
+    const uuidMatch = trimmed.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    if (uuidMatch) {
+      return resolveFileUrl(`/api/files/${uuidMatch[0]}`);
+    }
+  }
 
   // Already fully qualified URLs or in-memory blobs
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {

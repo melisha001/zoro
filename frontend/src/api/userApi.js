@@ -210,6 +210,17 @@ export const getTrainerDependencies = async (id) => {
   return apiResponse({ hasDependencies: false, courseCount: 0, batchCount: 0, scheduleCount: 0, courses: [], batches: [], schedules: [] }, false, res.message || 'Failed to fetch dependencies');
 };
 
+export const getTrainerDeletionImpact = async (id) => {
+  if (!id) {
+    return apiResponse(null, false, 'Trainer ID is required');
+  }
+  const res = await apiGet(`/users/trainers/${encodeURIComponent(id)}/deletion-impact`);
+  if (res.success && res.data) {
+    return apiResponse(res.data);
+  }
+  return apiResponse({ canDelete: false, blockingReasons: [res?.message || 'Failed to check deletion impact'] }, false, res?.message);
+};
+
 export const replaceTrainer = async (id, payload) => {
   if (!id) {
     return apiResponse(false, false, 'Trainer ID is required');
@@ -295,4 +306,14 @@ export const findUserByEmail = async (email) => {
   }
 
   return null;
+};
+
+export const checkEmailExists = async (email) => {
+  if (!email || !email.trim()) return false;
+  try {
+    const res = await apiGet(`/auth/check-email?email=${encodeURIComponent(email.trim())}`);
+    return Boolean(res?.data?.exists);
+  } catch (err) {
+    return false;
+  }
 };

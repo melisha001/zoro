@@ -39,6 +39,9 @@ public class User {
     @Column(length = 50)
     private String status = "Active";
 
+    @Column(nullable = false, length = 50)
+    private String origin = "LEARNING";
+
     @Column(columnDefinition = "TEXT")
     private String address;
 
@@ -148,6 +151,14 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public String getOrigin() {
+        return origin != null ? origin : "LEARNING";
+    }
+
+    public void setOrigin(String origin) {
+        this.origin = origin != null ? origin : "LEARNING";
     }
 
     public String getPhone() {
@@ -284,9 +295,15 @@ public class User {
         private BigDecimal salaryAmount = BigDecimal.ZERO;
         private String salaryCreditDate;
         private String course;
+        private String origin = "LEARNING";
         private Boolean mustChangePassword = false;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
+
+        public Builder origin(String origin) {
+            this.origin = origin != null ? origin : "LEARNING";
+            return this;
+        }
 
         public Builder id(String id) {
             this.id = id;
@@ -372,6 +389,7 @@ public class User {
         public User build() {
             User u = new User(id, email, username, password, name, role, phone, avatar, status, address, joinedOn, specialty, code, salaryAmount, salaryCreditDate, course, mustChangePassword, createdAt, updatedAt);
             u.setAdminVisiblePassword(adminVisiblePassword);
+            u.setOrigin(origin != null ? origin : "LEARNING");
             return u;
         }
     }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Building, Check, Save, Globe, Info, Loader2, HardDrive, Trash2, RefreshCw, ShieldAlert, Image as ImageIcon, ArrowUp, ArrowDown, UploadCloud, Eye } from 'lucide-react';
 import { getWebsiteSettings, saveWebsiteSettings, getAllHeroImages, createHeroImage, updateHeroImageOrder, updateHeroImage, deleteHeroImage } from '../../api/websiteSettingsApi';
 import { getStorageMetrics, triggerStorageCleanup, updateStorageSettings } from '../../api/storageApi';
-import { uploadFile } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl } from '../../api/fileApi';
 import { compressHeroImage } from '../../utils/imageCompressor';
 import HeroCarousel from '../public/HeroCarousel';
 import { useDialog } from '../../context/DialogContext';
@@ -1047,9 +1047,13 @@ export default function AdminSettingsPage() {
 
                       <div className="relative w-24 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
                         <img
-                          src={img.url}
+                          src={resolveFileUrl(img.url)}
                           alt={img.altText || 'Hero thumbnail'}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = '/assets/course-placeholder.svg';
+                          }}
                         />
                         <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] font-bold px-1 rounded">
                           #{index + 1}

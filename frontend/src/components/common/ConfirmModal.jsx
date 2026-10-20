@@ -11,8 +11,11 @@ export default function ConfirmModal({
   onCancel,
   onClose,
   error = null,
+  confirmDisabled = false,
+  disabled = false,
   children = null
 }) {
+  const isConfirmDisabled = confirmDisabled || disabled;
   if (!isOpen) return null;
 
   const handleDismiss = () => {
@@ -64,8 +67,13 @@ export default function ConfirmModal({
           </button>
           <button
             type="button"
+            disabled={isConfirmDisabled}
             onClick={onConfirm}
-            className="px-5 py-2.5 text-xs font-black text-white bg-rose-600 hover:bg-rose-700 shadow-md rounded-xl transition-transform active:scale-95 cursor-pointer"
+            className={`px-5 py-2.5 text-xs font-black text-white rounded-xl transition-all ${
+              isConfirmDisabled
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-60'
+                : 'bg-rose-600 hover:bg-rose-700 shadow-md transition-transform active:scale-95 cursor-pointer'
+            }`}
           >
             {confirmText}
           </button>

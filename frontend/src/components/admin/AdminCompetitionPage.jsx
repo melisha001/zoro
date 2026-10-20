@@ -11,6 +11,27 @@ import ConfirmModal from '../common/ConfirmModal';
 import MoneyInput from '../common/MoneyInput';
 import { formatDate } from '../../utils/dateFormatter';
 import { useDialog } from '../../context/DialogContext';
+import AdminCompetitionPortalManagerModal from './AdminCompetitionPortalManagerModal';
+
+const toIsoOrNull = (val) => {
+  if (!val) return null;
+  try {
+    return new Date(val).toISOString();
+  } catch {
+    return null;
+  }
+};
+
+const toLocalInput = (isoStr) => {
+  if (!isoStr) return '';
+  try {
+    const d = new Date(isoStr);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return '';
+  }
+};
 
 export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
   const navigate = useNavigate();
@@ -24,6 +45,7 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
   const [editingComp, setEditingComp] = useState(null);
   const [viewingComp, setViewingComp] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
+  const [managingPortalComp, setManagingPortalComp] = useState(null);
 
   const [bannerPreview, setBannerPreview] = useState('');
   const [rulesFileName, setRulesFileName] = useState('');
@@ -46,7 +68,10 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
     rules: '',
     contactDetails: '',
     bannerUrl: '',
-    rulesPdfUrl: ''
+    rulesPdfUrl: '',
+    finalUnlockAt: '',
+    leaderboardPublishTime: '',
+    answerReviewEnabled: false
   });
 
   const loadData = async () => {
@@ -73,6 +98,10 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
       endTime: '',
       regStartDate: '',
       regEndDate: '',
+      regStartAt: '',
+      regEndAt: '',
+      startAt: '',
+      endAt: '',
       venue: '',
       status: 'Active',
       registrationFee: '',
@@ -80,13 +109,42 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
       rules: '',
       contactDetails: '',
       bannerUrl: '',
-      rulesPdfUrl: ''
+      rulesPdfUrl: '',
+      finalUnlockAt: '',
+      leaderboardPublishTime: '18:00',
+      answerReviewEnabled: false
     });
     setBannerPreview('');
     setRulesFileName('');
     if (rulesFileInputRef.current) {
       rulesFileInputRef.current.value = '';
     }
+  };
+
+  const validateTimings = () => {
+    if (formData.startAt && formData.endAt) {
+      if (new Date(formData.endAt) <= new Date(formData.startAt)) {
+        showWarning('Competition end date/time must be strictly after start date/time', 'Timing Validation');
+        return false;
+      }
+    }
+    if (formData.regEndAt && formData.startAt) {
+      if (new Date(formData.regEndAt) > new Date(formData.startAt)) {
+        showWarning('Registration closes before or when the competition starts', 'Timing Validation');
+        return false;
+      }
+    }
+    if (formData.finalUnlockAt) {
+      if (formData.startAt && new Date(formData.finalUnlockAt) < new Date(formData.startAt)) {
+        showWarning('Final Assessment unlock time must be inside the competition window', 'Timing Validation');
+        return false;
+      }
+      if (formData.endAt && new Date(formData.finalUnlockAt) > new Date(formData.endAt)) {
+        showWarning('Final Assessment unlock time must be inside the competition window', 'Timing Validation');
+        return false;
+      }
+    }
+    return true;
   };
 
   const handleBannerUpload = async (e) => {
@@ -156,10 +214,22 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
     if (!formData.title.trim()) return;
+    if (!validateTimings()) return;
 
     const payload = {
       ...formData,
-      registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0
+      registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0,
+      regStartAt: toIsoOrNull(formData.regStartAt),
+      regEndAt: toIsoOrNull(formData.regEndAt),
+      startAt: toIsoOrNull(formData.startAt),
+      endAt: toIsoOrNull(formData.endAt),
+      finalUnlockAt: toIsoOrNull(formData.finalUnlockAt),
+      leaderboardPublishTime: formData.leaderboardPublishTime || '18:00',
+      answerReviewEnabled: Boolean(formData.answerReviewEnabled),
+      startDate: formData.startAt ? formData.startAt.slice(0, 10) : formData.startDate,
+      endDate: formData.endAt ? formData.endAt.slice(0, 10) : formData.endDate,
+      regStartDate: formData.regStartAt ? formData.regStartAt.slice(0, 10) : formData.regStartDate,
+      regEndDate: formData.regEndAt ? formData.regEndAt.slice(0, 10) : formData.regEndDate
     };
     try {
       const res = await createCompetition(payload);
@@ -179,10 +249,22 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
   const handleUpdateSubmit = async (e) => {
     e.preventDefault();
     if (!editingComp || !formData.title.trim()) return;
+    if (!validateTimings()) return;
 
     const payload = {
       ...formData,
-      registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0
+      registrationFee: formData.registrationFee !== '' ? Number(formData.registrationFee) : 0,
+      regStartAt: toIsoOrNull(formData.regStartAt),
+      regEndAt: toIsoOrNull(formData.regEndAt),
+      startAt: toIsoOrNull(formData.startAt),
+      endAt: toIsoOrNull(formData.endAt),
+      finalUnlockAt: toIsoOrNull(formData.finalUnlockAt),
+      leaderboardPublishTime: formData.leaderboardPublishTime || '18:00',
+      answerReviewEnabled: Boolean(formData.answerReviewEnabled),
+      startDate: formData.startAt ? formData.startAt.slice(0, 10) : formData.startDate,
+      endDate: formData.endAt ? formData.endAt.slice(0, 10) : formData.endDate,
+      regStartDate: formData.regStartAt ? formData.regStartAt.slice(0, 10) : formData.regStartDate,
+      regEndDate: formData.regEndAt ? formData.regEndAt.slice(0, 10) : formData.regEndDate
     };
     try {
       const res = await updateCompetition(editingComp.id, payload);
@@ -229,6 +311,10 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
       endTime: comp.endTime || '',
       regStartDate: comp.regStartDate || '',
       regEndDate: comp.regEndDate || comp.deadline || '',
+      regStartAt: toLocalInput(comp.regStartAt),
+      regEndAt: toLocalInput(comp.regEndAt),
+      startAt: toLocalInput(comp.startAt),
+      endAt: toLocalInput(comp.endAt),
       venue: comp.venue || '',
       status: comp.status === 'Registration Open' ? 'Active' : (comp.status || 'Active'),
       registrationFee: comp.registrationFee !== null && comp.registrationFee !== undefined ? String(comp.registrationFee) : '',
@@ -236,7 +322,10 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
       rules: comp.rules || '',
       contactDetails: comp.contactDetails || '',
       bannerUrl: comp.bannerUrl || comp.banner || '',
-      rulesPdfUrl: comp.rulesPdfUrl || comp.rulesPdf?.url || ''
+      rulesPdfUrl: comp.rulesPdfUrl || comp.rulesPdf?.url || '',
+      finalUnlockAt: toLocalInput(comp.finalUnlockAt),
+      leaderboardPublishTime: comp.leaderboardPublishTime || '18:00',
+      answerReviewEnabled: Boolean(comp.answerReviewEnabled)
     });
     setBannerPreview(comp.bannerUrl || comp.banner || '');
     setRulesFileName(comp.rulesPdfUrl || comp.rulesPdf?.url ? 'Saved Rules Document (PDF)' : '');
@@ -361,7 +450,15 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
                   {/* Banner Header */}
                   <div className="relative h-44 bg-slate-900 overflow-hidden">
                     {bannerSrc ? (
-                      <img src={resolveFileUrl(bannerSrc)} alt={compTitle} className="w-full h-full object-cover" />
+                      <img
+                        src={resolveFileUrl(bannerSrc)}
+                        alt={compTitle}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = '/assets/course-placeholder.svg';
+                        }}
+                      />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-slate-800 to-indigo-950 flex flex-col items-center justify-center text-white/30 p-4 text-center">
                         <Trophy className="w-12 h-12 mb-2" />
@@ -459,6 +556,17 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
                   </button>
 
                   <button
+                    onClick={() => {
+                      navigate(`/admin/competition-management?comp=${comp.id}`);
+                    }}
+                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold px-3 py-2 rounded-xl border border-indigo-200 flex items-center justify-center space-x-1.5 text-xs cursor-pointer"
+                    title="Manage Competition Portal (Sets, Syllabus, Videos, Materials, Assessments)"
+                  >
+                    <Trophy className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Portal</span>
+                  </button>
+
+                  <button
                     onClick={() => openEdit(comp)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl cursor-pointer"
                     title="Edit Competition"
@@ -552,82 +660,108 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
                 </div>
               </div>
 
-              {/* Dates Grid: Registration Start/End & Competition Start/End */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Registration Window (datetime-local in IST) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Reg Start Date</label>
+                  <label className="block font-bold text-slate-700 mb-1">Registration Opens (IST)</label>
                   <input
-                    type="date"
-                    value={formData.regStartDate}
-                    onChange={(e) => setFormData({ ...formData, regStartDate: e.target.value })}
+                    type="datetime-local"
+                    value={formData.regStartAt}
+                    onChange={(e) => setFormData({ ...formData, regStartAt: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Reg End Date</label>
+                  <label className="block font-bold text-slate-700 mb-1">Registration Closes (IST)</label>
                   <input
-                    type="date"
-                    value={formData.regEndDate}
-                    onChange={(e) => setFormData({ ...formData, regEndDate: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Comp Start Date</label>
-                  <input
-                    type="date"
-                    value={formData.startDate}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Comp End Date</label>
-                  <input
-                    type="date"
-                    value={formData.endDate}
-                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                    type="datetime-local"
+                    value={formData.regEndAt}
+                    onChange={(e) => setFormData({ ...formData, regEndAt: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
                   />
                 </div>
               </div>
 
-              {/* Time Slots & Venue */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Competition Window (datetime-local in IST) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Start Time</label>
+                  <label className="block font-bold text-slate-700 mb-1">Competition Starts (IST)</label>
                   <input
-                    type="text"
-                    placeholder="e.g. 10:00 AM"
-                    value={formData.startTime}
-                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
+                    type="datetime-local"
+                    value={formData.startAt}
+                    onChange={(e) => setFormData({ ...formData, startAt: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">End Time</label>
+                  <label className="block font-bold text-slate-700 mb-1">Competition Ends (IST)</label>
                   <input
-                    type="text"
-                    placeholder="e.g. 01:00 PM"
-                    value={formData.endTime}
-                    onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
+                    type="datetime-local"
+                    value={formData.endAt}
+                    onChange={(e) => setFormData({ ...formData, endAt: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
                   />
                 </div>
+              </div>
 
+              {/* Final Assessment Unlock & Leaderboard Publish Time */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-amber-50/60 rounded-xl border border-amber-200">
+                <div>
+                  <label className="block font-bold text-amber-900 mb-1">Final Assessment Unlock (IST)</label>
+                  <input
+                    type="datetime-local"
+                    value={formData.finalUnlockAt}
+                    onChange={(e) => setFormData({ ...formData, finalUnlockAt: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl font-semibold text-xs"
+                  />
+                  <p className="text-[11px] text-amber-700 mt-1">Must be inside the competition window</p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-amber-900 mb-1">Leaderboard Publish Time (IST)</label>
+                  <input
+                    type="time"
+                    value={formData.leaderboardPublishTime || '18:00'}
+                    onChange={(e) => setFormData({ ...formData, leaderboardPublishTime: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl font-semibold text-xs"
+                  />
+                  <p className="text-[11px] text-amber-700 mt-1">
+                    Auto-scheduled 5 days after competition end at {formData.leaderboardPublishTime || '18:00'} IST
+                    {formData.endAt ? ` (approx. ${(() => {
+                      const d = new Date(formData.endAt);
+                      d.setDate(d.getDate() + 5);
+                      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                    })()})` : ''}
+                  </p>
+                </div>
+              </div>
+
+              {/* Answer Review & Venue */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Venue / Platform</label>
                   <input
                     type="text"
-                    placeholder="e.g. Online (Google Meet)"
+                    placeholder="e.g. Online (Competition Portal)"
                     value={formData.venue}
                     onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
                   />
+                </div>
+
+                <div className="flex items-center space-x-2 pt-5">
+                  <input
+                    type="checkbox"
+                    id="answerReviewEnabled"
+                    checked={Boolean(formData.answerReviewEnabled)}
+                    onChange={(e) => setFormData({ ...formData, answerReviewEnabled: e.target.checked })}
+                    className="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary cursor-pointer"
+                  />
+                  <label htmlFor="answerReviewEnabled" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                    Enable Student Answer Review After Assessment
+                  </label>
                 </div>
               </div>
 
@@ -666,6 +800,48 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
                 />
               </div>
 
+              {/* Competition Portal Timings & Review Settings */}
+              <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
+                <div className="font-bold text-indigo-950 text-xs flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Competition Portal Timings & Answer Review</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Final Assessment Unlock Time</label>
+                    <input
+                      type="datetime-local"
+                      value={formData.finalUnlockAt}
+                      onChange={(e) => setFormData({ ...formData, finalUnlockAt: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold text-xs"
+                    />
+                    <span className="text-[10px] text-slate-500 font-medium">When students can start the 30-min final assessment</span>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Leaderboard Publish Time</label>
+                    <input
+                      type="datetime-local"
+                      value={formData.leaderboardPublishTime}
+                      onChange={(e) => setFormData({ ...formData, leaderboardPublishTime: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold text-xs"
+                    />
+                    <span className="text-[10px] text-slate-500 font-medium">When top 10 rankings become visible to students</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="answerReviewEnabled"
+                    checked={formData.answerReviewEnabled}
+                    onChange={(e) => setFormData({ ...formData, answerReviewEnabled: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <label htmlFor="answerReviewEnabled" className="text-xs font-bold text-slate-800 cursor-pointer">
+                    Enable Answer Review (Allow students to view question review & explanations after assessment)
+                  </label>
+                </div>
+              </div>
+
               {/* File Upload Section */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <div className="font-bold text-slate-800 text-xs">Attached Documents & Media</div>
@@ -693,7 +869,15 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
                     />
                   </div>
                   {bannerPreview && (
-                    <img src={resolveFileUrl(bannerPreview)} alt="Preview" className="h-16 w-32 object-cover rounded-xl border border-slate-200 mt-2" />
+                    <img
+                      src={resolveFileUrl(bannerPreview)}
+                      alt="Preview"
+                      className="h-16 w-32 object-cover rounded-xl border border-slate-200 mt-2"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = '/assets/course-placeholder.svg';
+                      }}
+                    />
                   )}
                 </div>
 
@@ -870,6 +1054,13 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
         message="Are you sure you want to delete this competition? Students will no longer see or register for it."
         confirmText="Delete"
         cancelText="Cancel"
+      />
+
+      {/* COMPETITION PORTAL MANAGER MODAL */}
+      <AdminCompetitionPortalManagerModal
+        competition={managingPortalComp}
+        isOpen={Boolean(managingPortalComp)}
+        onClose={() => setManagingPortalComp(null)}
       />
 
     </div>

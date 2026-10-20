@@ -1,9 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Monitor, Trophy, CheckCircle2, Tag, Download } from 'lucide-react';
+import { Calendar, Clock, Monitor, Trophy, CheckCircle2, Tag, Download, Award } from 'lucide-react';
 import { getCompetitions } from '../../api/competitionApi';
 import { resolveFileUrl, getRulesDownloadUrl } from '../../api/fileApi';
 import { formatDate } from '../../utils/dateFormatter';
 import CompetitionRegisterModal from './CompetitionRegisterModal';
+
+const formatDateTimeIST = (isoString) => {
+  if (!isoString) return '';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    return d.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }) + ' IST';
+  } catch {
+    return isoString;
+  }
+};
 
 export default function CompetitionPage({ currentUser }) {
   const [competitions, setCompetitions] = useState([]);
@@ -164,7 +183,7 @@ export default function CompetitionPage({ currentUser }) {
 
             <div className="space-y-4">
               {/* Registration Dates */}
-              {(activeComp.regStartDate || activeComp.regEndDate) && (
+              {(activeComp.regStartAt || activeComp.regEndAt || activeComp.regStartDate || activeComp.regEndDate) && (
                 <div className="flex items-center space-x-3.5">
                   <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
                     <Calendar className="w-5 h-5" />
@@ -172,22 +191,41 @@ export default function CompetitionPage({ currentUser }) {
                   <div>
                     <div className="text-xs font-semibold text-slate-400">Registration Period</div>
                     <div className="text-sm font-extrabold text-blue-900">
-                      {formatDate(activeComp.regStartDate)}{activeComp.regEndDate ? ` – ${formatDate(activeComp.regEndDate)}` : ''}
+                      {activeComp.regStartAt || activeComp.regEndAt
+                        ? `${formatDateTimeIST(activeComp.regStartAt)}${activeComp.regEndAt ? ` – ${formatDateTimeIST(activeComp.regEndAt)}` : ''}`
+                        : `${formatDate(activeComp.regStartDate)}${activeComp.regEndDate ? ` – ${formatDate(activeComp.regEndDate)}` : ''}`}
                     </div>
                   </div>
                 </div>
               )}
 
               {/* Competition Event Dates */}
-              {(activeComp.startDate || activeComp.endDate) && (
+              {(activeComp.startAt || activeComp.endAt || activeComp.startDate || activeComp.endDate) && (
                 <div className="flex items-center space-x-3.5">
                   <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
                     <Calendar className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-xs font-semibold text-slate-400">Competition Dates</div>
+                    <div className="text-xs font-semibold text-slate-400">Competition Window</div>
                     <div className="text-sm font-extrabold text-slate-800">
-                      {formatDate(activeComp.startDate)}{activeComp.endDate && activeComp.endDate !== activeComp.startDate ? ` – ${formatDate(activeComp.endDate)}` : ''}
+                      {activeComp.startAt || activeComp.endAt
+                        ? `${formatDateTimeIST(activeComp.startAt)}${activeComp.endAt ? ` – ${formatDateTimeIST(activeComp.endAt)}` : ''}`
+                        : `${formatDate(activeComp.startDate)}${activeComp.endDate && activeComp.endDate !== activeComp.startDate ? ` – ${formatDate(activeComp.endDate)}` : ''}`}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Final Assessment Unlock */}
+              {activeComp.finalUnlockAt && (
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-400">Final Assessment Unlock</div>
+                    <div className="text-sm font-extrabold text-amber-900">
+                      {formatDateTimeIST(activeComp.finalUnlockAt)}
                     </div>
                   </div>
                 </div>

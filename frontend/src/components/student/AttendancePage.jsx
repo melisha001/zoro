@@ -5,6 +5,7 @@ import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { getSchedules } from '../../api/scheduleApi';
 import { useAuth } from '../../context/AuthContext';
 import { getSessionEndDateTime, getNowInKolkata, syncServerTime } from '../../utils/scheduleSortUtil';
+import PageLoader from '../common/PageLoader';
 
 export default function StudentAttendancePage({ setActiveScreen }) {
   const { user } = useAuth();
@@ -220,8 +221,8 @@ export default function StudentAttendancePage({ setActiveScreen }) {
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="py-8 text-center text-slate-400 font-medium">
-                    Loading attendance history...
+                  <td colSpan="6" className="py-8 text-center">
+                    <PageLoader message="Loading attendance history..." />
                   </td>
                 </tr>
               ) : displayedSessions.length === 0 ? (

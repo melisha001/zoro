@@ -91,6 +91,9 @@ public class Course {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Transient
+    private String requestStatus;
+
     public Course() {}
 
     public Course(String id, String title, String description, String category, String mode, String level, String audience, String duration, BigDecimal price, BigDecimal originalPrice, String thumbnail, String previewVideoUrl, Integer enrolled, BigDecimal rating, String status, String assignedTrainer, List<CourseModule> modules, List<CourseResource> resources, LocalDateTime createdAt, LocalDateTime updatedAt) {
@@ -306,6 +309,14 @@ public class Course {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getRequestStatus() {
+        return requestStatus;
+    }
+
+    public void setRequestStatus(String requestStatus) {
+        this.requestStatus = requestStatus;
     }
 
     public static Builder builder() {

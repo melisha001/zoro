@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Bell, Calendar, BookOpen, HelpCircle, CheckCircle2, MessageSquare, Clock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getMyNotifications } from '../../api/notificationApi';
+import PageLoader from '../common/PageLoader';
 
 export default function StudentNotificationsPage({ setActiveScreen }) {
   const { user } = useAuth();
@@ -89,7 +90,7 @@ export default function StudentNotificationsPage({ setActiveScreen }) {
       {/* Notification List */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md divide-y divide-slate-100 overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-xs font-bold text-slate-400">Loading notifications...</div>
+          <PageLoader message="Loading notifications..." />
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center text-xs font-bold text-slate-400">No notifications found.</div>
         ) : (

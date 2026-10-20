@@ -8,6 +8,8 @@ import MoneyInput from '../common/MoneyInput';
 import { resolveFileUrl } from '../../api/fileApi';
 import { useDialog } from '../../context/DialogContext';
 import { normalizeGoogleMeetUrl, isValidGoogleMeetUrl } from '../../utils/scheduleSortUtil';
+import PageLoader from '../common/PageLoader';
+import ButtonSpinner from '../common/ButtonSpinner';
 
 export default function EditCoursePage({ courseId: propCourseId, setActiveScreen }) {
   const { showSuccess, showError } = useDialog();
@@ -52,7 +54,7 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
   }, [courseId]);
 
   if (!formData) {
-    return <div className="p-8 text-center text-xs font-bold text-slate-400">Loading course details...</div>;
+    return <PageLoader fullPage message="Loading course details..." />;
   }
 
   const handleSubmit = async (e) => {
@@ -321,7 +323,15 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
             <label className="block text-xs font-bold text-slate-700 mb-1">Course Thumbnail Image</label>
             {formData.thumbnail && (
               <div className="mb-2 w-32 h-20 rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
-                <img src={resolveFileUrl(formData.thumbnail)} alt="Thumbnail preview" className="w-full h-full object-cover" />
+                <img
+                  src={resolveFileUrl(formData.thumbnail)}
+                  alt="Thumbnail preview"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = '/assets/course-placeholder.svg';
+                  }}
+                />
               </div>
             )}
             <FileUploader 
@@ -337,14 +347,14 @@ export default function EditCoursePage({ courseId: propCourseId, setActiveScreen
             />
           </div>
 
-          <button
+          <ButtonSpinner
             type="submit"
-            disabled={saving}
+            loading={saving}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl shadow-lg transition-transform transform active:scale-95 flex items-center justify-center space-x-2 text-sm cursor-pointer"
           >
             <Save className="w-4 h-4" />
-            <span>{saving ? 'Saving...' : 'Update Course'}</span>
-          </button>
+            <span>Update Course</span>
+          </ButtonSpinner>
         </form>
       </div>
     </div>

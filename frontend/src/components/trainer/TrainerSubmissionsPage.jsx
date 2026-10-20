@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getTrainerAllocatedCourses, getTrainerAllocatedBatches } from '../../utils/trainerFilterHelper';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 import SecureVideoPlayer from '../common/SecureVideoPlayer';
+import PageLoader from '../common/PageLoader';
 
 function matchesTrainerName(assignedTrainer, currentTrainerName, currentTrainerEmail) {
   if (!assignedTrainer || assignedTrainer === 'None (Self-Paced)' || assignedTrainer === 'Unassigned') return false;
@@ -324,7 +325,9 @@ export default function TrainerSubmissionsPage() {
           {/* Submissions Table with Real Data (Requirement 7.1) */}
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden">
             {loading ? (
-              <div className="p-12 text-center text-xs font-bold text-slate-400">Loading student submissions...</div>
+              <div className="p-8">
+                <PageLoader message="Loading student submissions..." />
+              </div>
             ) : filteredSubmissions.length === 0 ? (
               <div className="p-12 text-center text-xs font-bold text-slate-400">
                 No {statusTab} submissions found for the selected Course and Batch filters.
@@ -411,7 +414,9 @@ export default function TrainerSubmissionsPage() {
           </div>
 
           {loading ? (
-            <div className="p-12 text-center text-xs font-bold text-slate-400 bg-white rounded-3xl border border-slate-200">Loading assigned recorded sessions...</div>
+            <div className="p-8 bg-white rounded-3xl border border-slate-200">
+              <PageLoader message="Loading assigned recorded sessions..." />
+            </div>
           ) : filteredRecordedCourses.length === 0 ? (
             <div className="p-12 text-center text-xs font-bold text-slate-400 bg-white rounded-3xl border border-slate-200 space-y-2">
               <Play className="w-12 h-12 text-purple-300 mx-auto" />

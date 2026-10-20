@@ -66,6 +66,15 @@ public class AuthController {
         return ApiResponse.ok(response, "Registration successful");
     }
 
+    @GetMapping("/check-email")
+    public ApiResponse<java.util.Map<String, Object>> checkEmail(@RequestParam(value = "email", required = false) String email) {
+        if (email == null || email.isBlank()) {
+            return ApiResponse.ok(java.util.Map.of("exists", false));
+        }
+        boolean exists = authService.checkEmailExists(email.trim());
+        return ApiResponse.ok(java.util.Map.of("exists", exists));
+    }
+
     @GetMapping("/me")
     public ApiResponse<UserDto> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails) {
         if (userDetails == null) {

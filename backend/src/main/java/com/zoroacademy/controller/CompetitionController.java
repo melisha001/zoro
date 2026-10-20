@@ -1,23 +1,49 @@
 package com.zoroacademy.controller;
 
 import com.zoroacademy.common.ApiResponse;
-import com.zoroacademy.entity.Competition;
-import com.zoroacademy.entity.CompetitionModule;
-import com.zoroacademy.entity.CompetitionRegistration;
+import com.zoroacademy.entity.*;
+import com.zoroacademy.repository.UserRepository;
+import com.zoroacademy.security.UserPrincipal;
 import com.zoroacademy.service.CompetitionService;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/competitions")
 public class CompetitionController {
 
     private final CompetitionService competitionService;
-    public CompetitionController(CompetitionService competitionService) {
+    private final UserRepository userRepository;
+
+    public CompetitionController(CompetitionService competitionService, UserRepository userRepository) {
         this.competitionService = competitionService;
+        this.userRepository = userRepository;
     }
 
+    private User getCurrentUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new org.springframework.security.access.AccessDeniedException("Not authenticated");
+        }
+        String identifier;
+        if (auth.getPrincipal() instanceof UserPrincipal up) {
+            identifier = up.getId();
+        } else if (auth.getPrincipal() instanceof UserDetails ud) {
+            identifier = ud.getUsername();
+        } else {
+            identifier = auth.getName();
+        }
+
+        return userRepository.findById(identifier)
+                .or(() -> userRepository.findByEmailIgnoreCase(identifier))
+                .or(() -> userRepository.findByUsernameIgnoreCase(identifier))
+                .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException("User not found: " + identifier));
+    }
 
     @GetMapping
     public ApiResponse<List<Competition>> getCompetitions() {
@@ -91,4 +117,325 @@ public class CompetitionController {
         competitionService.deleteRegistration(regId);
         return ApiResponse.ok(true, "Registration deleted");
     }
+
+    // --- Sets & Trainers Management (Phase 5) ---
+    @GetMapping("/{id}/sets")
+    public ApiResponse<List<Map<String, Object>>> getSets(@PathVariable String id) {
+        return ApiResponse.ok(competitionService.getSetsWithDetails(id));
+    }
+
+    @PutMapping("/{id}/sets/{code}/trainer")
+    public ApiResponse<CompetitionSet> assignTrainer(
+            @PathVariable String id,
+            @PathVariable String code,
+            @RequestBody Map<String, String> body) {
+        String trainerId = body != null ? body.get("trainerId") : null;
+        return ApiResponse.ok(competitionService.assignTrainerToSet(id, code, trainerId), "Trainer assigned to set " + code);
+    }
+
+    // --- Syllabus (Phase 6) ---
+    @GetMapping("/{id}/syllabus")
+    public ApiResponse<Map<String, Object>> getSyllabus(@PathVariable String id) {
+        User user = getCurrentUser();
+        competitionService.validateUserCompetitionAccess(id, user);
+        return ApiResponse.ok(competitionService.getSyllabus(id));
+    }
+
+    @PostMapping("/{id}/syllabus")
+    public ApiResponse<CompetitionSyllabus> saveSyllabus(
+            @PathVariable String id,
+            @RequestBody Map<String, String> body) {
+        String title = body != null ? body.get("title") : "Syllabus";
+        String storedFileId = body != null ? body.get("storedFileId") : null;
+        String fileType = body != null ? body.get("fileType") : null;
+        return ApiResponse.ok(competitionService.saveSyllabus(id, title, storedFileId, fileType), "Syllabus updated");
+    }
+
+    @DeleteMapping("/{id}/syllabus")
+    public ApiResponse<Boolean> deleteSyllabus(@PathVariable String id) {
+        competitionService.deleteSyllabus(id);
+        return ApiResponse.ok(true, "Syllabus deleted");
+    }
+
+    // --- Guidance Videos (Phase 6) ---
+    @GetMapping("/{id}/guidance-videos")
+    public ApiResponse<List<CompetitionGuidanceVideo>> getGuidanceVideos(@PathVariable String id) {
+        User user = getCurrentUser();
+        competitionService.validateUserCompetitionAccess(id, user);
+        return ApiResponse.ok(competitionService.getGuidanceVideos(id));
+    }
+
+    @PostMapping("/{id}/guidance-videos")
+    public ApiResponse<CompetitionGuidanceVideo> saveGuidanceVideo(
+            @PathVariable String id,
+            @RequestBody CompetitionGuidanceVideo video) {
+        return ApiResponse.ok(competitionService.saveGuidanceVideo(id, video), "Guidance video saved");
+    }
+
+    @DeleteMapping("/guidance-videos/{videoId}")
+    public ApiResponse<Boolean> deleteGuidanceVideo(@PathVariable String videoId) {
+        competitionService.deleteGuidanceVideo(videoId);
+        return ApiResponse.ok(true, "Guidance video deleted");
+    }
+
+    // --- Study Materials (Phase 6) ---
+    @GetMapping("/{id}/study-materials")
+    public ApiResponse<List<Map<String, Object>>> getStudyMaterials(@PathVariable String id) {
+        User user = getCurrentUser();
+        competitionService.validateUserCompetitionAccess(id, user);
+        return ApiResponse.ok(competitionService.getStudyMaterials(id));
+    }
+
+    @PostMapping("/{id}/study-materials")
+    public ApiResponse<CompetitionStudyMaterial> saveStudyMaterial(
+            @PathVariable String id,
+            @RequestBody CompetitionStudyMaterial material) {
+        return ApiResponse.ok(competitionService.saveStudyMaterial(id, material), "Study material saved");
+    }
+
+    @DeleteMapping("/study-materials/{materialId}")
+    public ApiResponse<Boolean> deleteStudyMaterial(@PathVariable String materialId) {
+        competitionService.deleteStudyMaterial(materialId);
+        return ApiResponse.ok(true, "Study material deleted");
+    }
+
+    // --- Assessments (Phase 7) ---
+    @GetMapping("/{id}/assessments")
+    public ApiResponse<List<CompetitionAssessment>> getAssessments(@PathVariable String id) {
+        return ApiResponse.ok(competitionService.getAssessments(id));
+    }
+
+    @PutMapping("/assessments/{asmtId}")
+    public ApiResponse<CompetitionAssessment> updateAssessment(
+            @PathVariable String asmtId,
+            @RequestBody CompetitionAssessment assessment) {
+        return ApiResponse.ok(competitionService.updateAssessment(asmtId, assessment), "Assessment updated");
+    }
+
+    @PostMapping("/assessments/{asmtId}/publish")
+    public ApiResponse<CompetitionAssessment> publishAssessment(@PathVariable String asmtId) {
+        return ApiResponse.ok(competitionService.publishAssessment(asmtId), "Assessment published successfully");
+    }
+
+    // --- Questions Builder (Phase 7) ---
+    @GetMapping("/assessments/{asmtId}/questions")
+    public ApiResponse<List<Map<String, Object>>> getQuestions(@PathVariable String asmtId) {
+        return ApiResponse.ok(competitionService.getAssessmentQuestions(asmtId));
+    }
+
+    @PostMapping("/assessments/{asmtId}/questions")
+    public ApiResponse<Map<String, Object>> saveQuestion(
+            @PathVariable String asmtId,
+            @RequestBody Map<String, Object> payload) {
+        return ApiResponse.ok(competitionService.saveQuestion(asmtId, payload), "Question saved");
+    }
+
+    @DeleteMapping("/questions/{questionId}")
+    public ApiResponse<Boolean> deleteQuestion(@PathVariable String questionId) {
+        competitionService.deleteQuestion(questionId);
+        return ApiResponse.ok(true, "Question deleted");
+    }
+
+    @PostMapping("/questions/{questionId}/duplicate")
+    public ApiResponse<Map<String, Object>> duplicateQuestion(@PathVariable String questionId) {
+        return ApiResponse.ok(competitionService.duplicateQuestion(questionId), "Question duplicated");
+    }
+
+    @PutMapping("/assessments/{asmtId}/questions/reorder")
+    public ApiResponse<List<Map<String, Object>>> reorderQuestions(
+            @PathVariable String asmtId,
+            @RequestBody List<String> questionIds) {
+        return ApiResponse.ok(competitionService.reorderQuestions(asmtId, questionIds), "Questions reordered");
+    }
+
+    // --- Overview & Registered Students Management ---
+    @GetMapping("/{id}/overview")
+    public ApiResponse<Map<String, Object>> getCompetitionOverview(@PathVariable String id) {
+        return ApiResponse.ok(competitionService.getCompetitionOverview(id));
+    }
+
+    @GetMapping("/{id}/registered-students")
+    public ApiResponse<List<Map<String, Object>>> getRegisteredStudents(@PathVariable String id) {
+        return ApiResponse.ok(competitionService.getRegisteredStudentsWithDetails(id));
+    }
+
+    // --- Student Portal Context ---
+    @GetMapping("/{id}/my-portal")
+    public ApiResponse<Map<String, Object>> getStudentPortalContext(@PathVariable String id) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getStudentPortalContext(id, user));
+    }
+
+    // --- Phase 1: Test Series Execution ---
+    @GetMapping("/{id}/test-series")
+    public ApiResponse<Map<String, Object>> getTestSeries(@PathVariable String id) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getStudentTestSeries(id, user));
+    }
+
+    @PostMapping("/test-series/{asmtId}/start")
+    public ApiResponse<Map<String, Object>> startTestSeries(@PathVariable String asmtId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.startOrResumeTestAttempt(asmtId, user));
+    }
+
+    @PostMapping("/test-series/{asmtId}/answers")
+    public ApiResponse<Map<String, Object>> saveAnswer(
+            @PathVariable String asmtId,
+            @RequestBody Map<String, Object> payload) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.saveAttemptAnswer(asmtId, payload, user));
+    }
+
+    @PostMapping("/test-series/{asmtId}/submit")
+    public ApiResponse<Map<String, Object>> submitTestSeries(@PathVariable String asmtId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.submitTestAttempt(asmtId, user));
+    }
+
+    @GetMapping("/test-series/{asmtId}/results")
+    public ApiResponse<Map<String, Object>> getTestResults(@PathVariable String asmtId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getAttemptResults(asmtId, user));
+    }
+
+    // --- Phase 2: Mock Tests Execution ---
+    @GetMapping("/{id}/mock-tests")
+    public ApiResponse<Map<String, Object>> getMockTests(@PathVariable String id) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getStudentMockTests(id, user));
+    }
+
+    @PostMapping("/mock-tests/{asmtId}/start")
+    public ApiResponse<Map<String, Object>> startMockTest(@PathVariable String asmtId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.startOrResumeTestAttempt(asmtId, user));
+    }
+
+    @PostMapping("/mock-tests/{asmtId}/answers")
+    public ApiResponse<Map<String, Object>> saveMockAnswer(
+            @PathVariable String asmtId,
+            @RequestBody Map<String, Object> payload) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.saveAttemptAnswer(asmtId, payload, user));
+    }
+
+    @PostMapping("/mock-tests/{asmtId}/submit")
+    public ApiResponse<Map<String, Object>> submitMockTest(@PathVariable String asmtId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.submitTestAttempt(asmtId, user));
+    }
+
+    @GetMapping("/mock-tests/{asmtId}/results")
+    public ApiResponse<Map<String, Object>> getMockResults(@PathVariable String asmtId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getAttemptResults(asmtId, user));
+    }
+
+    // --- Phase 3: Final Assessment Execution ---
+    @GetMapping("/{id}/final-assessment")
+    public ApiResponse<Map<String, Object>> getFinalAssessment(@PathVariable String id) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getStudentFinalAssessment(id, user));
+    }
+
+    @PostMapping("/final-assessment/{asmtId}/start")
+    public ApiResponse<Map<String, Object>> startFinalAssessment(@PathVariable String asmtId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.startOrResumeTestAttempt(asmtId, user));
+    }
+
+    @PostMapping("/final-assessment/{asmtId}/answers")
+    public ApiResponse<Map<String, Object>> saveFinalAssessmentAnswer(
+            @PathVariable String asmtId,
+            @RequestBody Map<String, Object> payload) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.saveAttemptAnswer(asmtId, payload, user));
+    }
+
+    @PostMapping("/final-assessment/{asmtId}/submit")
+    public ApiResponse<Map<String, Object>> submitFinalAssessment(@PathVariable String asmtId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.submitTestAttempt(asmtId, user));
+    }
+
+    @GetMapping("/final-assessment/{asmtId}/results")
+    public ApiResponse<Map<String, Object>> getFinalAssessmentResults(@PathVariable String asmtId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getAttemptResults(asmtId, user));
+    }
+
+    @PostMapping("/assessments/{asmtId}/generate-sets")
+    public ApiResponse<Map<String, Object>> generateSets(@PathVariable String asmtId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.generateSetPapers(asmtId, user));
+    }
+
+    @PostMapping("/assessments/{asmtId}/attempts/{attemptId}/reset")
+    public ApiResponse<Boolean> resetAttempt(
+            @PathVariable String asmtId,
+            @PathVariable String attemptId) {
+        User user = getCurrentUser();
+        competitionService.resetAssessmentAttempt(asmtId, attemptId, user);
+        return ApiResponse.ok(true, "Attempt reset successfully");
+    }
+
+    @GetMapping("/{id}/trainer/evaluations")
+    public ApiResponse<List<Map<String, Object>>> getTrainerEvaluations(@PathVariable String id) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getTrainerPendingSubmissions(id, user));
+    }
+
+    @GetMapping("/trainer/attempts/{attemptId}")
+    public ApiResponse<Map<String, Object>> getTrainerAttemptDetail(@PathVariable String attemptId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getTrainerAttemptDetail(attemptId, user));
+    }
+
+    @PostMapping("/trainer/attempts/{attemptId}/answers/{answerId}/evaluate")
+    public ApiResponse<Map<String, Object>> evaluateVoiceAnswer(
+            @PathVariable String attemptId,
+            @PathVariable String answerId,
+            @RequestBody Map<String, Object> payload) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.evaluateVoiceAnswer(attemptId, answerId, payload, user));
+    }
+
+    // =========================================================================
+    // PHASE 5: LEADERBOARD ENDPOINTS
+    // =========================================================================
+
+    @GetMapping("/{id}/leaderboard")
+    public ApiResponse<Map<String, Object>> getLeaderboard(@PathVariable String id) {
+        User user = null;
+        try {
+            user = getCurrentUser();
+        } catch (Exception ignored) {}
+        return ApiResponse.ok(competitionService.getLeaderboard(id, user));
+    }
+
+    @PostMapping("/{id}/leaderboard/recalculate")
+    public ApiResponse<Map<String, Object>> recalculateLeaderboard(@PathVariable String id) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.recalculateLeaderboard(id, user));
+    }
+
+    @PostMapping("/{id}/leaderboard/publish")
+    public ApiResponse<Map<String, Object>> publishLeaderboard(@PathVariable String id) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.publishLeaderboard(id, user));
+    }
+
+    @PostMapping("/{id}/leaderboard/unpublish")
+    public ApiResponse<Map<String, Object>> unpublishLeaderboard(@PathVariable String id) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.unpublishLeaderboard(id, user));
+    }
+
+    @PostMapping("/{id}/answer-review/toggle")
+    public ApiResponse<Map<String, Object>> toggleAnswerReview(@PathVariable String id) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.toggleAnswerReview(id, user));
+    }
 }
+

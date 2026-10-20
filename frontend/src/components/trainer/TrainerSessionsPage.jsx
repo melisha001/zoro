@@ -15,6 +15,7 @@ import {
   parseTimeToMinutes
 } from '../../utils/scheduleSortUtil';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import PageLoader from '../common/PageLoader';
 import { usePolling } from '../../hooks/usePolling';
 
 export default function TrainerSessionsPage() {
@@ -276,8 +277,8 @@ export default function TrainerSessionsPage() {
       </div>
 
       {loading ? (
-        <div className="p-12 text-center text-xs font-bold text-slate-400 bg-white rounded-3xl border border-slate-200">
-          Loading sessions data...
+        <div className="p-8 bg-white rounded-3xl border border-slate-200">
+          <PageLoader message="Loading sessions data..." />
         </div>
       ) : (
         <>

@@ -51,6 +51,11 @@ public class TrainerController {
         return ApiResponse.ok(true, "Trainer deleted successfully");
     }
 
+    @GetMapping("/{id}/deletion-impact")
+    public ApiResponse<com.zoroacademy.dto.DeletionImpactDto> getTrainerDeletionImpact(@PathVariable String id) {
+        return ApiResponse.ok(userService.getTrainerDeletionImpact(id));
+    }
+
     @GetMapping("/{id}/dependencies")
     public ApiResponse<com.zoroacademy.dto.TrainerDependencyDto> getTrainerDependencies(@PathVariable String id) {
         return ApiResponse.ok(userService.getTrainerDependencies(id));

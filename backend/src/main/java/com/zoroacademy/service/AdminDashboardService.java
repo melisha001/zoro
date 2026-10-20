@@ -50,7 +50,7 @@ public class AdminDashboardService {
         Map<String, Object> data = new HashMap<>();
 
         // 1. User & Course counts via COUNT(*)
-        long studentCount = userRepository.countByRole("STUDENT");
+        long studentCount = userRepository.countLearningStudents();
         long trainerCount = userRepository.countByRole("TRAINER");
         long courseCount = courseRepository.count();
         long batchCount = batchRepository.count();

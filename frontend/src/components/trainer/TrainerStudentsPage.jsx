@@ -5,6 +5,7 @@ import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerAllocatedCourses, getTrainerAllocatedBatches } from '../../utils/trainerFilterHelper';
+import PageLoader from '../common/PageLoader';
 
 export default function TrainerStudentsPage() {
   const { user } = useAuth();
@@ -310,9 +311,7 @@ export default function TrainerStudentsPage() {
       {/* Student List Table */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
         {loading ? (
-          <div className="py-12 text-center text-xs font-bold text-slate-400">
-            Loading students...
-          </div>
+          <PageLoader message="Loading students..." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">

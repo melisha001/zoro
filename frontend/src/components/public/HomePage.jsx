@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Award, Users, Globe, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
+import { Award, Users, Globe, CheckCircle, ArrowRight, Sparkles, BookOpen } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
 import { getCompetitions } from '../../api/competitionApi';
 import { getWebsiteSettings, getHeroImages } from '../../api/websiteSettingsApi';
@@ -152,46 +152,56 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
             <p className="text-slate-500 text-sm mt-2">{landingContent.featuresSubtitle}</p>
           </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {courses.slice(0, 6).map((course) => {
-            const courseImg = resolveFileUrl(course.thumbnail || course.videoUrl) || defaultThumbnailFallback;
+        {courses.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center max-w-lg mx-auto shadow-sm">
+            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <BookOpen className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">No courses available right now</h3>
+            <p className="text-sm text-slate-500">We are currently updating our course catalog. Please check back soon!</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {courses.slice(0, 6).map((course) => {
+              const courseImg = resolveFileUrl(course.thumbnail || course.videoUrl) || defaultThumbnailFallback;
 
-            return (
-              <div key={course.id} className="bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-md hover:shadow-xl transition-all group flex flex-col justify-between">
-                <div>
-                  <div className="relative h-48 overflow-hidden bg-slate-100">
-                    <SafeImage 
-                      src={courseImg} 
-                      alt={course.title} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      fallbackSrc={defaultThumbnailFallback}
-                    />
-                  </div>
-                  <div className="p-6">
-                    <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider">
-                      <span className="text-blue-600">{course.duration || '3 Months'} • {course.mode || 'Online'}</span>
-                      <span className="text-emerald-600 font-black">
-                        {course.price != null && Number(course.price) > 0 ? `₹${Number(course.price).toLocaleString('en-IN')}` : 'Free'}
-                      </span>
+              return (
+                <div key={course.id} className="bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-md hover:shadow-xl transition-all group flex flex-col justify-between">
+                  <div>
+                    <div className="relative h-48 overflow-hidden bg-slate-100">
+                      <SafeImage 
+                        src={courseImg} 
+                        alt={course.title} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        fallbackSrc={defaultThumbnailFallback}
+                      />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900 mt-1">{course.title}</h3>
-                    <p className="text-slate-500 text-xs mt-2 line-clamp-2">{course.description}</p>
+                    <div className="p-6">
+                      <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider">
+                        <span className="text-blue-600">{course.duration || '3 Months'} • {course.mode || 'Online'}</span>
+                        <span className="text-emerald-600 font-black">
+                          {course.price != null && Number(course.price) > 0 ? `₹${Number(course.price).toLocaleString('en-IN')}` : 'Free'}
+                        </span>
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-900 mt-1">{course.title}</h3>
+                      <p className="text-slate-500 text-xs mt-2 line-clamp-2">{course.description}</p>
+                    </div>
+                  </div>
+                  <div className="p-6 pt-0 flex items-center justify-between border-t border-slate-100 mt-4">
+                    <span className="text-xs font-extrabold text-slate-700">★ {course.rating || '4.9'} ({course.enrolled || 50}+ Students)</span>
+                    <button 
+                      onClick={() => setActiveScreen('public-course')}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center space-x-1 cursor-pointer"
+                    >
+                      <span>View Details</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
-                <div className="p-6 pt-0 flex items-center justify-between border-t border-slate-100 mt-4">
-                  <span className="text-xs font-extrabold text-slate-700">★ {course.rating || '4.9'} ({course.enrolled || 50}+ Students)</span>
-                  <button 
-                    onClick={() => setActiveScreen('public-course')}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center space-x-1 cursor-pointer"
-                  >
-                    <span>View Details</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </section>
       )}
 

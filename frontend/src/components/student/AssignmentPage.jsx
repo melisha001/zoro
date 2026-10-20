@@ -10,6 +10,7 @@ import { getSubmissions, getCreatedAssignments, createSubmission } from '../../a
 import { uploadFile as uploadFileApi, openFileWithSignedLink, resolveFileUrl } from '../../api/fileApi';
 import { useAuth } from '../../context/AuthContext';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import PageLoader from '../common/PageLoader';
 import { useDialog } from '../../context/DialogContext';
 import { getSessionStartDateTime, getNowInKolkata, syncServerTime } from '../../utils/scheduleSortUtil';
 
@@ -443,9 +444,8 @@ export default function AssignmentPage({ setActiveScreen }) {
 
       {/* LOADING STATE */}
       {loading ? (
-        <div className="bg-white p-16 rounded-3xl border border-slate-200 text-center space-y-3">
-          <Clock className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
-          <p className="text-xs font-bold text-slate-500">Loading assignments from your courses...</p>
+        <div className="bg-white p-8 rounded-3xl border border-slate-200">
+          <PageLoader message="Loading assignments from your courses..." />
         </div>
       ) : enrolledCourses.length === 0 ? (
         /* EMPTY STATE: STUDENT HAS NO COURSES */

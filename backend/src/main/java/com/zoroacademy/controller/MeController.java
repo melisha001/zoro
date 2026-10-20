@@ -32,6 +32,46 @@ public class MeController {
     private final AttendanceRecordRepository attendanceRecordRepository;
     private final NotificationRepository notificationRepository;
     private final EnquiryRepository enquiryRepository;
+    private final CompetitionRegistrationRepository competitionRegistrationRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompetitionRepository competitionRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompetitionSetRepository competitionSetRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MeController(UserRepository userRepository,
+                        CourseRepository courseRepository,
+                        BatchRepository batchRepository,
+                        EnrollmentRepository enrollmentRepository,
+                        StudentCourseBatchRepository studentCourseBatchRepository,
+                        AssignmentRepository assignmentRepository,
+                        AssignmentSubmissionRepository assignmentSubmissionRepository,
+                        ScheduleRepository scheduleRepository,
+                        TrainerCourseRequestRepository trainerCourseRequestRepository,
+                        UserService userService,
+                        StudentFeeRepository studentFeeRepository,
+                        AttendanceRecordRepository attendanceRecordRepository,
+                        NotificationRepository notificationRepository,
+                        EnquiryRepository enquiryRepository,
+                        CompetitionRegistrationRepository competitionRegistrationRepository) {
+        this.userRepository = userRepository;
+        this.courseRepository = courseRepository;
+        this.batchRepository = batchRepository;
+        this.enrollmentRepository = enrollmentRepository;
+        this.studentCourseBatchRepository = studentCourseBatchRepository;
+        this.assignmentRepository = assignmentRepository;
+        this.assignmentSubmissionRepository = assignmentSubmissionRepository;
+        this.scheduleRepository = scheduleRepository;
+        this.trainerCourseRequestRepository = trainerCourseRequestRepository;
+        this.userService = userService;
+        this.studentFeeRepository = studentFeeRepository;
+        this.attendanceRecordRepository = attendanceRecordRepository;
+        this.notificationRepository = notificationRepository;
+        this.enquiryRepository = enquiryRepository;
+        this.competitionRegistrationRepository = competitionRegistrationRepository;
+    }
 
     public MeController(UserRepository userRepository,
                         CourseRepository courseRepository,
@@ -47,20 +87,10 @@ public class MeController {
                         AttendanceRecordRepository attendanceRecordRepository,
                         NotificationRepository notificationRepository,
                         EnquiryRepository enquiryRepository) {
-        this.userRepository = userRepository;
-        this.courseRepository = courseRepository;
-        this.batchRepository = batchRepository;
-        this.enrollmentRepository = enrollmentRepository;
-        this.studentCourseBatchRepository = studentCourseBatchRepository;
-        this.assignmentRepository = assignmentRepository;
-        this.assignmentSubmissionRepository = assignmentSubmissionRepository;
-        this.scheduleRepository = scheduleRepository;
-        this.trainerCourseRequestRepository = trainerCourseRequestRepository;
-        this.userService = userService;
-        this.studentFeeRepository = studentFeeRepository;
-        this.attendanceRecordRepository = attendanceRecordRepository;
-        this.notificationRepository = notificationRepository;
-        this.enquiryRepository = enquiryRepository;
+        this(userRepository, courseRepository, batchRepository, enrollmentRepository, studentCourseBatchRepository,
+             assignmentRepository, assignmentSubmissionRepository, scheduleRepository, trainerCourseRequestRepository,
+             userService, studentFeeRepository, attendanceRecordRepository, notificationRepository, enquiryRepository,
+             null);
     }
 
     private User getCurrentUser() {
@@ -81,6 +111,109 @@ public class MeController {
                 .or(() -> userRepository.findByEmailIgnoreCase(identifier))
                 .or(() -> userRepository.findByUsernameIgnoreCase(identifier))
                 .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException("User not found: " + identifier));
+    }
+
+    private void checkLearningAccess(User user) {
+        String role = user.getRole() != null ? user.getRole().toUpperCase() : "STUDENT";
+        if ("STUDENT".equals(role) && "COMPETITION".equalsIgnoreCase(user.getOrigin())) {
+            boolean hasActive = enrollmentRepository.findByStudentId(user.getId()).stream()
+                    .anyMatch(e -> "Active".equalsIgnoreCase(e.getStatus()));
+            if (!hasActive) {
+                throw new com.zoroacademy.exception.ForbiddenException("Access denied: You do not have an active learning enrollment");
+            }
+        }
+    }
+
+    @GetMapping("/portals")
+    public ApiResponse<Map<String, Object>> getMyPortals() {
+        User user = getCurrentUser();
+        String role = user.getRole() != null ? user.getRole().toUpperCase() : "STUDENT";
+
+        boolean hasActiveEnrollment = enrollmentRepository.findByStudentId(user.getId()).stream()
+                .anyMatch(e -> "Active".equalsIgnoreCase(e.getStatus()));
+
+        boolean learning;
+        if (!"STUDENT".equals(role)) {
+            learning = true;
+        } else if (!"COMPETITION".equalsIgnoreCase(user.getOrigin())) {
+            learning = true;
+        } else {
+            learning = hasActiveEnrollment;
+        }
+
+        List<CompetitionRegistration> regs = new ArrayList<>(competitionRegistrationRepository.findByStudentId(user.getId()));
+        if (user.getEmail() != null) {
+            for (CompetitionRegistration r : competitionRegistrationRepository.findByStudentEmailIgnoreCase(user.getEmail())) {
+                if (regs.stream().noneMatch(existing -> existing.getId().equals(r.getId()))) {
+                    regs.add(r);
+                }
+            }
+        }
+
+        List<Map<String, Object>> paidCompetitions = regs.stream()
+                .filter(r -> "PAID".equalsIgnoreCase(r.getPaymentStatus()))
+                .map(r -> {
+                    Map<String, Object> compMap = new HashMap<>();
+                    if (r.getCompetition() != null) {
+                        compMap.put("id", r.getCompetition().getId());
+                        compMap.put("title", r.getCompetition().getTitle());
+                        compMap.put("registrationId", r.getId());
+                    } else if (r.getCompetitionId() != null) {
+                        compMap.put("id", r.getCompetitionId());
+                        compMap.put("registrationId", r.getId());
+                    }
+                    return compMap;
+                })
+                .filter(m -> m.get("id") != null)
+                .collect(Collectors.toList());
+
+        if ("ADMIN".equals(role) || "SUPER_ADMIN".equals(role)) {
+            if (competitionRepository != null) {
+                for (Competition c : competitionRepository.findAll()) {
+                    if (paidCompetitions.stream().noneMatch(m -> c.getId().equals(m.get("id")))) {
+                        Map<String, Object> compMap = new HashMap<>();
+                        compMap.put("id", c.getId());
+                        compMap.put("title", c.getTitle());
+                        compMap.put("registrationId", "admin_" + user.getId());
+                        paidCompetitions.add(compMap);
+                    }
+                }
+            }
+        } else if ("TRAINER".equals(role)) {
+            if (competitionSetRepository != null && competitionRepository != null) {
+                List<CompetitionSet> trainerSets = competitionSetRepository.findByTrainerId(user.getId());
+                Set<String> compIds = trainerSets.stream().map(CompetitionSet::getCompetitionId).collect(Collectors.toSet());
+                for (String cId : compIds) {
+                    competitionRepository.findById(cId).ifPresent(c -> {
+                        if (paidCompetitions.stream().noneMatch(m -> c.getId().equals(m.get("id")))) {
+                            Map<String, Object> compMap = new HashMap<>();
+                            compMap.put("id", c.getId());
+                            compMap.put("title", c.getTitle());
+                            compMap.put("registrationId", "trainer_" + user.getId());
+                            paidCompetitions.add(compMap);
+                        }
+                    });
+                }
+            }
+        }
+
+        boolean competition = !paidCompetitions.isEmpty();
+
+        String defaultPortal = null;
+        if (learning && !competition) {
+            defaultPortal = "learning";
+        } else if (!learning && competition) {
+            defaultPortal = "competition";
+        } else if (learning && competition) {
+            defaultPortal = null;
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("learning", learning);
+        response.put("competition", competition);
+        response.put("competitions", paidCompetitions);
+        response.put("defaultPortal", defaultPortal);
+        return ApiResponse.ok(response);
     }
 
     @GetMapping("/courses")
@@ -110,6 +243,7 @@ public class MeController {
         }
 
         // STUDENT
+        checkLearningAccess(user);
         List<Enrollment> enrollments = enrollmentRepository.findByStudentId(user.getId()).stream()
                 .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
                 .toList();
@@ -150,7 +284,14 @@ public class MeController {
         List<Course> pending = new ArrayList<>();
         List<Course> available = new ArrayList<>();
 
+        Map<String, String> courseRequestStatus = new HashMap<>();
+        for (TrainerCourseRequest req : requests) {
+            courseRequestStatus.put(req.getCourseId(), req.getStatus());
+        }
+
         for (Course c : trainerAudienceCourses) {
+            String reqStatus = courseRequestStatus.get(c.getId());
+            c.setRequestStatus(reqStatus);
             if (approvedCourseIds.contains(c.getId())) {
                 if (c.getModules() != null) {
                     c.getModules().forEach(m -> m.setLocked(false));
@@ -185,6 +326,7 @@ public class MeController {
         }
 
         // STUDENT
+        checkLearningAccess(user);
         Set<String> batchIds = studentCourseBatchRepository.findByStudentId(user.getId()).stream()
                 .map(StudentCourseBatch::getBatchId)
                 .filter(Objects::nonNull)
@@ -208,6 +350,7 @@ public class MeController {
         }
 
         // STUDENT: assignments matching student's enrolled courses and batches
+        checkLearningAccess(user);
         List<Enrollment> enrollments = enrollmentRepository.findByStudentId(user.getId()).stream()
                 .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
                 .toList();
@@ -254,6 +397,7 @@ public class MeController {
         }
 
         // STUDENT: return only student submissions
+        checkLearningAccess(user);
         return ApiResponse.ok(assignmentSubmissionRepository.findByStudentIdAndSubmitterRoleIgnoreCase(user.getId(), "STUDENT"));
     }
 
@@ -300,6 +444,7 @@ public class MeController {
         }
 
         // STUDENT
+        checkLearningAccess(user);
         List<Enrollment> enrollments = enrollmentRepository.findByStudentId(user.getId()).stream()
                 .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
                 .toList();
@@ -411,6 +556,7 @@ public class MeController {
         }
 
         if ("STUDENT".equals(role)) {
+            checkLearningAccess(user);
             List<StudentFee> fees = new ArrayList<>(studentFeeRepository.findByStudentId(user.getId()));
             if (user.getEmail() != null) {
                 for (StudentFee f : studentFeeRepository.findByStudentId(user.getEmail())) {
@@ -435,6 +581,7 @@ public class MeController {
         }
 
         if ("STUDENT".equals(role)) {
+            checkLearningAccess(user);
             List<AttendanceRecord> records = new ArrayList<>(attendanceRecordRepository.findByStudentId(user.getId()));
             if (user.getEmail() != null) {
                 for (AttendanceRecord r : attendanceRecordRepository.findByStudentId(user.getEmail())) {

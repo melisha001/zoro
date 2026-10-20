@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Search, Trash2, Eye, Calendar, Phone, Mail, BookOpen, Clock, CheckCircle2, XCircle, X, UserCheck } from 'lucide-react';
 import { getEnquiries, deleteEnquiry } from '../../api/enquiryApi';
-import { getTrainerCourseRequests, updateTrainerCourseRequestStatus } from '../../api/courseApi';
+import { getTrainerCourseRequests, updateTrainerCourseRequestStatus, deleteTrainerCourseRequest } from '../../api/courseApi';
 import ConfirmModal from '../common/ConfirmModal';
 
 export default function AdminEnquiryPage() {
@@ -35,7 +35,11 @@ export default function AdminEnquiryPage() {
 
   const handleConfirmDelete = async () => {
     if (deleteModalData) {
-      await deleteEnquiry(deleteModalData.id);
+      if (deleteModalData.type === 'trainer') {
+        await deleteTrainerCourseRequest(deleteModalData.id);
+      } else {
+        await deleteEnquiry(deleteModalData.id);
+      }
       setDeleteModalData(null);
       loadAllEnquiries();
     }
@@ -304,6 +308,13 @@ export default function AdminEnquiryPage() {
                             Reset Status
                           </button>
                         )}
+                        <button
+                          onClick={() => setDeleteModalData({ id: req.id, type: 'trainer', title: `trainer request from "${req.trainerName}"` })}
+                          className="p-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg cursor-pointer inline-flex items-center ml-2"
+                          title="Delete Request"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </td>
                     </tr>
                   ))}

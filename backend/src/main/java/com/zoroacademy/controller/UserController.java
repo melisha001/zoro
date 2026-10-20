@@ -121,6 +121,12 @@ public class UserController {
         return ApiResponse.ok(updated, "User status updated successfully");
     }
 
+    @GetMapping("/trainers/{id}/deletion-impact")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<com.zoroacademy.dto.DeletionImpactDto> getTrainerDeletionImpact(@PathVariable String id) {
+        return ApiResponse.ok(userService.getTrainerDeletionImpact(id));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Boolean> deleteUser(

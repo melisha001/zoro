@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Users, Download, Star, Award, CheckCircle2, FileText, Calendar } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, Download, Award, CheckCircle2, FileText, Calendar } from 'lucide-react';
 import { getStudents, getTrainers } from '../../api/userApi';
 import { getCourses } from '../../api/courseApi';
 import { getAttendanceRecords } from '../../api/attendanceApi';
@@ -57,8 +57,9 @@ export default function AdminReportsPage() {
     }
   };
 
-  const presentCount = attendance.filter(a => a.status?.toUpperCase() === 'PRESENT').length;
-  const attendanceRate = attendance.length > 0 ? Math.round((presentCount / attendance.length) * 100) : 94;
+  const totalAttendance = attendance.length;
+  const presentCount = attendance.filter(a => (a.status || '').toUpperCase() === 'PRESENT').length;
+  const attendanceRate = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 0;
   const totalCompRev = competitionRegistrations
     .filter(r => r.paymentStatus === 'Paid' || r.paymentStatus === 'PAID')
     .reduce((sum, r) => sum + (r.amount != null ? Number(r.amount) : (r.amountPaise != null ? Number(r.amountPaise) / 100 : Number(r.registrationFee || 0))), 0);
@@ -170,20 +171,13 @@ export default function AdminReportsPage() {
       </div>
 
       {/* KPI Highlight Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="text-xs font-semibold text-slate-500">Student Satisfaction</div>
-          <div className="text-2xl font-black text-amber-500 mt-1 flex items-center gap-1.5">
-            <span>4.9</span>
-            <Star className="w-5 h-5 fill-amber-400 text-amber-400 inline" />
-          </div>
-          <div className="text-[10px] text-slate-400 font-medium mt-1">Based on student feedback</div>
-        </div>
-
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="text-xs font-semibold text-slate-500">Avg Attendance Rate</div>
           <div className="text-2xl font-black text-emerald-600 mt-1">{attendanceRate}%</div>
-          <div className="text-[10px] text-emerald-700 font-bold mt-1">{presentCount} present sessions</div>
+          <div className="text-[10px] text-emerald-700 font-bold mt-1">
+            {totalAttendance > 0 ? `${presentCount} of ${totalAttendance} sessions present` : 'No attendance recorded yet'}
+          </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">

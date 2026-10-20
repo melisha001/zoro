@@ -42,6 +42,12 @@ public class AuthService {
         this(userRepository, passwordEncoder, tokenProvider, null);
     }
 
+    @Transactional(readOnly = true)
+    public boolean checkEmailExists(String email) {
+        if (email == null || email.isBlank()) return false;
+        return userRepository.existsByEmailIgnoreCase(email.trim());
+    }
+
     @Transactional
     public LoginResponse login(LoginRequest request) {
         return login(request, null);

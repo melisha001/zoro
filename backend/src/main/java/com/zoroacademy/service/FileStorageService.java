@@ -304,7 +304,7 @@ public class FileStorageService {
         if (storedFile == null) return null;
         if (Boolean.TRUE.equals(storedFile.getIsPublic())) {
             String publicUrl = storageProvider.getPublicUrl(storedFile.getStoragePath());
-            if (publicUrl != null && !publicUrl.isBlank()) {
+            if (publicUrl != null && !publicUrl.isBlank() && !publicUrl.contains("b-cdn.net")) {
                 return publicUrl;
             }
         }
@@ -330,7 +330,7 @@ public class FileStorageService {
 
         long expiresAt = (System.currentTimeMillis() / 1000) + expirationSeconds;
         String publicCdn = storageProvider.getPublicUrl(storedFile.getStoragePath());
-        if (publicCdn != null && bunnyTokenService != null) {
+        if (publicCdn != null && bunnyTokenService != null && !publicCdn.contains("b-cdn.net")) {
             String token = bunnyTokenService.generateToken(storedFile.getStoragePath(), expiresAt);
             result.put("url", publicCdn + "?token=" + token + "&expires=" + expiresAt);
             result.put("expiresAt", expiresAt);

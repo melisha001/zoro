@@ -1,0 +1,66 @@
+import React, { useState } from 'react';
+import { Video } from 'lucide-react';
+import { resolveFileUrl } from '../../api/fileApi';
+
+export default function SafeVideo({
+  src,
+  poster,
+  title = 'Video Player',
+  className = 'w-full aspect-video rounded-xl',
+  containerClassName = '',
+  isIframe = false,
+  autoPlay = false,
+  controls = true,
+  muted = false,
+  bunnyVideoId,
+  ...rest
+}) {
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const effectiveIframe = isIframe || Boolean(bunnyVideoId);
+  const resolvedSrc = src ? resolveFileUrl(src) : '';
+  const effectiveSrc = resolvedSrc || (bunnyVideoId ? (bunnyVideoId.includes('http') ? bunnyVideoId : `https://iframe.mediadelivery.net/embed/770045/${bunnyVideoId}`) : '');
+
+  return (
+    <div className={`relative overflow-hidden bg-slate-900 rounded-xl ${containerClassName}`}>
+      {!isLoaded && (
+        <div
+          role="status"
+          aria-busy="true"
+          className="absolute inset-0 bg-slate-800 animate-pulse flex flex-col items-center justify-center text-slate-500 z-10"
+        >
+          <Video className="w-10 h-10 mb-2 opacity-50" />
+          <span className="text-xs font-semibold">Loading video...</span>
+        </div>
+      )}
+
+      {effectiveIframe ? (
+        <iframe
+          src={effectiveSrc}
+          title={title}
+          className={`${className} transition-opacity duration-300 ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          loading="lazy"
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
+          allowFullScreen
+          onLoad={() => setIsLoaded(true)}
+          {...rest}
+        />
+      ) : (
+        <video
+          src={effectiveSrc}
+          poster={poster}
+          controls={controls}
+          autoPlay={autoPlay}
+          muted={muted}
+          className={`${className} transition-opacity duration-300 ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          onLoadedData={() => setIsLoaded(true)}
+          {...rest}
+        />
+      )}
+    </div>
+  );
+}

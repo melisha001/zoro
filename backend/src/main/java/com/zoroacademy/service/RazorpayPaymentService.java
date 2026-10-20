@@ -35,6 +35,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.zoroacademy.entity.User;
+import com.zoroacademy.repository.UserRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
 @Service
 public class RazorpayPaymentService {
 
@@ -42,6 +48,9 @@ public class RazorpayPaymentService {
 
     private final CompetitionRepository competitionRepository;
     private final CompetitionRegistrationRepository registrationRepository;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final CompetitionSetDistributionService setDistributionService;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
@@ -64,13 +73,28 @@ public class RazorpayPaymentService {
     public RazorpayPaymentService(
             CompetitionRepository competitionRepository,
             CompetitionRegistrationRepository registrationRepository,
+            @Autowired(required = false) UserRepository userRepository,
+            @Autowired(required = false) PasswordEncoder passwordEncoder,
+            @Autowired(required = false) CompetitionSetDistributionService setDistributionService,
             @Autowired(required = false) RestTemplate restTemplate,
             @Autowired(required = false) ObjectMapper objectMapper
     ) {
         this.competitionRepository = competitionRepository;
         this.registrationRepository = registrationRepository;
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.setDistributionService = setDistributionService;
         this.restTemplate = (restTemplate != null) ? restTemplate : new RestTemplate();
         this.objectMapper = (objectMapper != null) ? objectMapper : new ObjectMapper();
+    }
+
+    public RazorpayPaymentService(
+            CompetitionRepository competitionRepository,
+            CompetitionRegistrationRepository registrationRepository,
+            RestTemplate restTemplate,
+            ObjectMapper objectMapper
+    ) {
+        this(competitionRepository, registrationRepository, null, null, null, restTemplate, objectMapper);
     }
 
     public void checkRateLimit(String clientIp) {
@@ -156,10 +180,52 @@ public class RazorpayPaymentService {
         reg.setStudentName(request.getStudentName());
         reg.setStudentEmail(cleanEmail);
         reg.setStudentPhone(sanitizedPhone);
-        reg.setStudentId(request.getStudentId());
         reg.setAge(request.getAge());
         reg.setSchool(request.getSchool());
         reg.setCity(request.getCity());
+
+        // Account linkage / creation (Phase 2)
+        if (userRepository != null) {
+            Optional<User> existingUserOpt = userRepository.findByEmailIgnoreCase(cleanEmail);
+            if (existingUserOpt.isPresent()) {
+                User existingUser = existingUserOpt.get();
+                Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                boolean isLoggedInAsUser = auth != null && auth.isAuthenticated()
+                        && !"anonymousUser".equals(auth.getPrincipal())
+                        && (cleanEmail.equalsIgnoreCase(auth.getName())
+                            || auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")));
+
+                if (!isLoggedInAsUser) {
+                    throw new BadRequestException("You already have an account. Please log in to register");
+                }
+                reg.setStudentId(existingUser.getId());
+            } else {
+                // New email: require password (min 8 chars)
+                String pwd = request.getPassword();
+                if (pwd == null || pwd.trim().length() < 8) {
+                    throw new BadRequestException("Password is required and must be at least 8 characters");
+                }
+                User newUser = new User();
+                newUser.setId("usr_" + UUID.randomUUID());
+                newUser.setEmail(cleanEmail);
+                newUser.setName(request.getStudentName());
+                newUser.setPhone(sanitizedPhone);
+                if (passwordEncoder != null) {
+                    newUser.setPassword(passwordEncoder.encode(pwd.trim()));
+                } else {
+                    newUser.setPassword(pwd.trim());
+                }
+                newUser.setRole("STUDENT");
+                newUser.setOrigin("COMPETITION");
+                newUser.setStatus("Active");
+                newUser.setJoinedOn(LocalDate.now().toString());
+                userRepository.save(newUser);
+
+                reg.setStudentId(newUser.getId());
+            }
+        } else if (request.getStudentId() != null) {
+            reg.setStudentId(request.getStudentId());
+        }
 
         // Free Competition -> Confirm immediately without payment
         if (amountPaise <= 0) {
@@ -170,6 +236,14 @@ public class RazorpayPaymentService {
             reg.setSignatureVerified(false);
             reg.setPaidAt(LocalDateTime.now());
             registrationRepository.save(reg);
+
+            if (setDistributionService != null) {
+                try {
+                    setDistributionService.assignStudentToSet(comp.getId(), reg.getId());
+                } catch (Exception e) {
+                    log.error("Failed to assign student to set for free competition: {}", e.getMessage());
+                }
+            }
 
             return RazorpayOrderResponse.builder()
                     .orderId(null)
@@ -284,7 +358,16 @@ public class RazorpayPaymentService {
                 reg.setAmount(reg.getCompetition().getRegistrationFee());
             }
         }
-        return registrationRepository.save(reg);
+        reg = registrationRepository.save(reg);
+
+        if (setDistributionService != null && reg.getCompetition() != null) {
+            try {
+                setDistributionService.assignStudentToSet(reg.getCompetition().getId(), reg.getId());
+            } catch (Exception e) {
+                log.error("Failed to assign student to set in verifyPayment: {}", e.getMessage());
+            }
+        }
+        return reg;
     }
 
     @Transactional
@@ -325,6 +408,13 @@ public class RazorpayPaymentService {
                                 }
                             }
                             registrationRepository.save(reg);
+                            if (setDistributionService != null && reg.getCompetition() != null) {
+                                try {
+                                    setDistributionService.assignStudentToSet(reg.getCompetition().getId(), reg.getId());
+                                } catch (Exception e) {
+                                    log.error("Failed to assign student to set in handleWebhook: {}", e.getMessage());
+                                }
+                            }
                             log.info("Webhook successfully marked registration {} as PAID", reg.getId());
                         }
                     });

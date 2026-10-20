@@ -161,6 +161,16 @@ class AuthServiceTest {
             return 0L;
         }
 
+        @Override
+        public List<User> findLearningStudents() {
+            return Collections.singletonList(user);
+        }
+
+        @Override
+        public long countLearningStudents() {
+            return 1L;
+        }
+
         @Override public void flush() {}
         @Override public <S extends User> S saveAndFlush(S entity) { return entity; }
         @Override public <S extends User> List<S> saveAllAndFlush(Iterable<S> entities) { return Collections.emptyList(); }

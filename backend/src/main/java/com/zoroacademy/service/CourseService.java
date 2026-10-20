@@ -32,6 +32,9 @@ public class CourseService {
     private final AssignmentSubmissionRepository submissionRepository;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private TrainerCourseRequestRepository trainerCourseRequestRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -132,6 +135,7 @@ public class CourseService {
         copy.setGoogleMeetUrl(null);
         copy.setCreatedAt(course.getCreatedAt());
         copy.setUpdatedAt(course.getUpdatedAt());
+        copy.setRequestStatus(course.getRequestStatus());
 
         if (course.getModules() != null) {
             java.util.List<CourseModule> sorted = new java.util.ArrayList<>(course.getModules());
@@ -670,27 +674,94 @@ public class CourseService {
         cleanupStoredFilesFromText(module.getAssignmentFileUrl());
     }
 
-    @Transactional
-    public void deleteCourse(String id) {
-        long activeEnrollments = enrollmentRepository.findByCourseId(id).stream()
-                .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
-                .count();
-        if (activeEnrollments > 0) {
-            throw new ConflictException("Cannot delete course with " + activeEnrollments + " active enrollments");
-        }
-        List<Batch> batches = batchRepository.findByCourseId(id);
-        if (!batches.isEmpty()) {
-            throw new ConflictException("Cannot delete course with " + batches.size() + " active batches");
+    @Transactional(readOnly = true)
+    public com.zoroacademy.dto.DeletionImpactDto getCourseDeletionImpact(String id) {
+        Course course = courseRepository.findById(id)
+                .or(() -> courseRepository.findBySlug(id))
+                .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
+
+        boolean canDelete = true;
+        List<String> blockingReasons = new ArrayList<>();
+        Map<String, Long> counts = new HashMap<>();
+        Map<String, List<String>> names = new HashMap<>();
+
+        // Trainer audience courses: check approved trainer access
+        if ("trainer".equalsIgnoreCase(course.getAudience())) {
+            List<TrainerCourseRequest> approvedReqs = trainerCourseRequestRepository != null
+                    ? trainerCourseRequestRepository.findByCourseId(course.getId()).stream()
+                        .filter(r -> "Approved".equalsIgnoreCase(r.getStatus()))
+                        .toList()
+                    : Collections.emptyList();
+            counts.put("assignedTrainers", (long) approvedReqs.size());
+            List<String> trainerNames = approvedReqs.stream()
+                    .map(r -> r.getTrainerName() != null && !r.getTrainerName().isBlank() ? r.getTrainerName() : r.getTrainerEmail())
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+            names.put("trainers", trainerNames);
+
+            if (!approvedReqs.isEmpty()) {
+                canDelete = false;
+                blockingReasons.add("Trainers are assigned to this course. Remove their access first, then delete the course.");
+            }
+        } else {
+            // Student audience courses: no active enrollments or batches
+            List<Enrollment> activeEnrs = enrollmentRepository.findByCourseId(course.getId()).stream()
+                    .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
+                    .toList();
+            counts.put("activeEnrollments", (long) activeEnrs.size());
+            if (!activeEnrs.isEmpty()) {
+                canDelete = false;
+                blockingReasons.add("Course has " + activeEnrs.size() + " active student enrollment(s). Remove their access first, then delete the course.");
+            }
+
+            List<Batch> batches = batchRepository.findByCourseId(course.getId());
+            counts.put("batches", (long) batches.size());
+            List<String> batchNames = batches.stream().map(Batch::getName).filter(Objects::nonNull).toList();
+            names.put("batches", batchNames);
+            if (!batches.isEmpty()) {
+                canDelete = false;
+                blockingReasons.add("Course is assigned to active batch(es): " + String.join(", ", batchNames) + ". Reassign or delete batches first, then delete the course.");
+            }
+
+            if (course.getTrainerId() != null && !course.getTrainerId().isBlank()) {
+                canDelete = false;
+                String tName = course.getAssignedTrainer() != null ? course.getAssignedTrainer() : "assigned trainer";
+                blockingReasons.add("Trainer " + tName + " is assigned to this course. Remove their access first, then delete the course.");
+            }
         }
 
-        Course course = courseRepository.findById(id).orElse(null);
+        return new com.zoroacademy.dto.DeletionImpactDto(canDelete, blockingReasons, counts, names);
+    }
+
+    @Transactional
+    public void deleteCourse(String id) {
+        com.zoroacademy.dto.DeletionImpactDto impact = getCourseDeletionImpact(id);
+        if (!impact.isCanDelete()) {
+            throw new ConflictException(String.join(" ", impact.getBlockingReasons()));
+        }
+
+        Course course = courseRepository.findById(id)
+                .or(() -> courseRepository.findBySlug(id))
+                .orElse(null);
+
         if (course != null) {
+            String courseId = course.getId();
+
+            // Pending and Rejected trainer requests are not access: delete them in the same transaction as the course
+            if (trainerCourseRequestRepository != null) {
+                List<TrainerCourseRequest> requests = trainerCourseRequestRepository.findByCourseId(courseId);
+                if (requests != null && !requests.isEmpty()) {
+                    trainerCourseRequestRepository.deleteAll(requests);
+                }
+            }
+
             if (course.getModules() != null) {
                 for (CourseModule m : course.getModules()) {
                     cleanupModuleFilesAndVideos(m);
                 }
             }
-            List<Video> courseVideos = videoRepository.findByCourseId(id);
+            List<Video> courseVideos = videoRepository.findByCourseId(courseId);
             for (Video v : courseVideos) {
                 purgeVideo(v.getBunnyVideoId());
             }

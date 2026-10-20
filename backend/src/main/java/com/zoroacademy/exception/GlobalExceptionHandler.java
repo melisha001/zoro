@@ -36,6 +36,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage(), "CONFLICT", null));
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiResponse<Void>> handleForbidden(ForbiddenException ex) {
+        log.warn("Forbidden: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage(), "FORBIDDEN", null));
+    }
+
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleMessageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException ex) {
         String correlationId = UUID.randomUUID().toString();
@@ -58,25 +64,27 @@ public class GlobalExceptionHandler {
         String correlationId = UUID.randomUUID().toString();
         String specificCause = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage();
         log.warn("Data integrity violation [correlationId={}]: {}", correlationId, specificCause);
-        String msg = "Operation cannot be completed because a database constraint was violated.";
+        String msg = "Operation cannot be completed because related data depends on this record.";
         HttpStatus status = HttpStatus.CONFLICT;
         String errorCode = "DATA_INTEGRITY_VIOLATION";
 
-        if (ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
-            String specific = ex.getMostSpecificCause().getMessage();
-            if (specific.contains("violates foreign key constraint")) {
-                msg = "Cannot delete or modify record because it is referenced by other records (foreign key constraint).";
+        if (specificCause != null) {
+            String lower = specificCause.toLowerCase();
+            if (lower.contains("violates foreign key constraint") || lower.contains("referenced from table")) {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("table [\"']([^\"']+)[\"']").matcher(specificCause);
+                String referencedTable = m.find() ? m.group(1).replace('_', ' ') : "dependent records";
+                msg = "Cannot delete or modify this record because it is actively referenced by " + referencedTable + ". Please remove or reassign related records first.";
                 status = HttpStatus.CONFLICT;
                 errorCode = "FOREIGN_KEY_VIOLATION";
-            } else if (specific.contains("violates unique constraint") || specific.contains("duplicate key")) {
-                msg = "A record with this information already exists (unique constraint violation).";
+            } else if (lower.contains("violates unique constraint") || lower.contains("duplicate key")) {
+                msg = "A record with this information already exists. Please choose a different unique value.";
                 status = HttpStatus.CONFLICT;
                 errorCode = "DUPLICATE_KEY";
-            } else if (specific.contains("column is of type jsonb") || specific.contains("invalid input syntax for type json")) {
+            } else if (lower.contains("column is of type jsonb") || lower.contains("invalid input syntax for type json")) {
                 msg = "Invalid JSON data provided for one or more fields.";
                 status = HttpStatus.BAD_REQUEST;
                 errorCode = "INVALID_JSON_DATA";
-            } else if (specific.contains("violates not-null constraint")) {
+            } else if (lower.contains("violates not-null constraint")) {
                 msg = "A required field was missing or null.";
                 status = HttpStatus.BAD_REQUEST;
                 errorCode = "NOT_NULL_VIOLATION";

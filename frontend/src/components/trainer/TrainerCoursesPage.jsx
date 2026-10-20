@@ -4,6 +4,7 @@ import { getMyTrainerCourses, createTrainerCourseRequest } from '../../api/cours
 import { resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
 import { useAuth } from '../../context/AuthContext';
 import SafeImage from '../common/SafeImage';
+import SkeletonList from '../common/SkeletonList';
 import CourseLearningPage from '../student/CourseLearningPage';
 
 function formatModulesDuration(modules) {
@@ -187,9 +188,7 @@ export default function TrainerCoursesPage() {
       </div>
 
       {loading ? (
-        <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 text-xs font-bold text-slate-400">
-          Loading trainer courses...
-        </div>
+        <SkeletonList count={3} lines={3} />
       ) : filteredCourses.length === 0 ? (
         <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 shadow-xs space-y-3">
           <BookOpen className="w-12 h-12 text-purple-300 mx-auto" />
@@ -234,6 +233,7 @@ export default function TrainerCoursesPage() {
           {filteredCourses.map((course) => {
             const isEnrolled = enrolledCourseIds.has(course.id);
             const isPending = pendingCourseIds.has(course.id);
+            const isRejected = (course.requestStatus || '').toLowerCase() === 'rejected';
 
             return (
               <div key={course.id} className="bg-white rounded-3xl border border-slate-200/80 shadow-md overflow-hidden flex flex-col justify-between group hover:shadow-lg transition-shadow">
@@ -248,9 +248,9 @@ export default function TrainerCoursesPage() {
                       fallbackSrc="/assets/course-placeholder.svg"
                     />
                     <div className={`absolute top-3 right-3 text-white text-[10px] font-extrabold px-3 py-1 rounded-full shadow ${
-                      isEnrolled ? 'bg-purple-600' : isPending ? 'bg-amber-500' : 'bg-slate-800'
+                      isEnrolled ? 'bg-purple-600' : isPending ? 'bg-amber-500' : isRejected ? 'bg-rose-600' : 'bg-slate-800'
                     }`}>
-                      {isEnrolled ? 'Enrolled Course' : isPending ? 'Pending Approval' : 'Available Course'}
+                      {isEnrolled ? 'Enrolled Course' : isPending ? 'Pending Approval' : isRejected ? 'Rejected' : 'Available Course'}
                     </div>
 
                     {/* Requirement 10.2: Course Duration Display */}
@@ -351,7 +351,7 @@ export default function TrainerCoursesPage() {
                         className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold px-4 py-2 rounded-xl shadow-xs text-xs flex items-center space-x-1.5 cursor-pointer"
                       >
                         <Send className="w-3.5 h-3.5" />
-                        <span>Request Access / Enquire</span>
+                        <span>{isRejected ? 'Request again' : 'Request Access / Enquire'}</span>
                       </button>
                     )}
                   </div>

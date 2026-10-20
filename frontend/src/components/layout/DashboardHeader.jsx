@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Calendar as CalendarIcon, Menu, X, AlertTriangle, Clock, CheckCircle2, Info, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, Calendar as CalendarIcon, Menu, X, AlertTriangle, Clock, CheckCircle2, Info, User, Trophy, ArrowLeftRight } from 'lucide-react';
 import { getMyNotifications } from '../../api/notificationApi';
 import { resolveFileUrl } from '../../api/fileApi';
+import { getMyPortals } from '../../api/competitionApi';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
 export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScreen }) {
+  const navigate = useNavigate();
   const { academyName } = useWebsiteSettings();
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [notifList, setNotifList] = useState([]);
+  const [hasCompetitionAccess, setHasCompetitionAccess] = useState(false);
 
   const currentDateStr = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
@@ -18,7 +22,19 @@ export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScr
 
   useEffect(() => {
     loadNotifications();
+    checkPortals();
   }, [user]);
+
+  const checkPortals = async () => {
+    try {
+      const res = await getMyPortals();
+      if (res.success && res.data) {
+        setHasCompetitionAccess(Boolean(res.data.competition));
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
 
   const handleProfileClick = () => {
     if (!setActiveScreen) return;
@@ -81,6 +97,18 @@ export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScr
           <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />
           <span>{currentDateStr}</span>
         </div>
+
+        {/* Switch to Competition Portal button (shown only when user has competition access) */}
+        {hasCompetitionAccess && (
+          <button
+            onClick={() => navigate('/competition')}
+            className="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition cursor-pointer shadow-2xs"
+            title="Switch to Competition Portal"
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-600" />
+            <span>Switch to Competition Portal</span>
+          </button>
+        )}
 
         {/* Notifications Icon & Bell Button */}
         <div className="relative">

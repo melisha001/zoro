@@ -22,6 +22,7 @@ public class CompetitionOrderRequest {
     private Integer age;
     private String school;
     private String city;
+    private String password;
 
     // Optional field from client - MUST BE IGNORED by server to prevent price tampering
     private Object amount;
@@ -98,5 +99,13 @@ public class CompetitionOrderRequest {
 
     public void setAmount(Object amount) {
         this.amount = amount;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
     }
 }

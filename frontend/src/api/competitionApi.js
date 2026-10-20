@@ -53,7 +53,16 @@ export const createCompetition = async (newCompData) => {
     rules: newCompData.rules || '',
     contactDetails: newCompData.contactDetails || '',
     registrationFee: parseFloat(newCompData.registrationFee || 0),
-    status: newCompData.status || 'Active'
+    status: newCompData.status || 'Active',
+    regStartAt: newCompData.regStartAt || null,
+    regEndAt: newCompData.regEndAt || null,
+    startAt: newCompData.startAt || null,
+    endAt: newCompData.endAt || null,
+    finalUnlockAt: newCompData.finalUnlockAt || null,
+    leaderboardPublishTime: newCompData.leaderboardPublishTime || null,
+    leaderboardStatus: newCompData.leaderboardStatus || 'NOT_PUBLISHED',
+    leaderboardPublishedAt: newCompData.leaderboardPublishedAt || null,
+    answerReviewEnabled: Boolean(newCompData.answerReviewEnabled)
   };
 
   const res = await apiPost('/competitions', payload);
@@ -85,7 +94,16 @@ export const updateCompetition = async (id, updatedData) => {
     rules: updatedData.rules || '',
     contactDetails: updatedData.contactDetails || '',
     registrationFee: parseFloat(updatedData.registrationFee || 0),
-    status: updatedData.status || 'Active'
+    status: updatedData.status || 'Active',
+    regStartAt: updatedData.regStartAt || null,
+    regEndAt: updatedData.regEndAt || null,
+    startAt: updatedData.startAt || null,
+    endAt: updatedData.endAt || null,
+    finalUnlockAt: updatedData.finalUnlockAt || null,
+    leaderboardPublishTime: updatedData.leaderboardPublishTime || null,
+    leaderboardStatus: updatedData.leaderboardStatus || undefined,
+    leaderboardPublishedAt: updatedData.leaderboardPublishedAt || undefined,
+    answerReviewEnabled: updatedData.answerReviewEnabled !== undefined ? Boolean(updatedData.answerReviewEnabled) : undefined
   };
 
   const res = await apiPut(`/competitions/${encodeURIComponent(id)}`, payload);
@@ -107,3 +125,403 @@ export const deleteCompetition = async (id) => {
   }
   return apiResponse(false, false, res?.message || 'Failed to delete competition');
 };
+
+// --- PORTALS API ---
+export const getMyPortals = async () => {
+  const res = await apiGet('/me/portals');
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse({ learning: false, competition: false, competitions: [], defaultPortal: null }, false, res?.message);
+};
+
+// --- STUDENT COMPETITION PORTAL CONTEXT ---
+export const getCompetitionPortalContext = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/my-portal`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to load competition portal details');
+};
+
+// --- SETS & TRAINERS ---
+export const getCompetitionSets = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/sets`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch sets');
+};
+
+export const assignTrainerToSet = async (competitionId, code, trainerId) => {
+  const res = await apiPut(`/competitions/${encodeURIComponent(competitionId)}/sets/${encodeURIComponent(code)}/trainer`, { trainerId });
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to assign trainer to set');
+};
+
+// --- SYLLABUS ---
+export const getCompetitionSyllabus = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/syllabus`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch syllabus');
+};
+
+export const saveCompetitionSyllabus = async (competitionId, { title, storedFileId, fileType }) => {
+  const res = await apiPost(`/competitions/${encodeURIComponent(competitionId)}/syllabus`, { title, storedFileId, fileType });
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to save syllabus');
+};
+
+export const deleteCompetitionSyllabus = async (competitionId) => {
+  const res = await apiDelete(`/competitions/${encodeURIComponent(competitionId)}/syllabus`);
+  if (res && res.success) {
+    return apiResponse(true);
+  }
+  return apiResponse(false, false, res?.message || 'Failed to delete syllabus');
+};
+
+// --- GUIDANCE VIDEOS ---
+export const getCompetitionGuidanceVideos = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/guidance-videos`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch guidance videos');
+};
+
+export const saveCompetitionGuidanceVideo = async (competitionId, video) => {
+  const res = await apiPost(`/competitions/${encodeURIComponent(competitionId)}/guidance-videos`, video);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to save guidance video');
+};
+
+export const deleteCompetitionGuidanceVideo = async (videoId) => {
+  const res = await apiDelete(`/competitions/guidance-videos/${encodeURIComponent(videoId)}`);
+  if (res && res.success) {
+    return apiResponse(true);
+  }
+  return apiResponse(false, false, res?.message || 'Failed to delete guidance video');
+};
+
+// --- STUDY MATERIALS ---
+export const getCompetitionStudyMaterials = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/study-materials`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch study materials');
+};
+
+export const saveCompetitionStudyMaterial = async (competitionId, material) => {
+  const res = await apiPost(`/competitions/${encodeURIComponent(competitionId)}/study-materials`, material);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to save study material');
+};
+
+export const deleteCompetitionStudyMaterial = async (materialId) => {
+  const res = await apiDelete(`/competitions/study-materials/${encodeURIComponent(materialId)}`);
+  if (res && res.success) {
+    return apiResponse(true);
+  }
+  return apiResponse(false, false, res?.message || 'Failed to delete study material');
+};
+
+// --- ASSESSMENTS & QUESTIONS ---
+export const getCompetitionAssessments = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/assessments`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch assessments');
+};
+
+export const updateCompetitionAssessment = async (asmtId, updated) => {
+  const res = await apiPut(`/competitions/assessments/${encodeURIComponent(asmtId)}`, updated);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to update assessment');
+};
+
+export const getAssessmentQuestions = async (asmtId) => {
+  const res = await apiGet(`/competitions/assessments/${encodeURIComponent(asmtId)}/questions`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch questions');
+};
+
+export const saveAssessmentQuestion = async (asmtId, payload) => {
+  const res = await apiPost(`/competitions/assessments/${encodeURIComponent(asmtId)}/questions`, payload);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to save question');
+};
+
+export const deleteAssessmentQuestion = async (questionId) => {
+  const res = await apiDelete(`/competitions/questions/${encodeURIComponent(questionId)}`);
+  if (res && res.success) {
+    return apiResponse(true);
+  }
+  return apiResponse(false, false, res?.message || 'Failed to delete question');
+};
+
+export const duplicateAssessmentQuestion = async (questionId) => {
+  const res = await apiPost(`/competitions/questions/${encodeURIComponent(questionId)}/duplicate`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to duplicate question');
+};
+
+export const reorderAssessmentQuestions = async (asmtId, questionIds) => {
+  const res = await apiPut(`/competitions/assessments/${encodeURIComponent(asmtId)}/questions/reorder`, questionIds);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to reorder questions');
+};
+
+export const publishCompetitionAssessment = async (asmtId) => {
+  const res = await apiPost(`/competitions/assessments/${encodeURIComponent(asmtId)}/publish`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to publish assessment');
+};
+
+// --- COMPETITION MANAGEMENT (OVERVIEW & STUDENTS) ---
+export const getCompetitionOverview = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/overview`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch competition overview');
+};
+
+export const getCompetitionRegisteredStudents = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/registered-students`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch registered students');
+};
+
+// --- PHASE 1: TEST SERIES & ASSESSMENT EXECUTION ---
+export const getStudentTestSeries = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/test-series`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch test series');
+};
+
+export const startTestSeriesAttempt = async (asmtId) => {
+  const res = await apiPost(`/competitions/test-series/${encodeURIComponent(asmtId)}/start`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to start test');
+};
+
+export const saveAssessmentAnswer = async (asmtId, payload) => {
+  const res = await apiPost(`/competitions/test-series/${encodeURIComponent(asmtId)}/answers`, payload);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to save answer');
+};
+
+export const submitTestSeriesAttempt = async (asmtId) => {
+  const res = await apiPost(`/competitions/test-series/${encodeURIComponent(asmtId)}/submit`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to submit test');
+};
+
+export const getAssessmentResults = async (asmtId) => {
+  const res = await apiGet(`/competitions/test-series/${encodeURIComponent(asmtId)}/results`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch test results');
+};
+
+export const resetAssessmentAttempt = async (asmtId, attemptId) => {
+  const res = await apiPost(`/competitions/assessments/${encodeURIComponent(asmtId)}/attempts/${encodeURIComponent(attemptId)}/reset`, {});
+  if (res && res.success) {
+    return apiResponse(true);
+  }
+  return apiResponse(false, false, res?.message || 'Failed to reset attempt');
+};
+
+// --- PHASE 2: MOCK TESTS API ---
+export const getStudentMockTests = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/mock-tests`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse({ mockTests: [] }, false, res?.message || 'Failed to fetch mock tests');
+};
+
+export const startMockTestAttempt = async (asmtId) => {
+  const res = await apiPost(`/competitions/mock-tests/${encodeURIComponent(asmtId)}/start`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to start mock test');
+};
+
+export const saveMockAssessmentAnswer = async (asmtId, payload) => {
+  const res = await apiPost(`/competitions/mock-tests/${encodeURIComponent(asmtId)}/answers`, payload);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to save answer');
+};
+
+export const submitMockTestAttempt = async (asmtId) => {
+  const res = await apiPost(`/competitions/mock-tests/${encodeURIComponent(asmtId)}/submit`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to submit mock test');
+};
+
+export const getMockAssessmentResults = async (asmtId) => {
+  const res = await apiGet(`/competitions/mock-tests/${encodeURIComponent(asmtId)}/results`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch mock test results');
+};
+
+// --- PHASE 3: FINAL ASSESSMENT API ---
+export const getStudentFinalAssessment = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/final-assessment`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch final assessment');
+};
+
+export const startFinalAssessmentAttempt = async (asmtId) => {
+  const res = await apiPost(`/competitions/final-assessment/${encodeURIComponent(asmtId)}/start`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to start final assessment');
+};
+
+export const saveFinalAssessmentAnswer = async (asmtId, payload) => {
+  const res = await apiPost(`/competitions/final-assessment/${encodeURIComponent(asmtId)}/answers`, payload);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to save answer');
+};
+
+export const submitFinalAssessmentAttempt = async (asmtId) => {
+  const res = await apiPost(`/competitions/final-assessment/${encodeURIComponent(asmtId)}/submit`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to submit final assessment');
+};
+
+export const getFinalAssessmentResults = async (asmtId) => {
+  const res = await apiGet(`/competitions/final-assessment/${encodeURIComponent(asmtId)}/results`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch final assessment results');
+};
+
+export const generateSetPapers = async (asmtId) => {
+  const res = await apiPost(`/competitions/assessments/${encodeURIComponent(asmtId)}/generate-sets`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to generate set papers');
+};
+
+// --- PHASE 4: TRAINER EVALUATION API ---
+export const getTrainerCompetitionEvaluations = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/trainer/evaluations`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch trainer evaluations');
+};
+
+export const getTrainerAttemptDetail = async (attemptId) => {
+  const res = await apiGet(`/competitions/trainer/attempts/${encodeURIComponent(attemptId)}`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch attempt details');
+};
+
+export const evaluateVoiceAnswer = async (attemptId, answerId, payload) => {
+  const res = await apiPost(`/competitions/trainer/attempts/${encodeURIComponent(attemptId)}/answers/${encodeURIComponent(answerId)}/evaluate`, payload);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to evaluate voice answer');
+};
+
+// --- PHASE 5: LEADERBOARD API ---
+export const getCompetitionLeaderboard = async (competitionId) => {
+  const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/leaderboard`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to load leaderboard');
+};
+
+export const recalculateCompetitionLeaderboard = async (competitionId) => {
+  const res = await apiPost(`/competitions/${encodeURIComponent(competitionId)}/leaderboard/recalculate`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to recalculate leaderboard');
+};
+
+export const publishCompetitionLeaderboard = async (competitionId) => {
+  const res = await apiPost(`/competitions/${encodeURIComponent(competitionId)}/leaderboard/publish`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to publish leaderboard');
+};
+
+export const unpublishCompetitionLeaderboard = async (competitionId) => {
+  const res = await apiPost(`/competitions/${encodeURIComponent(competitionId)}/leaderboard/unpublish`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to unpublish leaderboard');
+};
+
+export const toggleCompetitionAnswerReview = async (competitionId) => {
+  const res = await apiPost(`/competitions/${encodeURIComponent(competitionId)}/answer-review/toggle`, {});
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to toggle answer review');
+};
+
+
+

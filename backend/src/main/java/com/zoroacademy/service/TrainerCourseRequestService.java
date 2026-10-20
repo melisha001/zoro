@@ -88,16 +88,31 @@ public class TrainerCourseRequestService {
                 .or(() -> courseRepository.findByTitleIgnoreCase(req.getCourseTitle()))
                 .orElseThrow(() -> new IllegalArgumentException("Course not found: " + req.getCourseId()));
 
-        // Check if trainer is already assigned
-        if (course.getTrainerId() != null && course.getTrainerId().equals(effectiveTrainerId)) {
-            throw new ConflictException("You are already the assigned trainer for this course");
+        // Check if approved request exists
+        Optional<TrainerCourseRequest> approved = requestRepository.findByTrainerIdAndCourseIdAndStatusIgnoreCase(
+                effectiveTrainerId, course.getId(), "Approved");
+        if (approved.isPresent()) {
+            throw new ConflictException("You already have approved access to this course");
         }
 
         // Check if pending request exists
         Optional<TrainerCourseRequest> pending = requestRepository.findByTrainerIdAndCourseIdAndStatusIgnoreCase(
                 effectiveTrainerId, course.getId(), "Pending");
         if (pending.isPresent()) {
-            return pending.get();
+            throw new ConflictException("Your request for this course is already pending approval");
+        }
+
+        // Check if rejected request exists -> allow requesting again
+        Optional<TrainerCourseRequest> rejected = requestRepository.findByTrainerIdAndCourseIdAndStatusIgnoreCase(
+                effectiveTrainerId, course.getId(), "Rejected");
+        if (rejected.isPresent()) {
+            TrainerCourseRequest reqToUpdate = rejected.get();
+            reqToUpdate.setStatus("Pending");
+            reqToUpdate.setRequestDate(LocalDate.now().toString());
+            reqToUpdate = requestRepository.save(reqToUpdate);
+            activityLogService.logAction(effectiveTrainerId, trainerName, "TRAINER_COURSE_REQUEST",
+                    "Trainer requested access again to course: " + course.getTitle(), "System");
+            return reqToUpdate;
         }
 
         TrainerCourseRequest newReq = TrainerCourseRequest.builder()
@@ -145,6 +160,16 @@ public class TrainerCourseRequestService {
             activityLogService.logAction("ADMIN", "Admin", "TRAINER_COURSE_APPROVED",
                     "Approved trainer " + req.getTrainerName() + " for course " + req.getCourseTitle(), "System");
         } else if ("Rejected".equalsIgnoreCase(status)) {
+            // Revoke access, clear any trainer fields that this approval had set
+            courseRepository.findById(req.getCourseId()).ifPresent(course -> {
+                if (req.getTrainerId() != null && req.getTrainerId().equals(course.getTrainerId())) {
+                    course.setTrainerId(null);
+                    course.setAssignedTrainer(null);
+                    course.setAssignedTrainerId(null);
+                    courseRepository.save(course);
+                }
+            });
+
             notificationService.createNotification(Notification.builder()
                     .id("notif_" + UUID.randomUUID())
                     .recipientId(req.getTrainerId())
@@ -159,5 +184,10 @@ public class TrainerCourseRequestService {
         }
 
         return requestRepository.save(req);
+    }
+
+    @Transactional
+    public void deleteRequest(String requestId) {
+        requestRepository.deleteById(requestId);
     }
 }

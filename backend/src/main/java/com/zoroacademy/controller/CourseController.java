@@ -121,6 +121,12 @@ public class CourseController {
         return ApiResponse.ok(courseService.updateCourse(id, course), "Course updated successfully");
     }
 
+    @GetMapping("/{id}/deletion-impact")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<com.zoroacademy.dto.DeletionImpactDto> getCourseDeletionImpact(@PathVariable String id) {
+        return ApiResponse.ok(courseService.getCourseDeletionImpact(id));
+    }
+
     @DeleteMapping("/{id}")
     public ApiResponse<Boolean> deleteCourse(@PathVariable String id) {
         courseService.deleteCourse(id);

@@ -23,6 +23,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { parseJsonField, getCourseById, addModule, updateModule, deleteModule, reorderModules } from '../../api/courseApi';
+import PageLoader from '../common/PageLoader';
 import { uploadFile, resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
 import { createVideoUploadSession, getVideoDetails } from '../../api/videoApi';
 import { useDialog } from '../../context/DialogContext';
@@ -168,7 +169,15 @@ function SortableModuleCard({
         <div className="flex flex-col md:flex-row gap-4 items-start border-b border-slate-100 pb-4">
           {mod.thumbnail ? (
             <div className="w-32 h-24 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0">
-              <img src={resolveFileUrl(mod.thumbnail)} alt={mod.title} className="w-full h-full object-cover" />
+              <img
+                src={resolveFileUrl(mod.thumbnail)}
+                alt={mod.title}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = '/assets/course-placeholder.svg';
+                }}
+              />
             </div>
           ) : (
             <div className="w-32 h-24 rounded-xl bg-slate-100 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-[10px] font-semibold shrink-0">
@@ -364,7 +373,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
   }, [courseId]);
 
   if (!course) {
-    return <div className="p-8 text-center text-xs font-bold text-slate-400">Loading course modules...</div>;
+    return <PageLoader fullPage message="Loading course modules..." />;
   }
 
   const resetForm = () => {
@@ -938,7 +947,15 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                 <div className="flex items-center gap-3">
                   {formData.thumbnail && (
                     <div className="relative w-16 h-16 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 shrink-0">
-                      <img src={resolveFileUrl(formData.thumbnail)} alt="Preview" className="w-full h-full object-cover" />
+                      <img
+                        src={resolveFileUrl(formData.thumbnail)}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = '/assets/course-placeholder.svg';
+                        }}
+                      />
                       <button
                         type="button"
                         onClick={() => setFormData({ ...formData, thumbnail: '' })}

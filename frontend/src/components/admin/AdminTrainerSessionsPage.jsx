@@ -13,6 +13,7 @@ import {
   isValidGoogleMeetUrl
 } from '../../utils/scheduleSortUtil';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import PageLoader from '../common/PageLoader';
 
 export default function AdminTrainerSessionsPage({ setActiveScreen: _setActiveScreen }) {
   const [schedules, setSchedules] = useState([]);
@@ -404,9 +405,8 @@ export default function AdminTrainerSessionsPage({ setActiveScreen: _setActiveSc
         </div>
 
         {loading ? (
-          <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 space-y-3">
-            <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mx-auto" />
-            <p className="text-xs font-bold text-slate-500">Loading trainer sessions...</p>
+          <div className="bg-white p-8 rounded-3xl border border-slate-200">
+            <PageLoader message="Loading trainer sessions..." />
           </div>
         ) : filteredSchedules.length === 0 ? (
           <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 space-y-3">

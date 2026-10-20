@@ -5,6 +5,7 @@ import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerAllocatedCourses, getTrainerAllocatedBatches } from '../../utils/trainerFilterHelper';
+import PageLoader from '../common/PageLoader';
 
 export default function TrainerDoubtsPage() {
   const { user } = useAuth();
@@ -196,8 +197,8 @@ export default function TrainerDoubtsPage() {
       {/* Doubts List */}
       <div className="space-y-4">
         {loading ? (
-          <div className="p-8 text-center text-xs font-bold text-slate-400 bg-white rounded-3xl border border-slate-200">
-            Loading student doubts...
+          <div className="p-8 bg-white rounded-3xl border border-slate-200">
+            <PageLoader message="Loading student doubts..." />
           </div>
         ) : filteredDoubts.length === 0 ? (
           <div className="p-8 text-center text-xs font-bold text-slate-400 bg-white rounded-3xl border border-slate-200">

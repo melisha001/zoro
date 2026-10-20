@@ -68,6 +68,33 @@ public class Competition {
     @Column(length = 50)
     private String status = "Active";
 
+    @Column(name = "reg_start_at")
+    private java.time.OffsetDateTime regStartAt;
+
+    @Column(name = "reg_end_at")
+    private java.time.OffsetDateTime regEndAt;
+
+    @Column(name = "start_at")
+    private java.time.OffsetDateTime startAt;
+
+    @Column(name = "end_at")
+    private java.time.OffsetDateTime endAt;
+
+    @Column(name = "final_unlock_at")
+    private java.time.OffsetDateTime finalUnlockAt;
+
+    @Column(name = "leaderboard_publish_time", length = 20)
+    private String leaderboardPublishTime;
+
+    @Column(name = "leaderboard_status", length = 50, nullable = false)
+    private String leaderboardStatus = "NOT_PUBLISHED";
+
+    @Column(name = "leaderboard_published_at")
+    private java.time.OffsetDateTime leaderboardPublishedAt;
+
+    @Column(name = "answer_review_enabled", nullable = false)
+    private Boolean answerReviewEnabled = false;
+
     @OneToMany(mappedBy = "competition", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JsonManagedReference
     private List<CompetitionModule> modules = new ArrayList<>();
@@ -253,6 +280,78 @@ public class Competition {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public java.time.OffsetDateTime getRegStartAt() {
+        return regStartAt;
+    }
+
+    public void setRegStartAt(java.time.OffsetDateTime regStartAt) {
+        this.regStartAt = regStartAt;
+    }
+
+    public java.time.OffsetDateTime getRegEndAt() {
+        return regEndAt;
+    }
+
+    public void setRegEndAt(java.time.OffsetDateTime regEndAt) {
+        this.regEndAt = regEndAt;
+    }
+
+    public java.time.OffsetDateTime getStartAt() {
+        return startAt;
+    }
+
+    public void setStartAt(java.time.OffsetDateTime startAt) {
+        this.startAt = startAt;
+    }
+
+    public java.time.OffsetDateTime getEndAt() {
+        return endAt;
+    }
+
+    public void setEndAt(java.time.OffsetDateTime endAt) {
+        this.endAt = endAt;
+    }
+
+    public java.time.OffsetDateTime getFinalUnlockAt() {
+        return finalUnlockAt;
+    }
+
+    public void setFinalUnlockAt(java.time.OffsetDateTime finalUnlockAt) {
+        this.finalUnlockAt = finalUnlockAt;
+    }
+
+    public String getLeaderboardPublishTime() {
+        return leaderboardPublishTime;
+    }
+
+    public void setLeaderboardPublishTime(String leaderboardPublishTime) {
+        this.leaderboardPublishTime = leaderboardPublishTime;
+    }
+
+    public String getLeaderboardStatus() {
+        return leaderboardStatus != null ? leaderboardStatus : "NOT_PUBLISHED";
+    }
+
+    public void setLeaderboardStatus(String leaderboardStatus) {
+        this.leaderboardStatus = leaderboardStatus != null ? leaderboardStatus : "NOT_PUBLISHED";
+    }
+
+    public java.time.OffsetDateTime getLeaderboardPublishedAt() {
+        return leaderboardPublishedAt;
+    }
+
+    public void setLeaderboardPublishedAt(java.time.OffsetDateTime leaderboardPublishedAt) {
+        this.leaderboardPublishedAt = leaderboardPublishedAt;
+    }
+
+    public Boolean getAnswerReviewEnabled() {
+        return answerReviewEnabled != null ? answerReviewEnabled : false;
+    }
+
+    public void setAnswerReviewEnabled(Boolean answerReviewEnabled) {
+        this.answerReviewEnabled = answerReviewEnabled != null ? answerReviewEnabled : false;
     }
 
     public List<CompetitionModule> getModules() {

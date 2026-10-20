@@ -15,6 +15,7 @@ import ContactPage from './components/public/ContactPage';
 import EnquireModal from './components/public/EnquireModal';
 import LoginModal from './components/public/LoginModal';
 import { getWebsiteSettings } from './api/websiteSettingsApi';
+import { getMyPortals } from './api/competitionApi';
 
 // Code-splitting via React.lazy for portal screens
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
@@ -33,6 +34,7 @@ const AdminExpensesPage = lazy(() => import('./components/admin/AdminExpensesPag
 const AdminSalaryPage = lazy(() => import('./components/admin/AdminSalaryPage'));
 const AdminDailyReportPage = lazy(() => import('./components/admin/AdminDailyReportPage'));
 const AdminCompetitionPage = lazy(() => import('./components/admin/AdminCompetitionPage'));
+const AdminCompetitionManagementPage = lazy(() => import('./components/admin/AdminCompetitionManagementPage'));
 const AdminCompetitionRegistrationsPage = lazy(() => import('./components/admin/AdminCompetitionRegistrationsPage'));
 const AdminCompetitionModulesPage = lazy(() => import('./components/admin/AdminCompetitionModulesPage'));
 const AdminAssignmentsPage = lazy(() => import('./components/admin/AdminAssignmentsPage'));
@@ -63,6 +65,20 @@ const AssignmentPage = lazy(() => import('./components/student/AssignmentPage'))
 const DoubtPage = lazy(() => import('./components/student/DoubtPage'));
 const StudentNotificationsPage = lazy(() => import('./components/student/StudentNotificationsPage'));
 const StudentProfilePage = lazy(() => import('./components/student/StudentProfilePage'));
+
+// Competition Portal screens
+const PortalSelectPage = lazy(() => import('./components/portal/PortalSelectPage'));
+const CompetitionPortalLayout = lazy(() => import('./components/competition/CompetitionPortalLayout'));
+const StudentCompetitionPortalPage = lazy(() => import('./components/competition/StudentCompetitionPortalPage'));
+const CompetitionSyllabusPage = lazy(() => import('./components/competition/CompetitionSyllabusPage'));
+const CompetitionStudyMaterialsPage = lazy(() => import('./components/competition/CompetitionStudyMaterialsPage'));
+const CompetitionTestSeriesPage = lazy(() => import('./components/competition/CompetitionTestSeriesPage'));
+const CompetitionMockTestsPage = lazy(() => import('./components/competition/CompetitionMockTestsPage'));
+const CompetitionFinalAssessmentPage = lazy(() => import('./components/competition/CompetitionFinalAssessmentPage'));
+const TrainerCompetitionEvaluationPage = lazy(() => import('./components/competition/TrainerCompetitionEvaluationPage'));
+const CompetitionLeaderboardPage = lazy(() => import('./components/competition/CompetitionLeaderboardPage'));
+const CompetitionPlaceholderPage = lazy(() => import('./components/competition/CompetitionPlaceholderPage'));
+
 
 function PortalLoadingFallback() {
   return (
@@ -101,6 +117,7 @@ function getActiveScreenFromPath(path) {
   if (path === '/admin/salary') return 'admin-salary';
   if (path === '/admin/daily-reports') return 'admin-daily-reports';
   if (path === '/admin/competitions') return 'admin-competition';
+  if (path === '/admin/competition-management') return 'admin-competition-management';
   if (path.includes('/admin/competitions/') && path.includes('/modules')) return 'admin-competition-modules';
   if (path === '/admin/competitions/registrations') return 'admin-competition-registrations';
   if (path === '/admin/reports') return 'admin-reports';
@@ -159,6 +176,7 @@ function screenToPath(screen, params = {}) {
     case 'admin-salary': return '/admin/salary';
     case 'admin-daily-reports': return '/admin/daily-reports';
     case 'admin-competition': return '/admin/competitions';
+    case 'admin-competition-management': return '/admin/competition-management';
     case 'admin-competition-modules': return params.competitionId ? `/admin/competitions/${params.competitionId}/modules` : '/admin/competitions';
     case 'admin-competition-registrations': return '/admin/competitions/registrations';
     case 'admin-reports': return '/admin/reports';
@@ -194,12 +212,31 @@ function screenToPath(screen, params = {}) {
   }
 }
 
-// Protected route component that checks auth and role
-function ProtectedRoute({ allowedRoles, children }) {
+// Protected route component that checks auth, role, and portal permissions
+function ProtectedRoute({ allowedRoles, portalType, children }) {
   const { user, role, loading } = useAuth();
   const location = useLocation();
+  const [portalAccess, setPortalAccess] = useState(null);
+  const [checkingPortals, setCheckingPortals] = useState(Boolean(portalType && user));
 
-  if (loading) {
+  useEffect(() => {
+    if (!portalType || !user) {
+      setCheckingPortals(false);
+      return;
+    }
+    let isMounted = true;
+    getMyPortals().then(res => {
+      if (isMounted) {
+        setPortalAccess(res?.data || { learning: true, competition: false });
+        setCheckingPortals(false);
+      }
+    }).catch(() => {
+      if (isMounted) setCheckingPortals(false);
+    });
+    return () => { isMounted = false; };
+  }, [portalType, user]);
+
+  if (loading || checkingPortals) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white">
         <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
@@ -222,6 +259,16 @@ function ProtectedRoute({ allowedRoles, children }) {
     } else {
       return <Navigate to="/student" replace />;
     }
+  }
+
+  // Guard: if portalType is 'learning', competition-only student cannot enter
+  if (portalType === 'learning' && currentRole === 'STUDENT' && portalAccess && !portalAccess.learning && portalAccess.competition) {
+    return <Navigate to="/competition" replace />;
+  }
+
+  // Guard: if portalType is 'competition', user without competition registrations cannot enter
+  if (portalType === 'competition' && currentRole === 'STUDENT' && portalAccess && !portalAccess.competition) {
+    return <Navigate to="/student" replace />;
   }
 
   return children;
@@ -448,9 +495,24 @@ function AppRoutes() {
     );
   }
 
-  const handleLoginSuccess = (loggedUser) => {
+  const handleLoginSuccess = async (loggedUser) => {
     setIsLoginOpen(false);
     const roleUpper = (loggedUser?.role || '').toUpperCase();
+    try {
+      const pRes = await getMyPortals();
+      const p = pRes?.data;
+      if (p?.learning && p?.competition) {
+        navigate('/portal-select');
+        return;
+      }
+      if (p?.competition && !p?.learning) {
+        navigate('/competition');
+        return;
+      }
+    } catch (e) {
+      // fallback to role routes
+    }
+
     if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN') {
       navigate('/admin');
     } else if (roleUpper === 'TRAINER') {
@@ -470,6 +532,15 @@ function AppRoutes() {
           <Route path="/competitions" element={<PublicCompetitionWrapper />} />
           <Route path="/contact" element={<PublicContactWrapper />} />
         </Route>
+
+        {/* PORTAL SELECT ROUTE */}
+        <Route path="/portal-select" element={
+          <ProtectedRoute>
+            <Suspense fallback={<PortalLoadingFallback />}>
+              <PortalSelectPage />
+            </Suspense>
+          </ProtectedRoute>
+        } />
 
         {/* ADMIN ROUTES */}
         <Route path="/admin" element={
@@ -497,6 +568,7 @@ function AppRoutes() {
           <Route path="salary" element={<AdminSalaryPage />} />
           <Route path="daily-reports" element={<AdminDailyReportPage />} />
           <Route path="competitions" element={<AdminCompetitionPage setActiveScreen={(s) => navigate(screenToPath(s))} setSelectedCompIdForModules={(id) => navigate(`/admin/competitions/${id}/modules`)} />} />
+          <Route path="competition-management" element={<AdminCompetitionManagementPage />} />
           <Route path="competitions/:competitionId/modules" element={<CompetitionModulesWrapper />} />
           <Route path="competitions/registrations" element={<AdminCompetitionRegistrationsPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="reports" element={<AdminReportsPage />} />
@@ -527,9 +599,9 @@ function AppRoutes() {
           <Route path="*" element={<Navigate to="/trainer" replace />} />
         </Route>
 
-        {/* STUDENT ROUTES */}
+        {/* STUDENT ROUTES (Learning Portal guarded) */}
         <Route path="/student" element={
-          <ProtectedRoute allowedRoles={['STUDENT']}>
+          <ProtectedRoute allowedRoles={['STUDENT']} portalType="learning">
             <DashboardLayout expectedRole="STUDENT" />
           </ProtectedRoute>
         }>
@@ -542,6 +614,28 @@ function AppRoutes() {
           <Route path="notifications" element={<StudentNotificationsPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="profile" element={<StudentProfilePage />} />
           <Route path="*" element={<Navigate to="/student" replace />} />
+        </Route>
+
+        {/* COMPETITION PORTAL ROUTES */}
+        <Route path="/competition" element={
+          <ProtectedRoute portalType="competition">
+            <Suspense fallback={<PortalLoadingFallback />}>
+              <CompetitionPortalLayout />
+            </Suspense>
+          </ProtectedRoute>
+        }>
+          <Route index element={<StudentCompetitionPortalPage />} />
+          <Route path="portal" element={<StudentCompetitionPortalPage />} />
+          <Route path="syllabus" element={<CompetitionSyllabusPage />} />
+          <Route path="materials" element={<CompetitionStudyMaterialsPage />} />
+          <Route path="study-materials" element={<Navigate to="/competition/materials" replace />} />
+          <Route path="test-series" element={<CompetitionTestSeriesPage />} />
+
+          <Route path="mock-tests" element={<CompetitionMockTestsPage />} />
+          <Route path="final-assessment" element={<CompetitionFinalAssessmentPage />} />
+          <Route path="evaluations" element={<TrainerCompetitionEvaluationPage />} />
+          <Route path="leaderboard" element={<CompetitionLeaderboardPage />} />
+          <Route path="*" element={<Navigate to="/competition" replace />} />
         </Route>
 
         {/* CATCH-ALL REDIRECT TO HOME */}

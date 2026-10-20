@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LogIn, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { authenticateUser } from '../api/userApi';
+import ButtonSpinner from '../components/common/ButtonSpinner';
 
 export default function LoginPage({ setActiveScreen, onLoginSuccess }) {
   const { login, authNotice, clearAuthNotice } = useAuth();
@@ -160,13 +161,14 @@ export default function LoginPage({ setActiveScreen, onLoginSuccess }) {
               <a href="#" className="font-bold text-blue-600 hover:text-blue-800">Forgot password?</a>
             </div>
 
-            <button
+            <ButtonSpinner
               type="submit"
+              loading={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl shadow-lg transition-transform transform active:scale-95 flex items-center justify-center space-x-2 text-sm"
             >
               <LogIn className="w-4 h-4" />
               <span>Login as {selectedRole.replace('_', ' ')}</span>
-            </button>
+            </ButtonSpinner>
           </form>
 
           <div className="pt-4 border-t border-slate-100 text-center text-xs">

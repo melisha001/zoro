@@ -11,6 +11,7 @@ import { getSchedules } from '../../api/scheduleApi';
 import { useAuth } from '../../context/AuthContext';
 import { useDialog } from '../../context/DialogContext';
 import { getNowInKolkata, getSessionStartDateTime, getSessionEndDateTime, syncServerTime } from '../../utils/scheduleSortUtil';
+import PageLoader from '../common/PageLoader';
 
 const CORRECTION_WINDOW_MINUTES = 60;
 
@@ -539,8 +540,8 @@ export default function TrainerAttendancePage() {
       {/* SCHEDULE-WISE SESSIONS LIST */}
       <div className="space-y-6">
         {loading ? (
-          <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400">
-            Loading session attendance records...
+          <div className="bg-white p-8 rounded-3xl border border-slate-200">
+            <PageLoader message="Loading session attendance records..." />
           </div>
         ) : filteredSchedules.length === 0 ? (
           <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs font-bold text-slate-400 space-y-2">
