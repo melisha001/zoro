@@ -339,6 +339,20 @@ public class EnrollmentService {
                     // Ignore if already enrolled
                 }
             }
+        } else if ("Rejected".equalsIgnoreCase(status)) {
+            if (notificationService != null) {
+                String targetId = req.getStudentId() != null && !req.getStudentId().isBlank() ? req.getStudentId() : req.getStudentEmail();
+                if (targetId != null && !targetId.isBlank()) {
+                    notificationService.createNotification(Notification.builder()
+                            .id("notif_" + UUID.randomUUID())
+                            .recipientId(targetId)
+                            .recipientRole("STUDENT")
+                            .title("Course Registration Not Approved")
+                            .message("Your registration request for '" + (req.getCourseTitle() != null ? req.getCourseTitle() : "course") + "' was not approved." + (remarks != null && !remarks.isBlank() ? " Reason: " + remarks : ""))
+                            .readStatus(false)
+                            .build());
+                }
+            }
         }
 
         return requestRepository.save(req);

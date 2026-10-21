@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HelpCircle, MessageSquare, Send, CheckCircle2, User, Search, Layers, Clock } from 'lucide-react';
 import { getDoubts, resolveDoubt } from '../../api/doubtApi';
+import { getFriendlyDoubtId } from '../../utils/doubtRefUtil';
 
 export default function AdminDoubtsPage() {
   const [activeModeTab, setActiveModeTab] = useState('Online'); // 'Online' | 'Recorded' | 'Hybrid'
@@ -175,7 +176,7 @@ export default function AdminDoubtsPage() {
 
               {/* Doubt Items List for this Batch */}
               <div className="space-y-4">
-                {batchDoubts.map(doubt => {
+                {batchDoubts.map((doubt, index) => {
                   const isOpen = doubt.status?.toUpperCase() === 'OPEN' || doubt.status?.toUpperCase() === 'PENDING';
                   return (
                     <div key={doubt.id} className="bg-slate-50/80 rounded-2xl border border-slate-200/80 p-5 space-y-4">
@@ -186,7 +187,10 @@ export default function AdminDoubtsPage() {
                             {(doubt.studentName || 'S').charAt(0)}
                           </div>
                           <div>
-                            <h3 className="font-extrabold text-slate-900 text-sm">{doubt.studentName}</h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-extrabold text-slate-900 text-sm">{doubt.studentName}</h3>
+                              <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">{getFriendlyDoubtId(doubt, index, doubts)}</span>
+                            </div>
                             <p className="text-[11px] text-slate-500 font-semibold">
                               Course: <span className="font-bold text-blue-700">{doubt.course}</span> • Topic: <span className="text-slate-800 font-bold">{doubt.topic || 'General Query'}</span> • Trainer: <span className="text-purple-700 font-bold">{doubt.trainerName || 'Admin'}</span>
                             </p>

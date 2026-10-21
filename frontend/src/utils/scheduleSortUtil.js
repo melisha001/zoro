@@ -2,6 +2,7 @@
  * Utility for parsing schedule time strings and sorting schedule items chronologically,
  * and evaluating lock states in Asia/Kolkata timezone (Requirement B3).
  */
+import { API_BASE_URL } from '../api/client';
 
 export function parseTimeToMinutes(timeStr) {
   if (!timeStr) return 0;
@@ -39,10 +40,11 @@ let serverTimeOffset = 0;
 
 export async function syncServerTime() {
   try {
-    const res = await fetch('/api/time');
+    const res = await fetch(`${API_BASE_URL}/time`);
     if (res.ok) {
-      const data = await res.json();
-      const serverEpoch = data.epochMillis || data.serverTime || data;
+      const json = await res.json();
+      const data = json?.data || json;
+      const serverEpoch = data.epochMillis || data.serverTime || data.serverNow;
       if (typeof serverEpoch === 'number') {
         serverTimeOffset = serverEpoch - Date.now();
       }

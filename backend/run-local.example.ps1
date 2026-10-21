@@ -24,6 +24,14 @@ $env:RAZORPAY_KEY_ID="rzp_live_Tnpy54aDPMVwI2"
 $env:RAZORPAY_KEY_SECRET="J7ycJFK9yiHaYXM16G4PNsBr"
 $env:CORS_ORIGINS = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
 
+# AWS SES SMTP Email Configuration
+$env:AWS_SES_HOST = "email-smtp.ap-south-1.amazonaws.com"
+$env:AWS_SES_PORT = "587"
+$env:AWS_SES_USERNAME = "AKIA3TYABBDG42QKOJDV"
+$env:AWS_SES_PASSWORD = "BDY2w2y0ZvUIdAkniKbm2SthAiUfZpjhLGikMKJ9+qF/"
+$env:AWS_SES_FROM_EMAIL = "zorocentre@gmail.com"
+$env:AWS_SES_FROM_NAME = "Zoro Academy"
+
 $requiredVars = @(
     "APP_STORAGE_PROVIDER",
     "BUNNY_STORAGE_HOST",
@@ -47,7 +55,14 @@ $requiredVars = @(
     "ADMIN_PASSWORD",
     "RAZORPAY_KEY_ID",
     "RAZORPAY_KEY_SECRET",
-    "CORS_ORIGINS"
+    "CORS_ORIGINS",
+    "AWS_SES_HOST",
+    "AWS_SES_PORT",
+    "AWS_SES_USERNAME",
+    "AWS_SES_PASSWORD",
+    "AWS_SES_FROM_EMAIL",
+    "AWS_SES_FROM_NAME"
+
 )
 
 $missingVars = @()

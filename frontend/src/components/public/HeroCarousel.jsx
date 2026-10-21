@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
  * Public Hero Background Component with 0, 1, or >1 image handling:
  * - 0 images: Neutral brand gradient (no stock/Unsplash photos)
- * - 1 image: Static cover background with dark overlay, no animation/timer
+ * - 1 image: Static cover background with dark overlay, no animation/timer/arrows/dots
  * - >1 images: Automatic crossfade rotation every `intervalSeconds` (default 5s).
  *   - Preloads all images; skips failed images automatically.
- *   - Stable interval with functional updates (timer does NOT reset on every index change).
+ *   - Stable interval with functional updates.
+ *   - Left / Right chevron navigation arrows (purple/brand, vertically centered).
+ *   - Clicking arrows or dots changes image immediately and resets the 5s timer.
+ *   - Loop around at the ends. Auto-advance keeps running afterwards.
+ *   - Dot indicators at the bottom.
  *   - Pauses on document.hidden, resumes and advances on document becoming visible.
- *   - Pauses on hover, supports swipe on touch devices.
- *   - Smooth crossfade (no flicker, no blank frames).
+ *   - Touch-friendly swipe support on mobile devices.
+ *   - Respects admin-configured sortOrder.
  */
 export default function HeroCarousel({
   images = [],
@@ -19,11 +24,16 @@ export default function HeroCarousel({
 }) {
   const [failedUrls, setFailedUrls] = useState(() => new Set());
 
-  // Filter valid, active, non-failed images
+  // Filter valid, active, non-failed images and preserve admin sortOrder
   const validImages = useMemo(() => {
-    return (images || []).filter(
-      (img) => img && img.active !== false && img.url && !failedUrls.has(img.url)
-    );
+    return (images || [])
+      .filter((img) => img && img.active !== false && img.url && !failedUrls.has(img.url))
+      .slice()
+      .sort((a, b) => {
+        const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.displayOrder === 'number' ? a.displayOrder : 0);
+        const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.displayOrder === 'number' ? b.displayOrder : 0);
+        return orderA - orderB;
+      });
   }, [images, failedUrls]);
 
   const count = validImages.length;
@@ -35,6 +45,7 @@ export default function HeroCarousel({
     return 0;
   });
 
+  const [timerResetKey, setTimerResetKey] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const touchStartXRef = useRef(null);
   const countRef = useRef(count);
@@ -85,7 +96,23 @@ export default function HeroCarousel({
     });
   }, []);
 
-  // Stable timer that does NOT depend on currentIndex!
+  // Manual navigation handlers that reset the auto-advance timer
+  const handleNext = useCallback(() => {
+    nextSlide();
+    setTimerResetKey((k) => k + 1);
+  }, [nextSlide]);
+
+  const handlePrev = useCallback(() => {
+    prevSlide();
+    setTimerResetKey((k) => k + 1);
+  }, [prevSlide]);
+
+  const handleSelectIndex = useCallback((idx) => {
+    setCurrentIndex(idx);
+    setTimerResetKey((k) => k + 1);
+  }, []);
+
+  // Auto-advance timer: advances every `intervalSeconds`, resets on manual interaction (timerResetKey)
   useEffect(() => {
     if (count <= 1 || isPaused) return;
 
@@ -95,7 +122,7 @@ export default function HeroCarousel({
     }, ms);
 
     return () => clearInterval(interval);
-  }, [count, isPaused, intervalSeconds, nextSlide]);
+  }, [count, isPaused, intervalSeconds, timerResetKey, nextSlide]);
 
   // Pause carousel when document is hidden; resume AND advance immediately on visibilitychange
   useEffect(() => {
@@ -106,9 +133,9 @@ export default function HeroCarousel({
         setIsPaused(true);
       } else {
         setIsPaused(false);
-        // Resume and advance immediately on tab focus
         if (countRef.current > 1) {
           nextSlide();
+          setTimerResetKey((k) => k + 1);
         }
       }
     };
@@ -130,9 +157,9 @@ export default function HeroCarousel({
     if (touchEndX !== undefined) {
       const diff = touchStartXRef.current - touchEndX;
       if (diff > 50) {
-        nextSlide();
+        handleNext();
       } else if (diff < -50) {
-        prevSlide();
+        handlePrev();
       }
     }
     touchStartXRef.current = null;
@@ -148,7 +175,7 @@ export default function HeroCarousel({
     );
   }
 
-  // Case 1: Exactly 1 image -> Static cover background, no animation, no indicator dots
+  // Case 1: Exactly 1 image -> Static cover background, no animation, no arrows/dots
   if (count === 1) {
     const single = validImages[0];
     return (
@@ -172,8 +199,6 @@ export default function HeroCarousel({
       className="relative text-white overflow-hidden py-16 md:py-24 min-h-[500px] flex items-center select-none"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
       data-testid="hero-carousel-section"
       data-current-index={currentIndex}
     >
@@ -207,6 +232,28 @@ export default function HeroCarousel({
       {/* Hero content */}
       <div className="relative z-10 w-full">{children}</div>
 
+      {/* Left Chevron Button */}
+      <button
+        type="button"
+        onClick={handlePrev}
+        aria-label="Previous slide"
+        data-testid="hero-prev-btn"
+        className="absolute left-3 md:left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 md:w-12 md:h-12 rounded-full bg-purple-600/80 hover:bg-purple-600 active:scale-95 text-white flex items-center justify-center shadow-lg backdrop-blur-xs transition-all focus:outline-hidden focus:ring-2 focus:ring-purple-400 cursor-pointer"
+      >
+        <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
+      </button>
+
+      {/* Right Chevron Button */}
+      <button
+        type="button"
+        onClick={handleNext}
+        aria-label="Next slide"
+        data-testid="hero-next-btn"
+        className="absolute right-3 md:right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 md:w-12 md:h-12 rounded-full bg-purple-600/80 hover:bg-purple-600 active:scale-95 text-white flex items-center justify-center shadow-lg backdrop-blur-xs transition-all focus:outline-hidden focus:ring-2 focus:ring-purple-400 cursor-pointer"
+      >
+        <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
+      </button>
+
       {/* Small Indicator Dots */}
       <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center items-center gap-2">
         {validImages.map((image, idx) => {
@@ -215,10 +262,11 @@ export default function HeroCarousel({
             <button
               key={image.id || image.url || idx}
               type="button"
-              onClick={() => setCurrentIndex(idx)}
+              onClick={() => handleSelectIndex(idx)}
               aria-label={`Jump to hero slide ${idx + 1}`}
+              data-testid={`hero-dot-${idx}`}
               className={`transition-all rounded-full cursor-pointer h-2 ${
-                isSelected ? 'w-6 bg-blue-500 shadow-sm' : 'w-2 bg-white/50 hover:bg-white/80'
+                isSelected ? 'w-6 bg-purple-500 shadow-sm' : 'w-2 bg-white/50 hover:bg-white/80'
               }`}
             />
           );

@@ -75,12 +75,17 @@ public class NotificationSchedulerService {
             int creditDay = 25;
             if (trainer.getSalaryCreditDate() != null && !trainer.getSalaryCreditDate().isBlank()) {
                 try {
-                    creditDay = Integer.parseInt(trainer.getSalaryCreditDate().trim());
+                    creditDay = Integer.parseInt(trainer.getSalaryCreditDate().trim().replaceAll("[^0-9]", ""));
                 } catch (NumberFormatException ignored) {}
             }
+            if (creditDay < 1) creditDay = 1;
+            if (creditDay > 31) creditDay = 31;
+
+            int maxDayInMonth = date.lengthOfMonth();
+            int effectiveCreditDay = Math.min(creditDay, maxDayInMonth);
 
             // Check if today is credit day or has passed in the current month
-            if (currentDay >= creditDay) {
+            if (currentDay >= effectiveCreditDay) {
                 // Check if a paid salary record exists for this month
                 List<SalaryRecord> records = salaryRecordRepository.findByTrainerId(trainer.getId());
                 boolean alreadyPaid = records.stream().anyMatch(r ->
@@ -92,12 +97,15 @@ public class NotificationSchedulerService {
                 if (!alreadyPaid) {
                     // Check if an admin notification has already been created for this trainer and month
                     String trainerName = trainer.getName() != null ? trainer.getName() : "Trainer";
-                    String message = String.format("Salary payment of ₹%s for %s is due for %s",
-                            salaryAmount.toPlainString(), trainerName, monthYear);
+                    String message = String.format("Salary due today for %s: Salary payment of ₹%s is due for %s",
+                            trainerName, salaryAmount.toPlainString(), monthYear);
 
                     boolean alreadyNotified = notificationRepository
                             .existsByRecipientRoleIgnoreCaseAndTitleAndMessageContaining(
-                                    "ADMIN", "Salary Payment Due", trainerName + " is due for " + monthYear
+                                    "ADMIN", "Salary Payment Due", "Salary due today for " + trainerName
+                            ) && notificationRepository
+                            .existsByRecipientRoleIgnoreCaseAndTitleAndMessageContaining(
+                                    "ADMIN", "Salary Payment Due", monthYear
                             );
 
                     if (!alreadyNotified) {
@@ -136,8 +144,8 @@ public class NotificationSchedulerService {
      */
     @Transactional
     public int runRetentionCleanup(LocalDateTime cutoff) {
-        int deleted = notificationRepository.deleteByCreatedAtBefore(cutoff);
-        log.info("Notification retention job deleted {} notifications created before {}", deleted, cutoff);
+        int deleted = notificationRepository.deleteOldReadNotifications(cutoff);
+        log.info("Notification retention job deleted {} read notifications created before {}", deleted, cutoff);
         return deleted;
     }
 

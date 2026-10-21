@@ -3,6 +3,7 @@ import { ArrowLeft, HelpCircle, CheckCircle, Clock, MessageSquare, ChevronRight,
 import { getDoubts, createDoubt } from '../../api/doubtApi';
 import { getStudentEnrolledCourses } from '../../api/enrollmentApi';
 import { useAuth } from '../../context/AuthContext';
+import { getFriendlyDoubtId } from '../../utils/doubtRefUtil';
 
 export default function DoubtPage({ setActiveScreen }) {
   const { user } = useAuth();
@@ -272,14 +273,14 @@ export default function DoubtPage({ setActiveScreen }) {
             {doubtsList.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-6">No doubts asked yet.</p>
             ) : (
-              doubtsList.map((doubt) => (
+              doubtsList.map((doubt, idx) => (
                 <div 
                   key={doubt.id} 
                   className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 hover:bg-slate-100/70 transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <span className="text-[10px] font-mono font-bold text-slate-400">{doubt.id}</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/60 px-1.5 py-0.5 rounded">{getFriendlyDoubtId(doubt, idx, doubtsList)}</span>
                       <span className="text-xs font-extrabold text-slate-900">{doubt.topic}</span>
                     </div>
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
@@ -326,8 +327,8 @@ export default function DoubtPage({ setActiveScreen }) {
               <X className="w-4 h-4" />
             </button>
             <div>
-              <span className="text-[10px] font-mono font-bold text-blue-600">{activeDoubtModal.id}</span>
-              <h3 className="text-base font-black text-slate-900">{activeDoubtModal.topic}</h3>
+              <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{getFriendlyDoubtId(activeDoubtModal, doubtsList.findIndex(d => d.id === activeDoubtModal.id), doubtsList)}</span>
+              <h3 className="text-base font-black text-slate-900 mt-1">{activeDoubtModal.topic}</h3>
             </div>
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs text-slate-700">
               <strong>Question:</strong> {activeDoubtModal.question}

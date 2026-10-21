@@ -79,8 +79,13 @@ Flyway automatically applies all schema migrations (V1 through V19) on applicati
 | `CORS_ORIGINS` | Spring | Comma-separated list of allowed CORS origins |
 | `RAZORPAY_KEY_ID` | Razorpay | Razorpay payment gateway API Key ID (`rzp_test_...` in dev, `rzp_live_...` in prod) |
 | `RAZORPAY_KEY_SECRET` | Razorpay | Razorpay payment gateway API Key Secret |
-| `RAZORPAY_WEBHOOK_SECRET` | Razorpay | Secret for validating X-Razorpay-Signature on incoming webhooks |
 | `ADMIN_PASSWORD_KEY` | Spring | Secret encryption key for AES-256-GCM reversible passwords (PBKDF2-derived, configured via `admin.password-key` / `ADMIN_PASSWORD_KEY`, min 16 chars) |
+| `AWS_SES_HOST` | AWS SES | Amazon SES SMTP host (e.g. `email-smtp.ap-south-1.amazonaws.com`) |
+| `AWS_SES_PORT` | AWS SES | Amazon SES SMTP port (typically `587` with STARTTLS or `465` with SSL) |
+| `AWS_SES_USERNAME` | AWS SES | Amazon SES SMTP username / IAM access key |
+| `AWS_SES_PASSWORD` | AWS SES | Amazon SES SMTP password / secret |
+| `AWS_SES_FROM_EMAIL` | AWS SES | Verified sender email address (e.g. `noreply@zoroacademy.com`) |
+| `AWS_SES_FROM_NAME` | AWS SES | Display name for outgoing emails (default: `Zoro Academy`) |
 
 ### Razorpay Configuration Guide
 

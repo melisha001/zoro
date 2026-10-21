@@ -9,6 +9,7 @@ import { getTrainerCourseRequests } from '../../api/courseApi';
 export default function AdminDashboard({ setActiveScreen }) {
   const [metrics, setMetrics] = useState({
     studentCount: 0,
+    totalStudents: 0,
     trainerCount: 0,
     courseCount: 0,
     batchCount: 0,
@@ -63,6 +64,7 @@ export default function AdminDashboard({ setActiveScreen }) {
           const d = dashRes.data;
           setMetrics({
             studentCount: d.studentCount || 0,
+            totalStudents: d.totalStudents ?? d.studentCount ?? 0,
             trainerCount: d.trainerCount || 0,
             courseCount: d.courseCount || 0,
             batchCount: d.batchCount || 0,
@@ -94,6 +96,7 @@ export default function AdminDashboard({ setActiveScreen }) {
 
   const {
     studentCount,
+    totalStudents,
     courseCount,
     totalIncome,
     studentFeeIncome,
@@ -108,10 +111,10 @@ export default function AdminDashboard({ setActiveScreen }) {
   } = metrics;
 
   const topNonFinancialStats = [
+    { title: 'Total Students', value: `${totalStudents} Students`, icon: Users, color: 'border-l-4 border-teal-500 bg-teal-50/50 text-teal-700', desc: 'Total students registered in the system' },
     { title: 'Active Enrolled Students', value: studentCount, icon: Users, color: 'border-l-4 border-blue-600 bg-blue-50/50 text-blue-700', desc: 'Total registered academy students' },
     { title: 'Daily Attendance Rate', value: `${attendancePresent} / ${attendanceTotal} (${attendanceRate}%)`, icon: Clock, color: 'border-l-4 border-amber-500 bg-amber-50/50 text-amber-700', desc: 'Verified session attendance' },
     { title: 'Published Courses', value: `${courseCount} Active Courses`, icon: BookOpen, color: 'border-l-4 border-sky-500 bg-sky-50/50 text-sky-800', desc: 'Available course programs' },
-    { title: 'Present Students Today', value: `${attendancePresent} Students`, icon: Activity, color: 'border-l-4 border-teal-500 bg-teal-50/50 text-teal-700', desc: 'Attended scheduled classes' },
   ];
 
   return (

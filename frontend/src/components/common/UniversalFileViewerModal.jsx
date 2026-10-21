@@ -17,7 +17,7 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
       return;
     }
     setErrorMsg('');
-    const raw = file.url || file.fileUrl || file.path || '';
+    const raw = file.url || file.fileUrl || file.path || file.id || '';
     if (!raw) {
       setResolvedUrl('#');
       return;

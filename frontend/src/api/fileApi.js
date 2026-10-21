@@ -149,7 +149,9 @@ export async function openFileWithSignedLink(fileUrlOrId, fileName = '') {
     // Try blob download in browser environment to bypass popup blockers and cross-origin download restrictions
     if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
       try {
-        const resp = await fetch(targetUrl);
+        const token = getAuthToken();
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const resp = await fetch(targetUrl, { headers });
         if (resp && resp.ok && typeof resp.blob === 'function') {
           const blob = await resp.blob();
           if (blob && typeof window.URL?.createObjectURL === 'function') {

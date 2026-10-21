@@ -317,3 +317,13 @@ export const checkEmailExists = async (email) => {
     return false;
   }
 };
+
+export const getTrainerDashboardStats = async (trainerIdentifier = '') => {
+  const query = trainerIdentifier ? `?trainer=${encodeURIComponent(trainerIdentifier)}` : '';
+  const res = await apiGet(`/trainers/dashboard-stats${query}`);
+  if (res.success && res.data) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res.message || 'Failed to fetch trainer dashboard stats');
+};
+

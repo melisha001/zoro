@@ -29,6 +29,10 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final RefreshTokenService refreshTokenService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private NotificationService notificationService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private EmailService emailService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider, RefreshTokenService refreshTokenService) {
@@ -170,6 +174,24 @@ public class AuthService {
                 .build();
 
         user = userRepository.save(user);
+
+        if (notificationService != null) {
+            notificationService.createNotification(com.zoroacademy.entity.Notification.builder()
+                    .id("notif_" + UUID.randomUUID())
+                    .recipientId(user.getId())
+                    .recipientRole("STUDENT")
+                    .title("Welcome to Zoro Academy!")
+                    .message("Welcome, " + user.getName() + "! Your student account has been created successfully. Explore courses, join sessions, and start learning.")
+                    .readStatus(false)
+                    .build());
+        }
+
+        if (emailService != null) {
+            try {
+                emailService.sendStudentWelcomeEmail(user.getEmail(), user.getName(), request.getPassword());
+            } catch (Exception ignored) {}
+        }
+
         return UserDto.fromEntity(user);
     }
 

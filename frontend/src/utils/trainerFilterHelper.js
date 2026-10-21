@@ -15,23 +15,14 @@ export function getTrainerAllocatedCourses(trainer, allCourses = [], allBatches 
   const trainerName = (trainer.name || '').toLowerCase().trim();
   const trainerEmail = (trainer.email || '').toLowerCase().trim();
 
-  // Get course IDs / titles from approved requests
-  const approvedTitles = approvedRequests
-    .filter(r => (r.status === 'Approved') && (
-      (trainerId && r.trainerId === trainerId) ||
-      (r.trainerEmail && r.trainerEmail.toLowerCase().trim() === trainerEmail) ||
-      (r.trainerName && r.trainerName.toLowerCase().trim() === trainerName)
-    ))
-    .map(r => (r.courseTitle || r.courseId || '').toLowerCase().trim());
-
-  // Get course titles from batches handled by trainer
+  // Get course titles from batches handled by trainer as instructor
   const trainerBatchCourseIdsOrTitles = allBatches
     .filter(b => {
       const bTrainerId = b.trainerId;
       const bTrainer = (b.trainerName || b.trainer || b.assignedTrainer || '').toLowerCase().trim();
       const bEmail = (b.trainerEmail || '').toLowerCase().trim();
       return (trainerId && bTrainerId === trainerId) ||
-             (trainerName && bTrainer.includes(trainerName)) ||
+             (trainerName && (bTrainer === trainerName || bTrainer.includes(trainerName))) ||
              (trainerEmail && bEmail === trainerEmail);
     })
     .map(b => (b.courseId || b.courseTitle || b.courseName || b.course || '').toLowerCase().trim());
@@ -45,14 +36,19 @@ export function getTrainerAllocatedCourses(trainer, allCourses = [], allBatches 
       ? c.allocatedTrainers.map(t => t.toLowerCase().trim()) 
       : [];
 
-    if (trainerId && cTrainerId === trainerId) return true;
-    if (trainerName && cAssigned && (cAssigned === trainerName || cAssigned.includes(trainerName))) return true;
-    if (trainerEmail && cAssigned.includes(trainerEmail)) return true;
-    if (cTrainers.includes(trainerName) || cTrainers.includes(trainerEmail)) return true;
-    if (approvedTitles.includes(cTitle) || approvedTitles.includes(cId)) return true;
-    if (trainerBatchCourseIdsOrTitles.includes(cId) || trainerBatchCourseIdsOrTitles.includes(cTitle)) return true;
+    const isDirectInstructor = (trainerId && cTrainerId === trainerId) ||
+      (trainerName && cAssigned && (cAssigned === trainerName || cAssigned.includes(trainerName))) ||
+      (trainerEmail && cAssigned.includes(trainerEmail)) ||
+      cTrainers.includes(trainerName) || cTrainers.includes(trainerEmail);
 
-    return false;
+    const isBatchInstructor = trainerBatchCourseIdsOrTitles.includes(cId) || trainerBatchCourseIdsOrTitles.includes(cTitle);
+
+    // If audience is 'trainer', only include if trainer is the assigned teacher, never if just learner
+    if (c.audience === 'trainer') {
+      return isDirectInstructor;
+    }
+
+    return isDirectInstructor || isBatchInstructor;
   });
 }
 

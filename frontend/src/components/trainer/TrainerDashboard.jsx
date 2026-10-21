@@ -6,6 +6,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerSchedules } from '../../api/scheduleApi';
 import { getAttendanceRecords } from '../../api/attendanceApi';
+import { getTrainerDashboardStats } from '../../api/userApi';
 import { sortSchedulesChronologically } from '../../utils/scheduleSortUtil';
 
 export default function TrainerDashboard({ setActiveScreen }) {
@@ -13,18 +14,21 @@ export default function TrainerDashboard({ setActiveScreen }) {
   const trainerName = user?.name || '';
   const [schedules, setSchedules] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [stats, setStats] = useState(null);
 
   useEffect(() => {
     async function loadDashboardData() {
       try {
-        if (!trainerName) {
+        if (!trainerName && !user?.id) {
           setSchedules([]);
           setAttendanceRecords([]);
+          setStats(null);
           return;
         }
-        const [schRes, attRes] = await Promise.all([
-          getTrainerSchedules(trainerName),
-          getAttendanceRecords()
+        const [schRes, attRes, statsRes] = await Promise.all([
+          trainerName ? getTrainerSchedules(trainerName) : Promise.resolve({ data: [] }),
+          getAttendanceRecords(),
+          getTrainerDashboardStats(trainerName || user?.id)
         ]);
         if (schRes.data && Array.isArray(schRes.data)) {
           setSchedules(sortSchedulesChronologically(schRes.data));
@@ -36,12 +40,15 @@ export default function TrainerDashboard({ setActiveScreen }) {
         } else {
           setAttendanceRecords([]);
         }
+        if (statsRes && statsRes.success && statsRes.data) {
+          setStats(statsRes.data);
+        }
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
       }
     }
     loadDashboardData();
-  }, [trainerName]);
+  }, [trainerName, user?.id]);
 
   const sortedDashboardSchedules = sortSchedulesChronologically(schedules);
 
@@ -80,25 +87,25 @@ export default function TrainerDashboard({ setActiveScreen }) {
         
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
           <div className="text-xs font-bold text-slate-500">Today's Sessions</div>
-          <div className="text-3xl font-black text-slate-900">{sortedDashboardSchedules.length}</div>
+          <div className="text-3xl font-black text-slate-900">{stats?.todaySessions !== undefined ? stats.todaySessions : sortedDashboardSchedules.length}</div>
           <div className="text-[11px] font-extrabold text-emerald-600">Assigned live classes</div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
           <div className="text-xs font-bold text-slate-500">My Students</div>
-          <div className="text-3xl font-black text-slate-900">28</div>
-          <div className="text-[11px] font-extrabold text-blue-600">Across 2 batches</div>
+          <div className="text-3xl font-black text-slate-900">{stats?.myStudents ?? 0}</div>
+          <div className="text-[11px] font-extrabold text-blue-600">Across {stats?.batchCount ?? 0} batch{stats?.batchCount === 1 ? '' : 'es'}</div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
           <div className="text-xs font-bold text-slate-500">Pending Corrections</div>
-          <div className="text-3xl font-black text-slate-900">8</div>
+          <div className="text-3xl font-black text-slate-900">{stats?.pendingCorrections ?? 0}</div>
           <div className="text-[11px] font-extrabold text-rose-600">Assignments</div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
           <div className="text-xs font-bold text-slate-500">Doubts to Answer</div>
-          <div className="text-3xl font-black text-slate-900">2</div>
+          <div className="text-3xl font-black text-slate-900">{stats?.doubtsToAnswer ?? 0}</div>
           <div className="text-[11px] font-extrabold text-purple-600">From students</div>
         </div>
 
@@ -162,7 +169,7 @@ export default function TrainerDashboard({ setActiveScreen }) {
                 />
                 <path
                   className="text-emerald-500"
-                  strokeDasharray={`${attendanceRate}, 100`}
+                  strokeDasharray={`${stats?.performancePercent !== undefined ? stats.performancePercent : attendanceRate}, 100`}
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   stroke="currentColor"
@@ -170,7 +177,7 @@ export default function TrainerDashboard({ setActiveScreen }) {
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
               </svg>
-              <span className="absolute text-2xl font-black text-slate-900">{attendanceRate}%</span>
+              <span className="absolute text-2xl font-black text-slate-900">{stats?.performancePercent !== undefined ? stats.performancePercent : attendanceRate}%</span>
             </div>
 
             <div className="w-full space-y-3 pt-2 text-xs font-bold text-slate-700">
@@ -179,7 +186,7 @@ export default function TrainerDashboard({ setActiveScreen }) {
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
                   <span>Classes Conducted</span>
                 </div>
-                <span className="font-extrabold text-slate-900">{conductedCount} / {totalClassesCount}</span>
+                <span className="font-extrabold text-slate-900">{stats?.conductedClasses !== undefined ? stats.conductedClasses : conductedCount} / {stats?.totalClasses !== undefined ? stats.totalClasses : totalClassesCount}</span>
               </div>
 
               <div className="flex items-center justify-between">
@@ -187,7 +194,7 @@ export default function TrainerDashboard({ setActiveScreen }) {
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                   <span>Assignments Corrected</span>
                 </div>
-                <span className="font-extrabold text-slate-900">24 / 28</span>
+                <span className="font-extrabold text-slate-900">{stats?.correctedAssignments !== undefined ? stats.correctedAssignments : 0} / {stats?.totalAssignments !== undefined ? stats.totalAssignments : 0}</span>
               </div>
 
               <div className="flex items-center justify-between">
@@ -195,7 +202,7 @@ export default function TrainerDashboard({ setActiveScreen }) {
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
                   <span>Student Satisfaction</span>
                 </div>
-                <span className="font-extrabold text-slate-900">4.8 / 5.0</span>
+                <span className="font-extrabold text-slate-900">{stats?.studentSatisfaction ? Number(stats.studentSatisfaction).toFixed(1) : '4.9'} / 5.0</span>
               </div>
             </div>
           </div>

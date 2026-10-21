@@ -120,7 +120,7 @@ public class FileAccessService {
 
         // STUDENT access authorization
         if ("STUDENT".equals(roleUpper)) {
-            // Submissions: submissions/corrections only for the submitter, assigned reviewer and admin
+            // 1. Submissions: submitter always has access
             if (!submissions.isEmpty()) {
                 boolean isSubmitter = submissions.stream().anyMatch(sub ->
                         (userId != null && userId.equalsIgnoreCase(sub.getStudentId()))
@@ -129,75 +129,89 @@ public class FileAccessService {
                 if (isSubmitter) {
                     return FileAccessResult.allowed();
                 }
-                if (modules.isEmpty() && schedules.isEmpty() && assignments.isEmpty() && courseResources.isEmpty()) {
-                    return FileAccessResult.forbidden("You do not have permission to access another student's submission or correction");
-                }
             }
 
-            // Course Modules: sequential module lock + course enrollment
+            FileAccessResult bestDenialResult = null;
+            boolean anyCourseMatched = false;
+
+            // 2. Course Modules: if student is enrolled in ANY referencing module's course, check unlock
             if (!modules.isEmpty()) {
                 for (CourseModule mod : modules) {
                     Course course = mod.getCourse();
                     if (course != null) {
                         String courseId = course.getId();
-                        if (!isStudentEnrolledInCourse(userId, userEmail, courseId, course.getTitle())) {
-                            return FileAccessResult.notEnrolled("You are not enrolled in this course");
-                        }
-                        if (courseService != null && courseService.isModuleLockedForStudent(courseId, mod.getId(), userId, userEmail)) {
-                            int modNum = (mod.getModuleOrder() != null && mod.getModuleOrder() > 1) ? (mod.getModuleOrder() - 1) : 1;
-                            return FileAccessResult.lockedModule("Complete Module " + modNum + " to unlock this resource");
+                        if (isStudentEnrolledInCourse(userId, userEmail, courseId, course.getTitle())) {
+                            anyCourseMatched = true;
+                            if (courseService != null && courseService.isModuleLockedForStudent(courseId, mod.getId(), userId, userEmail)) {
+                                int modNum = (mod.getModuleOrder() != null && mod.getModuleOrder() > 1) ? (mod.getModuleOrder() - 1) : 1;
+                                bestDenialResult = FileAccessResult.lockedModule("Complete Module " + modNum + " to unlock this resource");
+                            } else {
+                                return FileAccessResult.allowed();
+                            }
                         }
                     }
                 }
             }
 
-            // Schedules: batch membership + 60-minute pre-session unlock
+            // 3. Schedules: if student is in ANY referencing schedule's batch/course, check unlock
             if (!schedules.isEmpty()) {
                 for (Schedule sched : schedules) {
-                    if (!isStudentInBatch(userId, userEmail, sched.getBatchId(), sched.getBatch(), sched.getCourseId(), sched.getCourse())) {
-                        return FileAccessResult.forbidden("This schedule resource is for another batch");
-                    }
-                    if (scheduleService != null && scheduleService.isScheduleLockedForStudent(sched, userId, userEmail)) {
-                        String unlockLabel = com.zoroacademy.util.ScheduleTimeUtil.formatUnlockTime(
-                                sched.getDate(), sched.getTime(), scheduleService.getResourcesUnlockMinutes()
-                        );
-                        return FileAccessResult.lockedSchedule("Schedule resources are locked. " + unlockLabel, unlockLabel);
-                    }
-                }
-            }
-
-            // Assignments: course + batch enrollment
-            if (!assignments.isEmpty()) {
-                for (Assignment a : assignments) {
-                    if (!isStudentEnrolledInCourse(userId, userEmail, a.getCourseId(), a.getCourse())) {
-                        return FileAccessResult.notEnrolled("You are not enrolled in this course");
-                    }
-                    if (a.getBatchId() != null && !a.getBatchId().isBlank()) {
-                        if (!isStudentInBatch(userId, userEmail, a.getBatchId(), a.getBatch(), a.getCourseId(), a.getCourse())) {
-                            return FileAccessResult.forbidden("This assignment is for another batch");
+                    if (isStudentInBatch(userId, userEmail, sched.getBatchId(), sched.getBatch(), sched.getCourseId(), sched.getCourse())) {
+                        anyCourseMatched = true;
+                        if (scheduleService != null && scheduleService.isScheduleLockedForStudent(sched, userId, userEmail)) {
+                            String unlockLabel = com.zoroacademy.util.ScheduleTimeUtil.formatUnlockTime(
+                                    sched.getDate(), sched.getTime(), scheduleService.getResourcesUnlockMinutes()
+                            );
+                            bestDenialResult = FileAccessResult.lockedSchedule("Schedule resources are locked. " + unlockLabel, unlockLabel);
+                        } else {
+                            return FileAccessResult.allowed();
                         }
                     }
                 }
             }
 
-            // Course Resources: course enrollment
+            // 4. Assignments: if student is enrolled in ANY referencing assignment's course/batch
+            if (!assignments.isEmpty()) {
+                for (Assignment a : assignments) {
+                    if (isStudentEnrolledInCourse(userId, userEmail, a.getCourseId(), a.getCourse())) {
+                        anyCourseMatched = true;
+                        if (a.getBatchId() == null || a.getBatchId().isBlank() || isStudentInBatch(userId, userEmail, a.getBatchId(), a.getBatch(), a.getCourseId(), a.getCourse())) {
+                            return FileAccessResult.allowed();
+                        } else {
+                            bestDenialResult = FileAccessResult.forbidden("This assignment is for another batch");
+                        }
+                    }
+                }
+            }
+
+            // 5. Course Resources: if student is enrolled in ANY referencing resource's course
             if (!courseResources.isEmpty()) {
                 for (CourseResource cr : courseResources) {
                     Course c = cr.getCourse();
-                    if (c != null && !isStudentEnrolledInCourse(userId, userEmail, c.getId(), c.getTitle())) {
-                        return FileAccessResult.notEnrolled("You are not enrolled in this course");
+                    if (c != null && isStudentEnrolledInCourse(userId, userEmail, c.getId(), c.getTitle())) {
+                        return FileAccessResult.allowed();
                     }
                 }
             }
 
-            return FileAccessResult.allowed();
+            // If a specific lock/restriction was encountered on an enrolled entity, return it
+            if (bestDenialResult != null) {
+                return bestDenialResult;
+            }
+
+            // If student was not enrolled in any referencing course/batch
+            if (!anyCourseMatched) {
+                return FileAccessResult.notEnrolled("You are not enrolled in this course");
+            }
+
+            return FileAccessResult.forbidden("Access denied: You do not have permission to access this resource");
         }
 
         // TRAINER access authorization
         if ("TRAINER".equals(roleUpper)) {
             String trainerUsername = currentUser.getUsername();
 
-            // Submissions: submitter, assigned reviewer, or course/batch teacher
+            // 1. Submissions: submitter, assigned reviewer, or course/batch teacher
             if (!submissions.isEmpty()) {
                 boolean canAccessSub = submissions.stream().anyMatch(sub ->
                         isTrainerAuthorizedForSubmission(userId, userEmail, trainerUsername, sub)
@@ -205,58 +219,65 @@ public class FileAccessService {
                 if (canAccessSub) {
                     return FileAccessResult.allowed();
                 }
-                if (modules.isEmpty() && schedules.isEmpty() && assignments.isEmpty() && courseResources.isEmpty()) {
-                    return FileAccessResult.forbidden("You do not have permission to access this submission");
-                }
             }
 
-            // Modules: courses they teach or approved trainer learning
+            FileAccessResult bestDenialResult = null;
+            boolean anyContextMatched = false;
+
+            // 2. Modules: courses they teach or approved trainer learning
             if (!modules.isEmpty()) {
                 for (CourseModule mod : modules) {
                     Course course = mod.getCourse();
-                    if (!isTrainerAuthorizedForCourse(userId, userEmail, trainerUsername, course)) {
-                        return FileAccessResult.forbidden("You are not assigned to teach or enrolled in this course");
-                    }
-                    if (course != null && "trainer".equalsIgnoreCase(course.getAudience())) {
-                        if (courseService != null && courseService.isModuleLockedForStudent(course.getId(), mod.getId(), userId, userEmail)) {
-                            int modNum = (mod.getModuleOrder() != null && mod.getModuleOrder() > 1) ? (mod.getModuleOrder() - 1) : 1;
-                            return FileAccessResult.lockedModule("Complete Module " + modNum + " to unlock this resource");
+                    if (isTrainerAuthorizedForCourse(userId, userEmail, trainerUsername, course)) {
+                        anyContextMatched = true;
+                        if (course != null && "trainer".equalsIgnoreCase(course.getAudience())) {
+                            if (courseService != null && courseService.isModuleLockedForStudent(course.getId(), mod.getId(), userId, userEmail)) {
+                                int modNum = (mod.getModuleOrder() != null && mod.getModuleOrder() > 1) ? (mod.getModuleOrder() - 1) : 1;
+                                bestDenialResult = FileAccessResult.lockedModule("Complete Module " + modNum + " to unlock this resource");
+                                continue;
+                            }
                         }
+                        return FileAccessResult.allowed();
                     }
                 }
             }
 
-            // Schedules: assigned schedule or batch
+            // 3. Schedules: assigned schedule or batch
             if (!schedules.isEmpty()) {
-                boolean authorized = schedules.stream().anyMatch(s ->
-                        isTrainerAuthorizedForSchedule(userId, trainerUsername, s)
-                );
-                if (!authorized) {
-                    return FileAccessResult.forbidden("You are not assigned to this schedule");
+                for (Schedule s : schedules) {
+                    if (isTrainerAuthorizedForSchedule(userId, trainerUsername, s)) {
+                        return FileAccessResult.allowed();
+                    }
                 }
             }
 
-            // Assignments: assigned assignment or course teacher
+            // 4. Assignments: assigned assignment or course teacher
             if (!assignments.isEmpty()) {
-                boolean authorized = assignments.stream().anyMatch(a ->
-                        isTrainerAuthorizedForAssignment(userId, trainerUsername, a)
-                );
-                if (!authorized) {
-                    return FileAccessResult.forbidden("You are not assigned to teach this assignment");
+                for (Assignment a : assignments) {
+                    if (isTrainerAuthorizedForAssignment(userId, trainerUsername, a)) {
+                        return FileAccessResult.allowed();
+                    }
                 }
             }
 
-            // Course Resources: course teacher or approved learner
+            // 5. Course Resources: course teacher or approved learner
             if (!courseResources.isEmpty()) {
-                boolean authorized = courseResources.stream().anyMatch(cr ->
-                        isTrainerAuthorizedForCourse(userId, userEmail, trainerUsername, cr.getCourse())
-                );
-                if (!authorized) {
-                    return FileAccessResult.forbidden("You do not have permission to access this resource");
+                for (CourseResource cr : courseResources) {
+                    if (isTrainerAuthorizedForCourse(userId, userEmail, trainerUsername, cr.getCourse())) {
+                        return FileAccessResult.allowed();
+                    }
                 }
             }
 
-            return FileAccessResult.allowed();
+            if (bestDenialResult != null) {
+                return bestDenialResult;
+            }
+
+            if (!anyContextMatched) {
+                return FileAccessResult.forbidden("You are not assigned to teach or enrolled in this course");
+            }
+
+            return FileAccessResult.forbidden("You do not have permission to access this resource");
         }
 
         return FileAccessResult.forbidden("Access denied: role not permitted");
@@ -265,36 +286,56 @@ public class FileAccessService {
     private boolean isStudentEnrolledInCourse(String studentId, String studentEmail, String courseId, String courseTitle) {
         if (courseId == null && courseTitle == null) return false;
 
-        if (studentId != null && courseId != null) {
-            if (enrollmentRepository.existsByStudentIdAndCourseId(studentId, courseId)) return true;
-            if (studentCourseBatchRepository.findByStudentIdAndCourseId(studentId, courseId).isPresent()) return true;
+        // 1. Direct match by studentId
+        if (studentId != null) {
+            if (courseId != null && enrollmentRepository.existsByStudentIdAndCourseId(studentId, courseId)) return true;
+            if (courseId != null && studentCourseBatchRepository.findByStudentIdAndCourseId(studentId, courseId).isPresent()) return true;
+
+            List<Enrollment> enrollments = enrollmentRepository.findByStudentId(studentId);
+            if (matchesAnyCourse(enrollments, courseId, courseTitle)) return true;
+
+            List<StudentCourseBatch> scbs = studentCourseBatchRepository.findByStudentId(studentId);
+            if (scbs.stream().anyMatch(scb -> courseValueMatches(scb.getCourseId(), courseId, courseTitle))) return true;
         }
 
-        if (studentEmail != null && courseId != null) {
-            if (enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(studentEmail, courseId)) return true;
+        // 2. Direct match by studentEmail
+        if (studentEmail != null && !studentEmail.isBlank()) {
+            if (courseId != null && enrollmentRepository.existsByStudentEmailIgnoreCaseAndCourseId(studentEmail, courseId)) return true;
+            List<Enrollment> enrollments = enrollmentRepository.findByStudentEmailIgnoreCase(studentEmail);
+            if (matchesAnyCourse(enrollments, courseId, courseTitle)) return true;
         }
 
-        // Check user profile for enrolled course title/id
+        // 3. Check user profile for enrolled course title/id
         Optional<User> uOpt = Optional.empty();
         if (studentId != null) {
             uOpt = userRepository.findById(studentId);
         }
-        if (uOpt.isEmpty() && studentEmail != null) {
+        if (uOpt.isEmpty() && studentEmail != null && !studentEmail.isBlank()) {
             uOpt = userRepository.findByEmailIgnoreCase(studentEmail);
         }
 
         if (uOpt.isPresent()) {
             User u = uOpt.get();
-            if (u.getCourse() != null) {
-                if (courseId != null && (u.getCourse().equalsIgnoreCase(courseId) || u.getCourse().toLowerCase().contains(courseId.toLowerCase()))) {
-                    return true;
-                }
-                if (courseTitle != null && (u.getCourse().equalsIgnoreCase(courseTitle) || u.getCourse().toLowerCase().contains(courseTitle.toLowerCase()))) {
-                    return true;
-                }
+            if (courseValueMatches(u.getCourse(), courseId, courseTitle)) {
+                return true;
             }
         }
 
+        return false;
+    }
+
+    private boolean matchesAnyCourse(List<Enrollment> list, String courseId, String courseTitle) {
+        if (list == null) return false;
+        return list.stream().anyMatch(e ->
+                courseValueMatches(e.getCourseId(), courseId, courseTitle) ||
+                courseValueMatches(e.getCourseTitle(), courseId, courseTitle)
+        );
+    }
+
+    private boolean courseValueMatches(String val, String courseId, String courseTitle) {
+        if (val == null || val.isBlank()) return false;
+        if (courseId != null && (val.equalsIgnoreCase(courseId) || val.toLowerCase().contains(courseId.toLowerCase()))) return true;
+        if (courseTitle != null && (val.equalsIgnoreCase(courseTitle) || val.toLowerCase().contains(courseTitle.toLowerCase()))) return true;
         return false;
     }
 

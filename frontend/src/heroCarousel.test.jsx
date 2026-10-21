@@ -63,9 +63,13 @@ describe('HeroCarousel (Phase 4 & P14)', () => {
     const images = container.querySelectorAll('img');
     expect(images.length).toBe(3);
 
-    // Indicator dots present for all 3 images
-    const dots = container.querySelectorAll('button');
+    // Indicator dots present for all 3 images plus left/right navigation arrows
+    const dots = container.querySelectorAll('[data-testid^="hero-dot-"]');
     expect(dots.length).toBe(3);
+    const prevBtn = screen.getByRole('button', { name: /previous slide/i });
+    const nextBtn = screen.getByRole('button', { name: /next slide/i });
+    expect(prevBtn).toBeDefined();
+    expect(nextBtn).toBeDefined();
   });
 
   it('advances through all images and wraps using fake timers, including after simulated remount', () => {
@@ -164,6 +168,57 @@ describe('HeroCarousel (Phase 4 & P14)', () => {
     Object.defineProperty(document, 'hidden', { value: false, configurable: true });
     act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(section.getAttribute('data-current-index')).toBe('1');
+  });
+
+  it('allows manual navigation with next and prev chevron buttons and loops around', () => {
+    const multiImages = [
+      { id: 'h1', url: 'https://cdn.bunny.net/hero1.webp', altText: 'Slide 1', active: true },
+      { id: 'h2', url: 'https://cdn.bunny.net/hero2.webp', altText: 'Slide 2', active: true },
+      { id: 'h3', url: 'https://cdn.bunny.net/hero3.webp', altText: 'Slide 3', active: true }
+    ];
+
+    const { container } = render(
+      <HeroCarousel images={multiImages}>
+        <h1>Navigation Test</h1>
+      </HeroCarousel>
+    );
+
+    const section = container.querySelector('[data-testid="hero-carousel-section"]');
+    expect(section.getAttribute('data-current-index')).toBe('0');
+
+    const nextBtn = screen.getByRole('button', { name: /next slide/i });
+    const prevBtn = screen.getByRole('button', { name: /previous slide/i });
+
+    // Click next -> index 1
+    act(() => {
+      nextBtn.click();
+    });
+    expect(section.getAttribute('data-current-index')).toBe('1');
+
+    // Click next -> index 2
+    act(() => {
+      nextBtn.click();
+    });
+    expect(section.getAttribute('data-current-index')).toBe('2');
+
+    // Click next -> wraps to 0
+    act(() => {
+      nextBtn.click();
+    });
+    expect(section.getAttribute('data-current-index')).toBe('0');
+
+    // Click prev -> wraps to 2
+    act(() => {
+      prevBtn.click();
+    });
+    expect(section.getAttribute('data-current-index')).toBe('2');
+
+    // Click dot 1 -> jumps to 1
+    const dot1 = screen.getByRole('button', { name: /jump to hero slide 2/i });
+    act(() => {
+      dot1.click();
     });
     expect(section.getAttribute('data-current-index')).toBe('1');
   });

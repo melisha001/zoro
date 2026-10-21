@@ -299,7 +299,6 @@ export default function SecureVideoPlayer({
         loading="lazy"
         className="w-full h-full border-0 absolute inset-0 z-10"
         allow="autoplay; fullscreen; picture-in-picture"
-        allowFullScreen={true}
       />
 
       {/* DYNAMIC MOVING WATERMARK OVERLAY: Email only, real casing, semi-transparent, pointer-events none */}

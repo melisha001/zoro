@@ -1,10 +1,103 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit2, Trash2, X } from 'lucide-react';
-import { getSalaryPayments, createSalaryPayment, updateSalaryPayment, deleteSalaryPayment, getSalaryStats } from '../../api/salaryApi';
+import { Search, Eye, Edit2, X } from 'lucide-react';
+import { getSalaryPayments, createSalaryPayment, updateSalaryPayment, getSalaryStats } from '../../api/salaryApi';
 import { getTrainers } from '../../api/userApi';
-import ConfirmModal from '../common/ConfirmModal';
-import MoneyInput from '../common/MoneyInput';
 import { useDialog } from '../../context/DialogContext';
+
+function parseDueDay(creditDateStr) {
+  if (!creditDateStr) return 25;
+  const match = String(creditDateStr).match(/\d+/);
+  if (match) {
+    const day = parseInt(match[0], 10);
+    return isNaN(day) || day < 1 || day > 31 ? 25 : day;
+  }
+  return 25;
+}
+
+function getOrdinal(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function computeTrainerSalaryRow(trainer, allSalaries, today = new Date()) {
+  const dueDay = parseDueDay(trainer.salaryCreditDate);
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth(); // 0-11
+  const currentDay = today.getDate();
+
+  const maxDayThisMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const effectiveDueDayThisMonth = Math.min(dueDay, maxDayThisMonth);
+
+  // Is today on or past the due day of this month?
+  const isPastDueThisMonth = currentDay >= effectiveDueDayThisMonth;
+
+  let targetYear = currentYear;
+  let targetMonth = currentMonth;
+
+  if (!isPastDueThisMonth) {
+    // Check if the previous month's cycle is paid
+    const prevDate = new Date(currentYear, currentMonth - 1, 1);
+    const prevMonthName = prevDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const prevPaid = (allSalaries || []).some(s =>
+      (s.trainerId === trainer.id || (s.trainerName && s.trainerName.toLowerCase() === trainer.name?.toLowerCase())) &&
+      s.month?.toLowerCase() === prevMonthName.toLowerCase() &&
+      s.status === 'Paid'
+    );
+
+    if (!prevPaid) {
+      // Previous month is unpaid -> focus on previous month's overdue cycle
+      targetYear = prevDate.getFullYear();
+      targetMonth = prevDate.getMonth();
+    }
+  }
+
+  const targetDate = new Date(targetYear, targetMonth, 1);
+  const cycleMonthName = targetDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const maxDayInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const targetEffectiveDueDay = Math.min(dueDay, maxDayInTargetMonth);
+  const targetDueDate = new Date(targetYear, targetMonth, targetEffectiveDueDay);
+
+  // Find payment record for this cycle
+  const paymentRecord = (allSalaries || []).find(s =>
+    (s.trainerId === trainer.id || (s.trainerName && s.trainerName.toLowerCase() === trainer.name?.toLowerCase())) &&
+    s.month?.toLowerCase() === cycleMonthName.toLowerCase() &&
+    s.status === 'Paid'
+  );
+
+  let status;
+  if (paymentRecord) {
+    status = 'PAID';
+  } else {
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const dueMidnight = new Date(targetDueDate.getFullYear(), targetDueDate.getMonth(), targetDueDate.getDate()).getTime();
+
+    if (todayMidnight === dueMidnight) {
+      status = 'DUE TODAY';
+    } else if (todayMidnight > dueMidnight) {
+      status = 'OVERDUE';
+    } else {
+      status = 'PENDING';
+    }
+  }
+
+  const amount = parseFloat(trainer.salaryAmount || 25000);
+
+  return {
+    id: trainer.id,
+    trainerId: trainer.id,
+    trainerName: trainer.name,
+    specialty: trainer.specialty || 'Trainer',
+    month: cycleMonthName,
+    cycleMonthName,
+    amount: amount,
+    dueDay: targetEffectiveDueDay,
+    dueDateFormatted: `${getOrdinal(targetEffectiveDueDay)} of every month`,
+    status: status,
+    paymentRecord: paymentRecord,
+    lastPaymentDate: paymentRecord ? (paymentRecord.paymentDate || paymentRecord.date || 'Paid') : 'Not paid yet'
+  };
+}
 
 export default function AdminSalaryPage() {
   const { showSuccess, showError } = useDialog();
@@ -17,18 +110,14 @@ export default function AdminSalaryPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [viewingRecord, setViewingRecord] = useState(null);
-  const [deleteId, setDeleteId] = useState(null);
-
-  const currentDate = new Date();
-  const currentDay = currentDate.getDate();
-  const currentMonthYear = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   const [formData, setFormData] = useState({
     trainerId: '',
     trainerName: '',
-    month: currentMonthYear,
+    salaryAmount: '',
+    salaryDueDayText: '',
+    month: '',
     date: new Date().toISOString().split('T')[0],
-    amount: '',
     method: 'Bank Transfer',
     reference: '',
     notes: ''
@@ -40,14 +129,6 @@ export default function AdminSalaryPage() {
 
     const trnRes = await getTrainers();
     setTrainers(trnRes.data || []);
-    if (trnRes.data?.length > 0 && !formData.trainerName) {
-      setFormData(prev => ({ 
-        ...prev, 
-        trainerId: trnRes.data[0].id, 
-        trainerName: trnRes.data[0].name,
-        amount: trnRes.data[0].salaryAmount || 25000 
-      }));
-    }
 
     const statRes = await getSalaryStats();
     setStats(statRes.data || {});
@@ -57,18 +138,56 @@ export default function AdminSalaryPage() {
     loadData();
   }, []);
 
+  const openRecordModal = (item) => {
+    setFormData({
+      trainerId: item.id,
+      trainerName: item.trainerName,
+      salaryAmount: item.amount,
+      salaryDueDayText: item.dueDateFormatted,
+      month: item.cycleMonthName,
+      date: new Date().toISOString().split('T')[0],
+      method: 'Bank Transfer',
+      reference: '',
+      notes: ''
+    });
+    setEditingRecord(null);
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (item) => {
+    const rec = item.paymentRecord || {};
+    setEditingRecord(rec.id ? rec : { id: `sal_edit_${item.id}`, ...item });
+    setFormData({
+      trainerId: item.id,
+      trainerName: item.trainerName,
+      salaryAmount: item.amount,
+      salaryDueDayText: item.dueDateFormatted,
+      month: rec.month || item.cycleMonthName,
+      date: rec.paymentDate || rec.date || new Date().toISOString().split('T')[0],
+      method: rec.method || rec.paymentMethod || 'Bank Transfer',
+      reference: rec.reference || rec.transactionId || '',
+      notes: rec.notes || ''
+    });
+    setShowAddModal(true);
+  };
+
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!formData.amount || !formData.trainerName) return;
+    if (!formData.trainerId || !formData.trainerName) return;
     try {
       const res = await createSalaryPayment({
-        ...formData,
-        amount: parseFloat(formData.amount),
+        trainerId: formData.trainerId,
+        trainerName: formData.trainerName,
+        month: formData.month,
+        amount: parseFloat(formData.salaryAmount || 0),
+        date: formData.date,
+        method: formData.method,
+        reference: formData.reference,
+        notes: formData.notes,
         status: 'Paid'
       });
       if (res && res.success) {
         setShowAddModal(false);
-        resetForm();
         await showSuccess(res.message || 'Salary payment recorded successfully', 'Payment Recorded');
         loadData();
       } else {
@@ -81,15 +200,22 @@ export default function AdminSalaryPage() {
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    if (!editingRecord || !formData.amount) return;
+    if (!editingRecord) return;
     try {
       const res = await updateSalaryPayment(editingRecord.id, {
-        ...formData,
-        amount: parseFloat(formData.amount)
+        trainerId: formData.trainerId,
+        trainerName: formData.trainerName,
+        month: formData.month,
+        amount: parseFloat(formData.salaryAmount || 0),
+        date: formData.date,
+        method: formData.method,
+        reference: formData.reference,
+        notes: formData.notes,
+        status: 'Paid'
       });
       if (res && res.success) {
         setEditingRecord(null);
-        resetForm();
+        setShowAddModal(false);
         await showSuccess(res.message || 'Salary record updated successfully', 'Salary Updated');
         loadData();
       } else {
@@ -100,70 +226,9 @@ export default function AdminSalaryPage() {
     }
   };
 
-  const confirmDelete = async () => {
-    if (!deleteId) return;
-    try {
-      const res = await deleteSalaryPayment(deleteId);
-      setDeleteId(null);
-      if (res && res.success) {
-        await showSuccess(res.message || 'Salary payment record deleted successfully', 'Salary Deleted');
-        loadData();
-      } else {
-        await showError(res?.message || 'Failed to delete salary record', 'Delete Failed');
-      }
-    } catch (err) {
-      setDeleteId(null);
-      await showError(err?.message || 'Failed to delete salary record', 'Delete Failed');
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      trainerId: trainers[0]?.id || '',
-      trainerName: trainers[0]?.name || '',
-      month: currentMonthYear,
-      date: new Date().toISOString().split('T')[0],
-      amount: trainers[0]?.salaryAmount || 25000,
-      method: 'Bank Transfer',
-      reference: '',
-      notes: ''
-    });
-  };
-
-  // Compute dynamic trainer salary status for current month
+  // Compute dynamic trainer salary status for each trainer in Manage Trainers (1-to-1 sync)
   const computedTrainerSalaries = (trainers || []).map(trn => {
-    const creditDay = parseInt(trn.salaryCreditDate || 25, 10);
-    const amount = parseFloat(trn.salaryAmount || 25000);
-    
-    // Find payment record in salaries list
-    const paymentRecord = (salaries || []).find(s => 
-      (s.trainerId === trn.id || (s.trainerName && s.trainerName.toLowerCase() === trn.name.toLowerCase())) &&
-      (s.month?.toLowerCase() === currentMonthYear.toLowerCase() || s.status === 'Paid')
-    );
-
-    let status = 'PENDING';
-    if (paymentRecord && paymentRecord.status === 'Paid') {
-      status = 'PAID';
-    } else if (currentDay === creditDay) {
-      status = 'DUE TODAY';
-    } else if (currentDay > creditDay) {
-      status = 'OVERDUE';
-    } else {
-      status = 'PENDING';
-    }
-
-    return {
-      id: trn.id,
-      trainerName: trn.name,
-      specialty: trn.specialty || 'Trainer',
-      month: currentMonthYear,
-      amount: amount,
-      creditDay: creditDay,
-      dueDateFormatted: `${creditDay}th of month`,
-      status: status,
-      paymentRecord: paymentRecord,
-      date: paymentRecord ? paymentRecord.date : 'Not paid yet'
-    };
+    return computeTrainerSalaryRow(trn, salaries);
   });
 
   // Sort priority: 1. DUE TODAY, 2. OVERDUE, 3. PENDING, 4. PAID
@@ -197,23 +262,12 @@ export default function AdminSalaryPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header - Top-right Record button removed as each row has its own action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Trainer Salary Management</h1>
-          <p className="text-slate-500 text-xs sm:text-sm mt-1">Record and track monthly salary payments, payment methods, and financial disbursements to trainers.</p>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">Track monthly salary disbursements, cycle-based payment status, and record disbursements for trainers.</p>
         </div>
-
-        <button
-          onClick={() => {
-            resetForm();
-            setShowAddModal(true);
-          }}
-          className="bg-[#0F52BA] hover:bg-blue-700 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-sm flex items-center space-x-2 text-xs sm:text-sm self-start sm:self-auto cursor-pointer transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Record Salary Payment</span>
-        </button>
       </div>
 
       {/* Dynamic Summary Cards */}
@@ -227,19 +281,21 @@ export default function AdminSalaryPage() {
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="text-xs font-semibold text-slate-500">Current Month Salary</div>
           <div className="text-2xl font-black text-[#0F52BA] mt-1">₹{(stats?.currentMonthPaid || 0).toLocaleString()}</div>
-          <div className="text-[10px] text-[#0F52BA] font-bold mt-1">September 2026</div>
+          <div className="text-[10px] text-[#0F52BA] font-bold mt-1">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="text-xs font-semibold text-slate-500">Pending Salary Dues</div>
-          <div className="text-2xl font-black text-amber-600 mt-1">₹0</div>
-          <div className="text-[10px] text-amber-700 font-bold mt-1">All dues clear</div>
+          <div className="text-xs font-semibold text-slate-500">Trainers with Dues</div>
+          <div className="text-2xl font-black text-amber-600 mt-1">
+            {computedTrainerSalaries.filter(s => s.status !== 'PAID').length}
+          </div>
+          <div className="text-[10px] text-amber-700 font-bold mt-1">Cycle dues pending</div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="text-xs font-semibold text-slate-500">Trainers Paid</div>
-          <div className="text-2xl font-black text-purple-600 mt-1">{stats?.uniqueTrainersPaid || 0} of {trainers.length || 2}</div>
-          <div className="text-[10px] text-purple-700 font-bold mt-1">Active Staff</div>
+          <div className="text-2xl font-black text-purple-600 mt-1">{computedTrainerSalaries.filter(s => s.status === 'PAID').length} of {trainers.length}</div>
+          <div className="text-[10px] text-purple-700 font-bold mt-1">Active Trainers</div>
         </div>
       </div>
 
@@ -249,7 +305,7 @@ export default function AdminSalaryPage() {
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none"
+            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-hidden"
           >
             <option value="All">All Salary Statuses</option>
             <option value="Paid">PAID</option>
@@ -265,7 +321,7 @@ export default function AdminSalaryPage() {
             placeholder="Search trainer or specialty..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none"
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden"
           />
         </div>
       </div>
@@ -321,23 +377,11 @@ export default function AdminSalaryPage() {
                         {item.status}
                       </span>
                     </td>
-                    <td className="py-4 px-4 text-slate-500 font-mono text-[11px]">{item.date}</td>
+                    <td className="py-4 px-4 text-slate-500 font-mono text-[11px]">{item.lastPaymentDate}</td>
                     <td className="py-4 px-4 text-right space-x-1.5">
                       {item.status !== 'PAID' && (
                         <button
-                          onClick={() => {
-                            setFormData({
-                              trainerId: item.id,
-                              trainerName: item.trainerName,
-                              month: currentMonthYear,
-                              date: new Date().toISOString().split('T')[0],
-                              amount: item.amount,
-                              method: 'Bank Transfer',
-                              reference: '',
-                              notes: ''
-                            });
-                            setShowAddModal(true);
-                          }}
+                          onClick={() => openRecordModal(item)}
                           className="bg-[#0F52BA] hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
                         >
                           Record Payment
@@ -354,7 +398,7 @@ export default function AdminSalaryPage() {
                               amount: item.amount,
                               date: 'Pending',
                               method: 'Bank Transfer',
-                              notes: 'Salary due for current month'
+                              notes: 'Salary due for current cycle'
                             });
                           }
                         }}
@@ -363,23 +407,15 @@ export default function AdminSalaryPage() {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => {
-                          setEditingRecord(item);
-                          setFormData(item);
-                        }}
-                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Edit Record"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteId(item.id)}
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Delete Record"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {item.paymentRecord && (
+                        <button
+                          onClick={() => openEditModal(item)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                          title="Edit Payment Record"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -395,38 +431,41 @@ export default function AdminSalaryPage() {
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-xs">
             <button
               onClick={() => { setShowAddModal(false); setEditingRecord(null); }}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full"
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             <h3 className="text-xl font-black text-slate-900">
-              {editingRecord ? 'Edit Salary Payment' : 'Record Trainer Salary Payment'}
+              {editingRecord ? 'Edit Salary Payment' : 'Record Salary Payment'}
             </h3>
 
             <form onSubmit={editingRecord ? handleUpdate : handleCreate} className="space-y-3 pt-1">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Select Trainer</label>
-                <select
-                  required
+                <label className="block font-bold text-slate-700 mb-1">Trainer (Pre-filled)</label>
+                <input
+                  type="text"
+                  readOnly
+                  disabled
                   value={formData.trainerName}
-                  onChange={(e) => {
-                    const found = trainers.find(t => t.name === e.target.value);
-                    setFormData({
-                      ...formData,
-                      trainerName: e.target.value,
-                      trainerId: found ? found.id : ''
-                    });
-                  }}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:bg-white"
-                >
-                  {trainers.map(t => (
-                    <option key={t.id} value={t.name}>{t.name} ({t.specialty || 'Trainer'})</option>
-                  ))}
-                  {trainers.length === 0 && (
-                    <option value="">No trainers found</option>
-                  )}
-                </select>
+                  className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-800 cursor-not-allowed"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Configured Salary</label>
+                  <div className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-black text-emerald-600">
+                    ₹{Number(formData.salaryAmount || 0).toLocaleString()}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Payment Due Day</label>
+                  <div className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-700">
+                    {formData.salaryDueDayText}
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -435,7 +474,7 @@ export default function AdminSalaryPage() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. September 2026"
+                    placeholder="e.g. October 2026"
                     value={formData.month}
                     onChange={(e) => setFormData({ ...formData, month: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800"
@@ -455,17 +494,6 @@ export default function AdminSalaryPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Salary Amount (₹)</label>
-                <MoneyInput
-                  required
-                  placeholder="e.g. 25000"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white text-sm"
-                />
-              </div>
-
-              <div>
                 <label className="block font-bold text-slate-700 mb-1">Payment Method</label>
                 <select
                   value={formData.method}
@@ -475,12 +503,13 @@ export default function AdminSalaryPage() {
                   <option value="Bank Transfer">Bank Transfer</option>
                   <option value="UPI">UPI</option>
                   <option value="Cash">Cash</option>
+                  <option value="Cheque">Cheque</option>
                   <option value="Other">Other</option>
                 </select>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Transaction / Reference ID (Optional)</label>
+                <label className="block font-bold text-slate-700 mb-1">Transaction ID / Reference (Optional)</label>
                 <input
                   type="text"
                   placeholder="e.g. TXN98421054"
@@ -494,7 +523,7 @@ export default function AdminSalaryPage() {
                 <label className="block font-bold text-slate-700 mb-1">Notes (Optional)</label>
                 <input
                   type="text"
-                  placeholder="e.g. Performance bonus included"
+                  placeholder="e.g. Performance bonus included or bank remarks"
                   value={formData.notes || ''}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
@@ -518,7 +547,7 @@ export default function AdminSalaryPage() {
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-xs">
             <button
               onClick={() => setViewingRecord(null)}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full"
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -535,20 +564,20 @@ export default function AdminSalaryPage() {
                 <span className="font-bold text-slate-900">{viewingRecord.month}</span>
               </div>
               <div className="flex justify-between border-b border-slate-200 pb-2">
-                <span className="text-slate-500">Amount Paid:</span>
-                <span className="font-black text-emerald-600 text-sm">₹{parseFloat(viewingRecord.amount).toLocaleString()}</span>
+                <span className="text-slate-500">Amount:</span>
+                <span className="font-black text-emerald-600 text-sm">₹{parseFloat(viewingRecord.amount || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between border-b border-slate-200 pb-2">
                 <span className="text-slate-500">Payment Date:</span>
-                <span className="font-mono text-slate-800">{viewingRecord.date}</span>
+                <span className="font-mono text-slate-800">{viewingRecord.paymentDate || viewingRecord.date || 'Pending'}</span>
               </div>
               <div className="flex justify-between border-b border-slate-200 pb-2">
-                <span className="text-slate-500">Method:</span>
-                <span className="font-semibold text-slate-800">{viewingRecord.method}</span>
+                <span className="text-slate-500">Payment Method:</span>
+                <span className="font-semibold text-slate-800">{viewingRecord.paymentMethod || viewingRecord.method || 'Bank Transfer'}</span>
               </div>
               <div className="flex justify-between border-b border-slate-200 pb-2">
-                <span className="text-slate-500">Ref ID:</span>
-                <span className="font-mono text-slate-800">{viewingRecord.reference || 'None'}</span>
+                <span className="text-slate-500">Transaction ID:</span>
+                <span className="font-mono text-slate-800">{viewingRecord.transactionId || viewingRecord.reference || 'None'}</span>
               </div>
               {viewingRecord.notes && (
                 <div className="flex justify-between">
@@ -567,16 +596,6 @@ export default function AdminSalaryPage() {
           </div>
         </div>
       )}
-
-      <ConfirmModal
-        isOpen={Boolean(deleteId)}
-        onClose={() => setDeleteId(null)}
-        onConfirm={confirmDelete}
-        title="Confirm Delete"
-        message="Are you sure you want to delete this salary payment record?"
-        confirmText="Delete"
-        cancelText="Cancel"
-      />
     </div>
   );
 }

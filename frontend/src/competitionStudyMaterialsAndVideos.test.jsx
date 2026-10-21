@@ -80,7 +80,9 @@ describe('Competition Syllabus & Guidance Videos (Phase 6)', () => {
 
     // Switch video by clicking second item
     fireEvent.click(screen.getByText('Speech Recording Tips & Voice Rubrics'));
-    expect(player.getAttribute('data-video-id')).toBe('bunny_vid_102');
+    await waitFor(() => {
+      expect(screen.getByTestId('safe-video-player').getAttribute('data-video-id')).toBe('bunny_vid_102');
+    });
   });
 
   it('renders study materials handouts list and handles empty state', async () => {

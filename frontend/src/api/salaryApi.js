@@ -12,8 +12,10 @@ export const getSalaryPayments = async () => {
       date: s.paymentDate || (s.createdAt ? new Date(s.createdAt).toISOString().split('T')[0] : ''),
       paymentDate: s.paymentDate || '',
       amount: parseFloat(s.amount || 0),
-      method: 'Bank Transfer',
-      reference: s.id,
+      method: s.paymentMethod || 'Bank Transfer',
+      paymentMethod: s.paymentMethod || 'Bank Transfer',
+      reference: s.transactionId || s.id,
+      transactionId: s.transactionId || '',
       notes: s.notes || '',
       status: s.status || 'Paid'
     }));
@@ -34,20 +36,14 @@ export const createSalaryPayment = async (data) => {
     month: data.month || '',
     amount: parseFloat(data.amount || 0),
     paymentDate: data.date || data.paymentDate || new Date().toISOString().split('T')[0],
+    paymentMethod: data.method || data.paymentMethod || 'Bank Transfer',
+    transactionId: data.reference || data.transactionId || '',
     notes: data.notes || '',
     status: data.status || 'Paid'
   };
 
   const res = await apiPost('/salary-records', payload);
   if (res && res.success) {
-    if (payload.trainerName) {
-      await createNotification({
-        trainerName: payload.trainerName,
-        title: 'Salary Payment Recorded',
-        desc: `Salary payment of ₹${Number(payload.amount).toLocaleString()} for ${payload.month || 'current month'} has been recorded.`,
-        type: 'system'
-      });
-    }
     return apiResponse(res.data);
   }
   return apiResponse(null, false, res?.message || 'Failed to record salary');
@@ -61,6 +57,8 @@ export const updateSalaryPayment = async (id, data) => {
     month: data?.month,
     amount: parseFloat(data?.amount || 0),
     paymentDate: data?.date || data?.paymentDate,
+    paymentMethod: data?.method || data?.paymentMethod,
+    transactionId: data?.reference || data?.transactionId,
     notes: data?.notes,
     status: data?.status
   };

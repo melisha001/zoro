@@ -17,9 +17,12 @@ export default function EnquireModal({ isOpen, onClose }) {
     setLoadingCourses(true);
     setCoursesError(false);
     try {
-      const res = await getCourses();
+      const res = await getCourses('student');
       if (res && res.success && Array.isArray(res.data)) {
-        const active = res.data.filter(c => !c.status || c.status.toLowerCase() === 'active');
+        const active = res.data.filter(c => 
+          (!c.status || c.status.toLowerCase() === 'active') &&
+          (!c.audience || c.audience.toLowerCase() !== 'trainer')
+        );
         setCourses(active);
       } else {
         setCoursesError(true);

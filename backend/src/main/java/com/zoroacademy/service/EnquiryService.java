@@ -13,10 +13,17 @@ public class EnquiryService {
 
     private final EnquiryRepository enquiryRepository;
     private final CourseRepository courseRepository;
+    private final EmailService emailService;
 
-    public EnquiryService(EnquiryRepository enquiryRepository, CourseRepository courseRepository) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public EnquiryService(EnquiryRepository enquiryRepository, CourseRepository courseRepository, @org.springframework.beans.factory.annotation.Autowired(required = false) EmailService emailService) {
         this.enquiryRepository = enquiryRepository;
         this.courseRepository = courseRepository;
+        this.emailService = emailService;
+    }
+
+    public EnquiryService(EnquiryRepository enquiryRepository, CourseRepository courseRepository) {
+        this(enquiryRepository, courseRepository, null);
     }
 
 
@@ -47,7 +54,13 @@ public class EnquiryService {
                     .ifPresent(course -> enquiry.setCourseId(course.getId()));
         }
 
-        return enquiryRepository.save(enquiry);
+        Enquiry saved = enquiryRepository.save(enquiry);
+        if (emailService != null) {
+            try {
+                emailService.sendEnquiryAcknowledgement(saved);
+            } catch (Exception ignored) {}
+        }
+        return saved;
     }
 
     @Transactional

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Competition Registration Confirmed - Zoro Academy</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #334155;
+            -webkit-font-smoothing: antialiased;
+        }
+        table {
+            border-collapse: collapse;
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; padding: 32px 16px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0;">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 100%); padding: 32px 24px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">Zoro Academy</h1>
+                            <p style="color: #c7d2fe; margin: 8px 0 0 0; font-size: 14px; font-weight: 500;">Annual National English Championship</p>
+                        </td>
+                    </tr>
+
+                    <!-- Body Content -->
+                    <tr>
+                        <td style="padding: 32px 28px;">
+                            <div style="display: inline-block; background-color: #dcfce7; color: #166534; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 12px; border-radius: 9999px; margin-bottom: 16px;">
+                                &#10003; Registration Confirmed
+                            </div>
+
+                            <h2 style="color: #1e293b; margin: 0 0 16px 0; font-size: 20px; font-weight: 600;">
+                                Hello <span th:text="${studentName}">Participant</span>,
+                            </h2>
+                            <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;">
+                                Your registration for <strong th:text="${competitionTitle}">National Spell Bee Championship</strong> has been successfully received. We are thrilled to have you showcase your linguistic talents!
+                            </p>
+
+                            <!-- Registration Details Card -->
+                            <table role="presentation" width="100%" style="background-color: #f1f5f9; border-radius: 8px; margin: 20px 0; border: 1px solid #e2e8f0;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <h3 style="color: #334155; margin: 0 0 12px 0; font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                                            Event &amp; Registration Details
+                                        </h3>
+                                        <table role="presentation" width="100%">
+                                            <tr th:if="${registrationId != null}">
+                                                <td style="padding: 6px 0; color: #64748b; font-size: 14px; width: 40%;">Registration ID:</td>
+                                                <td style="padding: 6px 0; color: #1e293b; font-size: 14px; font-weight: 600;" th:text="${registrationId}">REG-98765</td>
+                                            </tr>
+                                            <tr th:if="${category != null and !category.isEmpty()}">
+                                                <td style="padding: 6px 0; color: #64748b; font-size: 14px; width: 40%;">Category / Level:</td>
+                                                <td style="padding: 6px 0; color: #1e293b; font-size: 14px; font-weight: 500;" th:text="${category}">Category B (Grades 6-8)</td>
+                                            </tr>
+                                            <tr th:if="${startDate != null and !startDate.isEmpty()}">
+                                                <td style="padding: 6px 0; color: #64748b; font-size: 14px; width: 40%;">Event Date:</td>
+                                                <td style="padding: 6px 0; color: #1e293b; font-size: 14px; font-weight: 500;" th:text="${startDate}">November 15, 2026</td>
+                                            </tr>
+                                            <tr th:if="${venue != null and !venue.isEmpty()}">
+                                                <td style="padding: 6px 0; color: #64748b; font-size: 14px; width: 40%;">Venue / Platform:</td>
+                                                <td style="padding: 6px 0; color: #1e293b; font-size: 14px; font-weight: 500;" th:text="${venue}">Online Portal / Main Hall</td>
+                                            </tr>
+                                            <tr th:if="${paymentStatus != null and !paymentStatus.isEmpty()}">
+                                                <td style="padding: 6px 0; color: #64748b; font-size: 14px; width: 40%;">Payment Status:</td>
+                                                <td style="padding: 6px 0; color: #047857; font-size: 14px; font-weight: 600;" th:text="${paymentStatus}">Confirmed / Paid</td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 20px 0 0 0;">
+                                Please keep your Registration ID handy during the event. You can log into your Student Portal to view practice materials, slot schedules, and rules.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #0f172a; padding: 24px; text-align: center; border-top: 1px solid #1e293b;">
+                            <p style="color: #94a3b8; font-size: 13px; margin: 0 0 8px 0;">
+                                &copy; Zoro English Academy. All rights reserved.
+                            </p>
+                            <p style="color: #64748b; font-size: 12px; margin: 0;">
+                                For queries regarding this competition, contact us at info@zoroacademy.com
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

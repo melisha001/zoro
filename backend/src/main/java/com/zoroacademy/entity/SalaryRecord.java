@@ -32,6 +32,12 @@ public class SalaryRecord {
     @Column(name = "payment_date", length = 50)
     private String paymentDate;
 
+    @Column(name = "payment_method", length = 50)
+    private String paymentMethod;
+
+    @Column(name = "transaction_id", length = 100)
+    private String transactionId;
+
     @Column(columnDefinition = "TEXT")
     private String notes;
 
@@ -49,6 +55,20 @@ public class SalaryRecord {
         this.amount = amount;
         this.status = status;
         this.paymentDate = paymentDate;
+        this.notes = notes;
+        this.createdAt = createdAt;
+    }
+
+    public SalaryRecord(String id, String trainerId, String trainerName, String month, BigDecimal amount, String status, String paymentDate, String paymentMethod, String transactionId, String notes, LocalDateTime createdAt) {
+        this.id = id;
+        this.trainerId = trainerId;
+        this.trainerName = trainerName;
+        this.month = month;
+        this.amount = amount;
+        this.status = status;
+        this.paymentDate = paymentDate;
+        this.paymentMethod = paymentMethod;
+        this.transactionId = transactionId;
         this.notes = notes;
         this.createdAt = createdAt;
     }
@@ -109,6 +129,22 @@ public class SalaryRecord {
         this.paymentDate = paymentDate;
     }
 
+    public String getPaymentMethod() {
+        return paymentMethod;
+    }
+
+    public void setPaymentMethod(String paymentMethod) {
+        this.paymentMethod = paymentMethod;
+    }
+
+    public String getTransactionId() {
+        return transactionId;
+    }
+
+    public void setTransactionId(String transactionId) {
+        this.transactionId = transactionId;
+    }
+
     public String getNotes() {
         return notes;
     }
@@ -137,6 +173,8 @@ public class SalaryRecord {
         private BigDecimal amount;
         private String status = "Paid";
         private String paymentDate;
+        private String paymentMethod;
+        private String transactionId;
         private String notes;
         private LocalDateTime createdAt;
 
@@ -168,6 +206,14 @@ public class SalaryRecord {
             this.paymentDate = paymentDate;
             return this;
         }
+        public Builder paymentMethod(String paymentMethod) {
+            this.paymentMethod = paymentMethod;
+            return this;
+        }
+        public Builder transactionId(String transactionId) {
+            this.transactionId = transactionId;
+            return this;
+        }
         public Builder notes(String notes) {
             this.notes = notes;
             return this;
@@ -178,7 +224,7 @@ public class SalaryRecord {
         }
 
         public SalaryRecord build() {
-            return new SalaryRecord(id, trainerId, trainerName, month, amount, status, paymentDate, notes, createdAt);
+            return new SalaryRecord(id, trainerId, trainerName, month, amount, status, paymentDate, paymentMethod, transactionId, notes, createdAt);
         }
     }
 

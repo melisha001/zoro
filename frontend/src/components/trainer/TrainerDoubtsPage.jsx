@@ -5,6 +5,7 @@ import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerAllocatedCourses, getTrainerAllocatedBatches } from '../../utils/trainerFilterHelper';
+import { getFriendlyDoubtId } from '../../utils/doubtRefUtil';
 import PageLoader from '../common/PageLoader';
 
 export default function TrainerDoubtsPage() {
@@ -205,7 +206,7 @@ export default function TrainerDoubtsPage() {
             No {activeTab} doubts match the selected Course and Batch filters.
           </div>
         ) : (
-          filteredDoubts.map(doubt => (
+          filteredDoubts.map((doubt, index) => (
             <div key={doubt.id} className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -213,7 +214,10 @@ export default function TrainerDoubtsPage() {
                     {(doubt.studentName || 'S').charAt(0)}
                   </div>
                   <div>
-                    <h3 className="font-black text-slate-900 text-sm">{doubt.studentName}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-slate-900 text-sm">{doubt.studentName}</h3>
+                      <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">{getFriendlyDoubtId(doubt, index, doubts)}</span>
+                    </div>
                     <p className="text-xs text-slate-500 font-semibold">{doubt.course} • Batch: {doubt.batchName || 'Unassigned'} • Topic: {doubt.topic}</p>
                   </div>
                 </div>

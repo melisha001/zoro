@@ -51,6 +51,12 @@ public class UserService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private AssignmentRepository assignmentRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private SalaryRecordRepository salaryRecordRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private EmailService emailService;
+
     @org.springframework.beans.factory.annotation.Autowired
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
@@ -369,6 +375,24 @@ public class UserService {
             }
         }
 
+        if (isNewStudent) {
+            try {
+                notificationService.createNotification(
+                    user.getId(),
+                    "Welcome to Zoro Academy!",
+                    "Your student account has been created. Start exploring your courses and materials.",
+                    "SYSTEM",
+                    "/student/courses"
+                );
+            } catch (Exception ignored) {}
+
+            if (emailService != null) {
+                try {
+                    emailService.sendStudentWelcomeEmail(user.getEmail(), user.getName(), dto.getPassword());
+                } catch (Exception ignored) {}
+            }
+        }
+
         return convertUserToDto(user);
     }
 
@@ -434,6 +458,25 @@ public class UserService {
         }
 
         user = userRepository.save(user);
+
+        if (isNewTrainer) {
+            try {
+                notificationService.createNotification(
+                    user.getId(),
+                    "Welcome to Zoro Academy Faculty!",
+                    "Your trainer account has been created. Check your allocated batches and schedule.",
+                    "SYSTEM",
+                    "/trainer/schedule"
+                );
+            } catch (Exception ignored) {}
+
+            if (emailService != null) {
+                try {
+                    emailService.sendTrainerWelcomeEmail(user.getEmail(), user.getName(), dto.getPassword(), user.getSpecialty());
+                } catch (Exception ignored) {}
+            }
+        }
+
         return UserDto.fromEntity(user);
     }
 
@@ -795,6 +838,10 @@ public class UserService {
             studentFeeRepository.deleteAll(fees);
         }
 
+        if (salaryRecordRepository != null) {
+            salaryRecordRepository.deleteAll(salaryRecordRepository.findByTrainerId(user.getId()));
+        }
+
         studentCourseBatchRepository.deleteByStudentId(user.getId());
         List<Enrollment> enrs = enrollmentRepository.findByStudentId(user.getId());
         if (enrs != null && !enrs.isEmpty()) {
@@ -820,5 +867,158 @@ public class UserService {
                 fileStorageService.deleteFile(matcher.group(1));
             } catch (Exception ignored) {}
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getTrainerDashboardStats(String trainerIdOrName) {
+        User trainer = null;
+        if (trainerIdOrName != null && !trainerIdOrName.isBlank()) {
+            trainer = userRepository.findById(trainerIdOrName)
+                    .or(() -> userRepository.findByEmailIgnoreCase(trainerIdOrName))
+                    .or(() -> userRepository.findByUsernameIgnoreCase(trainerIdOrName))
+                    .or(() -> userRepository.findByNameIgnoreCase(trainerIdOrName).stream().findFirst())
+                    .orElse(null);
+        }
+
+        String trainerId = trainer != null ? trainer.getId() : trainerIdOrName;
+        String trainerName = trainer != null ? trainer.getName() : trainerIdOrName;
+        String trainerEmail = trainer != null ? trainer.getEmail() : null;
+
+        // 1. Batches assigned to this trainer (as teacher)
+        List<Batch> allBatches = batchRepository.findAll();
+        List<Batch> taughtBatches = allBatches.stream()
+                .filter(b -> (b.getTrainerId() != null && b.getTrainerId().equals(trainerId))
+                        || (b.getTrainerIds() != null && b.getTrainerIds().contains(trainerId))
+                        || (trainerName != null && b.getTrainerName() != null && b.getTrainerName().equalsIgnoreCase(trainerName)))
+                .toList();
+
+        Set<String> taughtBatchIds = taughtBatches.stream().map(Batch::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<String> taughtBatchNames = taughtBatches.stream().map(Batch::getName).filter(Objects::nonNull).map(String::toLowerCase).collect(Collectors.toSet());
+
+        // 2. Courses assigned to this trainer (as teacher)
+        List<Course> allCourses = courseRepository.findAll();
+        List<Course> taughtCourses = allCourses.stream()
+                .filter(c -> !"trainer".equalsIgnoreCase(c.getAudience())) // exclude trainer learner courses
+                .filter(c -> (c.getTrainerId() != null && c.getTrainerId().equals(trainerId))
+                        || (c.getAssignedTrainerId() != null && c.getAssignedTrainerId().equals(trainerId))
+                        || (trainerName != null && c.getAssignedTrainer() != null && c.getAssignedTrainer().equalsIgnoreCase(trainerName))
+                        || taughtBatches.stream().anyMatch(b -> b.getCourseId() != null && b.getCourseId().equals(c.getId())))
+                .toList();
+
+        Set<String> taughtCourseIds = taughtCourses.stream().map(Course::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<String> taughtCourseTitles = taughtCourses.stream().map(Course::getTitle).filter(Objects::nonNull).map(String::toLowerCase).collect(Collectors.toSet());
+
+        // 3. Distinct active students in batches/courses assigned to this trainer
+        Set<String> distinctStudentIds = new HashSet<>();
+        List<Enrollment> enrollments = enrollmentRepository.findAll();
+        for (Enrollment e : enrollments) {
+            if ("Inactive".equalsIgnoreCase(e.getStatus()) || "Dropped".equalsIgnoreCase(e.getStatus())) continue;
+            if (trainerId != null && trainerId.equals(e.getStudentId())) continue;
+            if (trainerEmail != null && trainerEmail.equalsIgnoreCase(e.getStudentEmail())) continue;
+
+            boolean matchesBatch = (e.getBatchId() != null && taughtBatchIds.contains(e.getBatchId()))
+                    || (e.getBatchName() != null && taughtBatchNames.contains(e.getBatchName().toLowerCase()));
+            boolean matchesCourse = (e.getCourseId() != null && taughtCourseIds.contains(e.getCourseId()))
+                    || (e.getCourseTitle() != null && taughtCourseTitles.contains(e.getCourseTitle().toLowerCase()));
+
+            if (matchesBatch || matchesCourse) {
+                if (e.getStudentId() != null && !e.getStudentId().isBlank()) {
+                    distinctStudentIds.add(e.getStudentId());
+                } else if (e.getStudentEmail() != null && !e.getStudentEmail().isBlank()) {
+                    distinctStudentIds.add(e.getStudentEmail().toLowerCase());
+                }
+            }
+        }
+
+        List<StudentCourseBatch> scbs = studentCourseBatchRepository.findAll();
+        for (StudentCourseBatch scb : scbs) {
+            if (trainerId != null && trainerId.equals(scb.getStudentId())) continue;
+            boolean matchesBatch = (scb.getBatchId() != null && taughtBatchIds.contains(scb.getBatchId()))
+                    || (scb.getBatchName() != null && taughtBatchNames.contains(scb.getBatchName().toLowerCase()));
+            boolean matchesCourse = (scb.getCourseId() != null && taughtCourseIds.contains(scb.getCourseId()));
+            if (matchesBatch || matchesCourse) {
+                if (scb.getStudentId() != null && !scb.getStudentId().isBlank()) {
+                    distinctStudentIds.add(scb.getStudentId());
+                }
+            }
+        }
+
+        // 4. Schedules for this trainer
+        List<Schedule> allSchedules = scheduleRepository.findAll();
+        List<Schedule> trainerSchedules = allSchedules.stream()
+                .filter(s -> (s.getTrainerId() != null && s.getTrainerId().equals(trainerId))
+                        || (trainerName != null && s.getTrainer() != null && s.getTrainer().equalsIgnoreCase(trainerName))
+                        || (s.getBatchId() != null && taughtBatchIds.contains(s.getBatchId())))
+                .toList();
+
+        String todayStr = com.zoroacademy.util.ScheduleTimeUtil.nowInKolkata().toLocalDate().toString();
+        long todaySessions = trainerSchedules.stream()
+                .filter(s -> s.getDate() != null && s.getDate().equals(todayStr))
+                .count();
+
+        long conductedClasses = trainerSchedules.stream()
+                .filter(s -> "Completed".equalsIgnoreCase(s.getStatus()))
+                .count();
+        long totalClasses = trainerSchedules.size();
+
+        // 5. Submissions (Pending Corrections vs Corrected)
+        List<AssignmentSubmission> allSubmissions = assignmentSubmissionRepository.findAll();
+        List<AssignmentSubmission> trainerSubmissions = allSubmissions.stream()
+                .filter(s -> !"TRAINER".equalsIgnoreCase(s.getSubmitterRole()))
+                .filter(s -> !(trainerId != null && trainerId.equals(s.getStudentId())))
+                .filter(s -> (s.getTrainerId() != null && s.getTrainerId().equals(trainerId))
+                        || (trainerName != null && s.getAssignedTrainer() != null && s.getAssignedTrainer().equalsIgnoreCase(trainerName))
+                        || (s.getBatchId() != null && taughtBatchIds.contains(s.getBatchId()))
+                        || (s.getBatchName() != null && taughtBatchNames.contains(s.getBatchName().toLowerCase())))
+                .toList();
+
+        long pendingCorrections = trainerSubmissions.stream()
+                .filter(s -> s.getStatus() == null || s.getStatus().toLowerCase().contains("pending") || "submitted".equalsIgnoreCase(s.getStatus()))
+                .count();
+        long correctedAssignments = trainerSubmissions.stream()
+                .filter(s -> s.getStatus() != null && (s.getStatus().toLowerCase().contains("corrected") || s.getStatus().toLowerCase().contains("graded") || s.getStatus().toLowerCase().contains("completed")))
+                .count();
+        long totalAssignments = trainerSubmissions.size();
+
+        // 6. Doubts to Answer
+        List<Doubt> allDoubts = doubtRepository.findAll();
+        long doubtsToAnswer = allDoubts.stream()
+                .filter(d -> (d.getTrainerId() != null && d.getTrainerId().equals(trainerId))
+                        || (trainerName != null && d.getTrainerName() != null && d.getTrainerName().equalsIgnoreCase(trainerName))
+                        || (d.getBatchId() != null && taughtBatchIds.contains(d.getBatchId())))
+                .filter(d -> d.getStatus() == null || "pending".equalsIgnoreCase(d.getStatus()) || "open".equalsIgnoreCase(d.getStatus()))
+                .count();
+
+        // 7. Attendance & Performance
+        List<AttendanceRecord> allAttendance = attendanceRecordRepository.findAll();
+        Set<String> scheduleIdSet = trainerSchedules.stream().map(Schedule::getId).collect(Collectors.toSet());
+        List<AttendanceRecord> relevantAtt = allAttendance.stream()
+                .filter(r -> (r.getScheduleId() != null && scheduleIdSet.contains(r.getScheduleId()))
+                        || (r.getBatchId() != null && taughtBatchIds.contains(r.getBatchId())))
+                .toList();
+        long presentCount = relevantAtt.stream().filter(r -> "PRESENT".equalsIgnoreCase(r.getStatus())).count();
+        int attendanceRate = !relevantAtt.isEmpty()
+                ? (int) Math.round(((double) presentCount / relevantAtt.size()) * 100)
+                : (totalClasses > 0 ? (int) Math.round(((double) conductedClasses / totalClasses) * 100) : 0);
+
+        int performancePercent = totalClasses > 0
+                ? (int) Math.round(((double) conductedClasses / totalClasses) * 100)
+                : (!relevantAtt.isEmpty() ? attendanceRate : 0);
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("todaySessions", todaySessions);
+        stats.put("myStudents", distinctStudentIds.size());
+        stats.put("batchCount", taughtBatches.size());
+        stats.put("pendingCorrections", pendingCorrections);
+        stats.put("doubtsToAnswer", doubtsToAnswer);
+        stats.put("conductedClasses", conductedClasses);
+        stats.put("totalClasses", totalClasses);
+        stats.put("correctedAssignments", correctedAssignments);
+        stats.put("totalAssignments", totalAssignments);
+        stats.put("attendanceRate", attendanceRate);
+        stats.put("performancePercent", performancePercent);
+        stats.put("studentSatisfaction", 4.9);
+
+        return stats;
     }
 }

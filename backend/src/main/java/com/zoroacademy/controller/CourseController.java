@@ -52,9 +52,17 @@ public class CourseController {
 
     @GetMapping
     public ApiResponse<List<Course>> getCourses(@RequestParam(required = false) String audience) {
-        List<Course> courses = courseService.getAllCourses(audience);
-        if (!isStaffUser()) {
-            courses = courses.stream().map(courseService::sanitizeCourseForPublic).toList();
+        boolean staff = isStaffUser();
+        String effectiveAudience = audience;
+        if (!staff && (effectiveAudience == null || effectiveAudience.isBlank())) {
+            effectiveAudience = "student";
+        }
+        List<Course> courses = courseService.getAllCourses(effectiveAudience);
+        if (!staff) {
+            courses = courses.stream()
+                    .filter(c -> c.getAudience() == null || !"trainer".equalsIgnoreCase(c.getAudience()))
+                    .map(courseService::sanitizeCourseForPublic)
+                    .toList();
         }
         return ApiResponse.ok(courses);
     }

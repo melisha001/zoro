@@ -309,6 +309,8 @@ public class ScheduleService {
 
         if (isTrainerAudience && notificationService != null) {
             notifyEnrolledTrainers(saved);
+        } else if (notificationService != null) {
+            notifyBatchStudents(saved, false);
         }
 
         return saved;
@@ -318,6 +320,9 @@ public class ScheduleService {
     public Schedule updateSchedule(String id, Schedule updated) {
         Schedule existing = scheduleRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Schedule not found: " + id));
+
+        String prevDate = existing.getDate();
+        String prevTime = existing.getTime();
 
         if (updated.getTitle() != null) existing.setTitle(updated.getTitle());
         if (updated.getCourse() != null) existing.setCourse(updated.getCourse());
@@ -415,7 +420,52 @@ public class ScheduleService {
         validateAndNormalizeSchedule(existing, id);
         enrichSchedule(existing);
 
-        return scheduleRepository.save(existing);
+        Schedule saved = scheduleRepository.save(existing);
+        boolean isRescheduled = (prevDate != null && !prevDate.equals(saved.getDate()))
+                || (prevTime != null && !prevTime.equals(saved.getTime()));
+        if (isRescheduled && notificationService != null) {
+            notifyBatchStudents(saved, true);
+        }
+
+        return saved;
+    }
+
+    private void notifyBatchStudents(Schedule schedule, boolean isReschedule) {
+        if (notificationService == null) return;
+        java.util.Set<String> recipientStudentIds = new java.util.HashSet<>();
+
+        if (schedule.getBatchId() != null && studentCourseBatchRepository != null) {
+            studentCourseBatchRepository.findByBatchId(schedule.getBatchId()).forEach(scb -> {
+                if (scb.getStudentId() != null && !scb.getStudentId().isBlank()) {
+                    recipientStudentIds.add(scb.getStudentId());
+                }
+            });
+        }
+        if (schedule.getCourseId() != null && enrollmentRepository != null) {
+            enrollmentRepository.findByCourseId(schedule.getCourseId()).stream()
+                .filter(e -> "Active".equalsIgnoreCase(e.getStatus()) || e.getStatus() == null)
+                .forEach(e -> {
+                    if (e.getStudentId() != null && !e.getStudentId().isBlank()) {
+                        recipientStudentIds.add(e.getStudentId());
+                    }
+                });
+        }
+
+        String action = isReschedule ? "Rescheduled" : "Scheduled";
+        String title = "Session " + action + ": " + schedule.getTitle();
+        String message = "Your live session for " + schedule.getCourse() + " (" + (schedule.getBatch() != null ? schedule.getBatch() : "Batch")
+                + ") is " + action.toLowerCase() + " for " + schedule.getDate() + " at " + schedule.getTime() + ".";
+
+        for (String sId : recipientStudentIds) {
+            notificationService.createNotification(com.zoroacademy.entity.Notification.builder()
+                .id("notif_" + java.util.UUID.randomUUID())
+                .recipientId(sId)
+                .recipientRole("STUDENT")
+                .title(title)
+                .message(message)
+                .readStatus(false)
+                .build());
+        }
     }
 
     private void notifyEnrolledTrainers(Schedule schedule) {

@@ -16,7 +16,7 @@ export default function CompetitionSyllabusPage() {
   useEffect(() => {
     if (!currentCompetition?.id) return;
     loadContent();
-  }, [currentCompetition]);
+  }, [currentCompetition?.id]);
 
   const loadContent = async () => {
     setLoading(true);
@@ -29,7 +29,7 @@ export default function CompetitionSyllabusPage() {
       const vids = vidRes?.data || [];
       setVideos(vids);
       if (vids.length > 0) {
-        setSelectedVideo(vids[0]);
+        setSelectedVideo((prev) => (prev && vids.some((v) => v.id === prev.id) ? prev : vids[0]));
       }
     } catch (err) {
       console.error('Failed to load syllabus/videos:', err);

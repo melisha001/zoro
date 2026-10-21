@@ -51,6 +51,7 @@ public class AdminDashboardService {
 
         // 1. User & Course counts via COUNT(*)
         long studentCount = userRepository.countLearningStudents();
+        long totalStudents = userRepository.countByRoleIgnoreCase("STUDENT");
         long trainerCount = userRepository.countByRole("TRAINER");
         long courseCount = courseRepository.count();
         long batchCount = batchRepository.count();
@@ -95,6 +96,7 @@ public class AdminDashboardService {
         }
 
         data.put("studentCount", studentCount);
+        data.put("totalStudents", totalStudents);
         data.put("trainerCount", trainerCount);
         data.put("courseCount", courseCount);
         data.put("batchCount", batchCount);

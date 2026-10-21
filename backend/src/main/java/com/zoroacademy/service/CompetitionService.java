@@ -63,6 +63,9 @@ public class CompetitionService {
     @Autowired(required = false)
     private AssessmentSetOptionRepository assessmentSetOptionRepository;
 
+    @Autowired(required = false)
+    private EmailService emailService;
+
     @Autowired
     public CompetitionService(
             CompetitionRepository competitionRepository,
@@ -392,7 +395,13 @@ public class CompetitionService {
         }
 
         reg.setCompetition(comp);
-        return registrationRepository.save(reg);
+        CompetitionRegistration saved = registrationRepository.save(reg);
+        if (emailService != null) {
+            try {
+                emailService.sendCompetitionRegistrationConfirmation(saved);
+            } catch (Exception ignored) {}
+        }
+        return saved;
     }
 
     @Transactional

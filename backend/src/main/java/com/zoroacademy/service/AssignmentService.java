@@ -27,6 +27,8 @@ public class AssignmentService {
     private final ProgressService progressService;
 
     private final com.zoroacademy.repository.CourseModuleRepository courseModuleRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.zoroacademy.repository.EnrollmentRepository enrollmentRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     public AssignmentService(AssignmentRepository assignmentRepository,
@@ -121,6 +123,34 @@ public class AssignmentService {
                 .message("New assignment '" + saved.getTitle() + "' posted for " + saved.getCourse() + ".")
                 .readStatus(false)
                 .build());
+
+        java.util.Set<String> recipientStudentIds = new java.util.HashSet<>();
+        if (saved.getBatchId() != null && studentCourseBatchRepository != null) {
+            studentCourseBatchRepository.findByBatchId(saved.getBatchId()).forEach(scb -> {
+                if (scb.getStudentId() != null && !scb.getStudentId().isBlank()) {
+                    recipientStudentIds.add(scb.getStudentId());
+                }
+            });
+        }
+        if (saved.getCourseId() != null && enrollmentRepository != null) {
+            enrollmentRepository.findByCourseId(saved.getCourseId()).stream()
+                .filter(e -> "Active".equalsIgnoreCase(e.getStatus()) || e.getStatus() == null)
+                .forEach(e -> {
+                    if (e.getStudentId() != null && !e.getStudentId().isBlank()) {
+                        recipientStudentIds.add(e.getStudentId());
+                    }
+                });
+        }
+        for (String sId : recipientStudentIds) {
+            notificationService.createNotification(com.zoroacademy.entity.Notification.builder()
+                    .id("notif_" + java.util.UUID.randomUUID())
+                    .recipientId(sId)
+                    .recipientRole("STUDENT")
+                    .title("New Assignment: " + saved.getTitle())
+                    .message("New assignment '" + saved.getTitle() + "' posted for " + saved.getCourse() + ".")
+                    .readStatus(false)
+                    .build());
+        }
 
         return saved;
     }

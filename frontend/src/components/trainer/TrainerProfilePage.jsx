@@ -116,15 +116,17 @@ export default function TrainerProfilePage() {
               </div>
             )}
 
-            <label className="absolute bottom-0 right-0 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg cursor-pointer transition-transform transform hover:scale-105">
-              <Camera className="w-4 h-4" />
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/jpg"
-                onChange={handlePhotoUpload}
-                className="hidden"
-              />
-            </label>
+            {isEditing && (
+              <label className="absolute bottom-0 right-0 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg cursor-pointer transition-transform transform hover:scale-105" aria-label="Upload Profile Photo">
+                <Camera className="w-4 h-4" />
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/jpg"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </label>
+            )}
           </div>
 
           <div className="text-center sm:text-left space-y-1">

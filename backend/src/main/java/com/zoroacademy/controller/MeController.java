@@ -608,9 +608,18 @@ public class MeController {
         String role = user.getRole().toUpperCase();
 
         List<Notification> roleNotifs = notificationRepository.findByRecipientRoleIgnoreCaseOrRecipientRoleIgnoreCase("ALL", role);
-        List<Notification> userNotifs = new ArrayList<>(notificationRepository.findByRecipientId(user.getId()));
-        if (user.getEmail() != null) {
-            userNotifs.addAll(notificationRepository.findByRecipientId(user.getEmail()));
+        List<Notification> userNotifs = new ArrayList<>();
+        if (user.getId() != null && !user.getId().isBlank()) {
+            userNotifs.addAll(notificationRepository.findByRecipientIdIgnoreCase(user.getId()));
+        }
+        if (user.getEmail() != null && !user.getEmail().isBlank()) {
+            userNotifs.addAll(notificationRepository.findByRecipientIdIgnoreCase(user.getEmail()));
+        }
+        if (user.getUsername() != null && !user.getUsername().isBlank()) {
+            userNotifs.addAll(notificationRepository.findByRecipientIdIgnoreCase(user.getUsername()));
+        }
+        if (user.getName() != null && !user.getName().isBlank()) {
+            userNotifs.addAll(notificationRepository.findByRecipientIdIgnoreCase(user.getName()));
         }
 
         Set<String> seenIds = new HashSet<>();
@@ -625,6 +634,10 @@ public class MeController {
                 merged.add(n);
             }
         }
+        merged.sort((a, b) -> {
+            if (a.getCreatedAt() == null || b.getCreatedAt() == null) return 0;
+            return b.getCreatedAt().compareTo(a.getCreatedAt());
+        });
         return ApiResponse.ok(merged);
     }
 
