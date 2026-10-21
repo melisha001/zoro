@@ -69,6 +69,11 @@ export default function CompetitionPortalLayout() {
   };
 
   const isTrainerOrAdmin = ['TRAINER', 'ADMIN', 'SUPER_ADMIN'].includes((user?.role || '').toUpperCase());
+  const canSwitchToLearning = Boolean(
+    (portals.learning ?? user?.hasCourseEnrollment) &&
+    (portals.competition ?? user?.hasCompetitionRegistration) &&
+    (user?.role || '').toUpperCase() === 'STUDENT'
+  );
 
   const navItems = [
     { label: 'Overview', path: '/competition', icon: Trophy },
@@ -223,7 +228,7 @@ export default function CompetitionPortalLayout() {
 
         {/* Sidebar Footer: Switch to Learning Portal & Sign Out */}
         <div className="p-3 border-t border-slate-800 space-y-1.5">
-          {portals.learning && (
+          {canSwitchToLearning && (
             <button
               onClick={handleSwitchToLearning}
               className="w-full flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-blue-400 hover:text-blue-300 transition cursor-pointer border border-slate-700/60"
@@ -285,7 +290,7 @@ export default function CompetitionPortalLayout() {
             </nav>
 
             <div className="p-3 border-t border-slate-800 space-y-2">
-              {portals.learning && (
+              {canSwitchToLearning && (
                 <button
                   onClick={handleSwitchToLearning}
                   className="w-full flex items-center space-x-2 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-blue-400"

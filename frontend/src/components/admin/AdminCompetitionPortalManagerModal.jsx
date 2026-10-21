@@ -8,6 +8,7 @@ import {
   getCompetitionSets, assignTrainerToSet, 
   getCompetitionSyllabus, saveCompetitionSyllabus,
   getCompetitionGuidanceVideos, saveCompetitionGuidanceVideo, deleteCompetitionGuidanceVideo,
+  reorderCompetitionGuidanceVideos,
   getCompetitionStudyMaterials, saveCompetitionStudyMaterial, deleteCompetitionStudyMaterial,
   getCompetitionAssessments, updateCompetitionAssessment,
   getAssessmentQuestions, saveAssessmentQuestion, deleteAssessmentQuestion
@@ -16,6 +17,8 @@ import { getTrainers } from '../../api/userApi';
 import { uploadFile } from '../../api/fileApi';
 import ButtonSpinner from '../common/ButtonSpinner';
 import InlineSpinner from '../common/InlineSpinner';
+import UnifiedUploader from '../common/UnifiedUploader';
+import SafeVideo from '../common/SafeVideo';
 import { useDialog } from '../../context/DialogContext';
 
 export default function AdminCompetitionPortalManagerModal({ competition, isOpen, onClose }) {
@@ -39,6 +42,8 @@ export default function AdminCompetitionPortalManagerModal({ competition, isOpen
   // Video form
   const [newVideo, setNewVideo] = useState({ title: '', bunnyVideoId: '', duration: '', sortOrder: 0 });
   const [savingVideo, setSavingVideo] = useState(false);
+  const [previewingVideo, setPreviewingVideo] = useState(null);
+  const [reorderingVideos, setReorderingVideos] = useState(false);
 
   // Material form
   const [newMaterial, setNewMaterial] = useState({ title: '', sortOrder: 0 });
@@ -166,6 +171,67 @@ export default function AdminCompetitionPortalManagerModal({ competition, isOpen
       await showError(err.message || 'Failed to save video', 'Error');
     } finally {
       setSavingVideo(false);
+    }
+  };
+
+  const handleGuidanceVideoUploadComplete = async (uploadRes) => {
+    if (!uploadRes) return;
+    const autoTitle = uploadRes.title || uploadRes.name?.replace(/\.[^/.]+$/, '') || 'Guidance Video';
+    const videoGuid = uploadRes.bunnyVideoId || uploadRes.videoId || uploadRes.id;
+    const duration = uploadRes.duration || '';
+
+    setSavingVideo(true);
+    try {
+      const res = await saveCompetitionGuidanceVideo(competition.id, {
+        title: autoTitle,
+        bunnyVideoId: videoGuid,
+        duration: duration,
+        sortOrder: videos.length + 1,
+        status: 'PUBLISHED'
+      });
+      if (res && res.success) {
+        await showSuccess(`"${autoTitle}" uploaded and added to Guidance Videos.`);
+        const vRes = await getCompetitionGuidanceVideos(competition.id);
+        setVideos(vRes?.data || []);
+      } else {
+        await showError(res?.message || 'Failed to save guidance video');
+      }
+    } catch (err) {
+      await showError(err.message || 'Failed to save guidance video');
+    } finally {
+      setSavingVideo(false);
+    }
+  };
+
+  const handleGuidanceMultiUploadComplete = async (uploadResults) => {
+    if (!uploadResults || uploadResults.length === 0) return;
+    for (const item of uploadResults) {
+      await handleGuidanceVideoUploadComplete(item);
+    }
+  };
+
+  const handleMoveVideo = async (index, direction) => {
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= videos.length) return;
+
+    const reordered = [...videos];
+    const temp = reordered[index];
+    reordered[index] = reordered[targetIdx];
+    reordered[targetIdx] = temp;
+
+    setVideos(reordered);
+    const videoIds = reordered.map((v) => v.id);
+
+    try {
+      setReorderingVideos(true);
+      await reorderCompetitionGuidanceVideos(competition.id, videoIds);
+    } catch (err) {
+      console.error('Failed to reorder guidance videos:', err);
+      showError('Failed to save video order');
+      const vRes = await getCompetitionGuidanceVideos(competition.id);
+      setVideos(vRes?.data || []);
+    } finally {
+      setReorderingVideos(false);
     }
   };
 
@@ -463,85 +529,80 @@ export default function AdminCompetitionPortalManagerModal({ competition, isOpen
               {/* TAB 3: GUIDANCE VIDEOS */}
               {activeTab === 'videos' && (
                 <div className="space-y-6">
-                  {/* Add Video Form */}
-                  <form onSubmit={handleSaveVideo} className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 max-w-2xl">
-                    <h4 className="text-xs font-black uppercase text-slate-500">Add Guidance Video (Bunny Stream)</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Video Title *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. Mentor Introduction & Rules"
-                          value={newVideo.title}
-                          onChange={(e) => setNewVideo({ ...newVideo, title: e.target.value })}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Bunny Stream Video ID *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. 84b39174-..."
-                          value={newVideo.bunnyVideoId}
-                          onChange={(e) => setNewVideo({ ...newVideo, bunnyVideoId: e.target.value })}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Duration in Seconds</label>
-                        <input
-                          type="number"
-                          placeholder="e.g. 360"
-                          value={newVideo.duration}
-                          onChange={(e) => setNewVideo({ ...newVideo, duration: e.target.value })}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Sort Order</label>
-                        <input
-                          type="number"
-                          value={newVideo.sortOrder}
-                          onChange={(e) => setNewVideo({ ...newVideo, sortOrder: e.target.value })}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
-                        />
-                      </div>
-                    </div>
-                    <ButtonSpinner
-                      type="submit"
-                      loading={savingVideo}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition cursor-pointer"
-                    >
-                      <span>Add Video</span>
-                    </ButtonSpinner>
-                  </form>
+                  {/* Multi-file Drag & Drop Uploader */}
+                  <UnifiedUploader
+                    accept="video/*"
+                    multiple={true}
+                    category="guidance-video"
+                    maxSizeMB={500}
+                    label="Upload Guidance Videos (Bunny Stream)"
+                    helperText="Drag & drop video files. Videos are automatically transcoded and streamed via Bunny Stream."
+                    onUploadComplete={handleGuidanceVideoUploadComplete}
+                    onMultiUploadComplete={handleGuidanceMultiUploadComplete}
+                  />
 
                   {/* Videos List */}
                   <div className="space-y-2">
-                    <h4 className="text-xs font-black uppercase text-slate-500">Published Guidance Videos ({videos.length})</h4>
+                    <h4 className="text-xs font-black uppercase text-slate-500">
+                      Published Guidance Videos ({videos.length})
+                    </h4>
                     {videos.length === 0 ? (
                       <p className="text-xs text-slate-400">No videos added yet.</p>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {videos.map(v => (
-                          <div key={v.id} className="p-3 bg-white border border-slate-200 rounded-2xl flex items-center justify-between shadow-2xs">
+                        {videos.map((v, index) => (
+                          <div
+                            key={v.id}
+                            className="p-3 bg-white border border-slate-200 rounded-2xl flex items-center justify-between shadow-2xs"
+                          >
                             <div className="min-w-0 pr-2">
-                              <p className="font-bold text-xs text-slate-900 truncate">{v.title}</p>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">
+                                  #{index + 1}
+                                </span>
+                                <p className="font-bold text-xs text-slate-900 truncate">{v.title}</p>
+                              </div>
                               <p className="text-[10px] text-slate-400 font-mono truncate">ID: {v.bunnyVideoId}</p>
                             </div>
-                            <button
-                              onClick={() => handleDeleteVideo(v.id)}
-                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewingVideo(v)}
+                                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold cursor-pointer"
+                              >
+                                Preview
+                              </button>
+                              <button
+                                onClick={() => handleDeleteVideo(v.id)}
+                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
+
+                  {previewingVideo && (
+                    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+                      <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-4 space-y-3 shadow-2xl">
+                        <div className="flex items-center justify-between text-white pb-2 border-b border-slate-800">
+                          <span className="font-bold text-xs truncate">{previewingVideo.title}</span>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewingVideo(null)}
+                            className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <SafeVideo bunnyVideoId={previewingVideo.bunnyVideoId} className="w-full aspect-video rounded-xl" autoPlay />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -801,13 +862,29 @@ export default function AdminCompetitionPortalManagerModal({ competition, isOpen
 
               {questionFormData.questionFormat !== 'MCQ' && (
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Media Reference ID (Bunny video or audio file ID)</label>
-                  <input
-                    type="text"
-                    value={questionFormData.mediaRef}
-                    onChange={(e) => setQuestionFormData({ ...questionFormData, mediaRef: e.target.value })}
-                    placeholder="e.g. 9b1284a1-..."
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Question Media Prompt (Video or Audio Upload)
+                  </label>
+                  <UnifiedUploader
+                    accept="video/*,audio/*"
+                    multiple={false}
+                    category="question-media"
+                    maxSizeMB={200}
+                    initialValue={
+                      questionFormData.mediaRef
+                        ? {
+                            id: questionFormData.mediaRef,
+                            bunnyVideoId: questionFormData.mediaRef,
+                            name: `Media Attached (${questionFormData.mediaRef.substring(0, 8)}...)`
+                          }
+                        : null
+                    }
+                    onUploadComplete={(res) => {
+                      const refId = res.bunnyVideoId || res.videoId || res.id;
+                      setQuestionFormData((prev) => ({ ...prev, mediaRef: refId }));
+                    }}
+                    onClear={() => setQuestionFormData((prev) => ({ ...prev, mediaRef: '' }))}
+                    helperText="Upload audio or video question prompt. Videos stream via Bunny Stream, audio via Bunny Storage."
                   />
                 </div>
               )}

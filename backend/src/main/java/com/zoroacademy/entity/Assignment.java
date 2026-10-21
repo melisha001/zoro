@@ -47,6 +47,27 @@ public class Assignment {
     @JsonRawValue
     private String attachment;
 
+    @Column(name = "target_type", length = 20)
+    private String targetType = "batch";
+
+    @Column(name = "target_name", length = 255)
+    private String targetName;
+
+    @Column(name = "target_student_ids", columnDefinition = "TEXT")
+    private String targetStudentIds;
+
+    @Column(name = "target_student_emails", columnDefinition = "TEXT")
+    private String targetStudentEmails;
+
+    @Column(name = "target_student_names", columnDefinition = "TEXT")
+    private String targetStudentNames;
+
+    @Column(name = "created_by", length = 255)
+    private String createdBy;
+
+    @Column(name = "creator_role", length = 50)
+    private String creatorRole = "ADMIN";
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -154,6 +175,138 @@ public class Assignment {
 
     public void setAttachment(String attachment) {
         this.attachment = (attachment == null || attachment.trim().isEmpty()) ? null : attachment.trim();
+    }
+
+    public String getTargetType() {
+        return targetType != null ? targetType : "batch";
+    }
+
+    public void setTargetType(String targetType) {
+        if ("course".equalsIgnoreCase(targetType)) {
+            this.targetType = "batch";
+        } else {
+            this.targetType = targetType;
+        }
+    }
+
+    public String getTargetName() {
+        return targetName;
+    }
+
+    public void setTargetName(String targetName) {
+        this.targetName = targetName;
+    }
+
+    public Object getTargetStudentIds() {
+        if (targetStudentIds == null || targetStudentIds.isBlank()) return java.util.Collections.emptyList();
+        if (targetStudentIds.trim().startsWith("[")) {
+            try {
+                return new com.fasterxml.jackson.databind.ObjectMapper().readValue(targetStudentIds, java.util.List.class);
+            } catch (Exception ignored) {}
+        }
+        return java.util.Arrays.stream(targetStudentIds.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    public String getRawTargetStudentIds() {
+        return targetStudentIds;
+    }
+
+    public void setTargetStudentIds(Object targetStudentIds) {
+        if (targetStudentIds instanceof java.util.List<?> list) {
+            this.targetStudentIds = list.stream().map(Object::toString).collect(java.util.stream.Collectors.joining(","));
+        } else if (targetStudentIds != null) {
+            this.targetStudentIds = targetStudentIds.toString();
+        } else {
+            this.targetStudentIds = null;
+        }
+    }
+
+    public Object getTargetStudentEmails() {
+        if (targetStudentEmails == null || targetStudentEmails.isBlank()) return java.util.Collections.emptyList();
+        if (targetStudentEmails.trim().startsWith("[")) {
+            try {
+                return new com.fasterxml.jackson.databind.ObjectMapper().readValue(targetStudentEmails, java.util.List.class);
+            } catch (Exception ignored) {}
+        }
+        return java.util.Arrays.stream(targetStudentEmails.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    public String getRawTargetStudentEmails() {
+        return targetStudentEmails;
+    }
+
+    public void setTargetStudentEmails(Object targetStudentEmails) {
+        if (targetStudentEmails instanceof java.util.List<?> list) {
+            this.targetStudentEmails = list.stream().map(Object::toString).collect(java.util.stream.Collectors.joining(","));
+        } else if (targetStudentEmails != null) {
+            this.targetStudentEmails = targetStudentEmails.toString();
+        } else {
+            this.targetStudentEmails = null;
+        }
+    }
+
+    public Object getTargetStudentNames() {
+        if (targetStudentNames == null || targetStudentNames.isBlank()) return java.util.Collections.emptyList();
+        if (targetStudentNames.trim().startsWith("[")) {
+            try {
+                return new com.fasterxml.jackson.databind.ObjectMapper().readValue(targetStudentNames, java.util.List.class);
+            } catch (Exception ignored) {}
+        }
+        return java.util.Arrays.stream(targetStudentNames.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    public String getRawTargetStudentNames() {
+        return targetStudentNames;
+    }
+
+    public void setTargetStudentNames(Object targetStudentNames) {
+        if (targetStudentNames instanceof java.util.List<?> list) {
+            this.targetStudentNames = list.stream().map(Object::toString).collect(java.util.stream.Collectors.joining(","));
+        } else if (targetStudentNames != null) {
+            this.targetStudentNames = targetStudentNames.toString();
+        } else {
+            this.targetStudentNames = null;
+        }
+    }
+
+    public String getTargetStudentEmail() {
+        if (targetStudentEmails != null && !targetStudentEmails.isBlank()) {
+            return targetStudentEmails.split(",")[0].trim().replace("[", "").replace("]", "").replace("\"", "");
+        }
+        return null;
+    }
+
+    public void setTargetStudentEmail(String targetStudentEmail) {
+        if (targetStudentEmail != null && !targetStudentEmail.isBlank()) {
+            if (this.targetStudentEmails == null || this.targetStudentEmails.isBlank()) {
+                this.targetStudentEmails = targetStudentEmail;
+            }
+        }
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public String getCreatorRole() {
+        return creatorRole != null ? creatorRole : "ADMIN";
+    }
+
+    public void setCreatorRole(String creatorRole) {
+        this.creatorRole = creatorRole;
     }
 
     public LocalDateTime getCreatedAt() {

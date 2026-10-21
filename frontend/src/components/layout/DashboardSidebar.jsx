@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   LayoutDashboard, Users, BookOpen, UserCheck, Calendar, 
   CreditCard, FileText, HelpCircle, BarChart3, Settings, 
-  User, Video, Clock, LogOut, Bell, CheckSquare, X, Wallet, FileSpreadsheet, Layers, Trophy, MessageSquare, Award
+  User, Video, Clock, LogOut, Bell, CheckSquare, X, Wallet, FileSpreadsheet, Layers, Trophy, MessageSquare, Award, FileCheck
 } from 'lucide-react';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 
@@ -31,6 +31,7 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
       { id: 'admin-competition', label: 'Competitions', icon: Trophy },
       { id: 'admin-competition-management', label: 'Competition Management', icon: Award },
       { id: 'admin-competition-registrations', label: 'Competition Registrations', icon: CheckSquare },
+      { id: 'admin-competition-evaluations', label: 'Competition Evaluations', icon: FileCheck },
       { id: 'admin-reports', label: 'Reports', icon: BarChart3 },
       { id: 'admin-notifications', label: 'Notifications', icon: Bell },
       { id: 'admin-settings', label: 'Settings', icon: Settings },
@@ -40,6 +41,7 @@ export default function DashboardSidebar({ role, activeScreen, setActiveScreen, 
     menuItems = [
       { id: 'trainer-dash', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'trainer-courses', label: "Trainer's Courses", icon: BookOpen },
+      { id: 'trainer-competitions', label: 'Competitions', icon: Trophy },
       { id: 'trainer-students', label: 'Students', icon: Users },
       { id: 'trainer-schedule', label: 'Schedule', icon: Calendar },
       { id: 'trainer-sessions', label: 'Sessions', icon: Video },

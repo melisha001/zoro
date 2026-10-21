@@ -106,41 +106,73 @@ public class AssignmentService {
                     .ifPresent(u -> assignment.setTrainerId(u.getId()));
         }
 
+        // Target audience normalization (remove "course", keep "batch" and "student")
+        if (assignment.getTargetType() == null || "course".equalsIgnoreCase(assignment.getTargetType())) {
+            assignment.setTargetType("batch");
+        }
+
         Assignment saved = assignmentRepository.save(assignment);
 
         activityLogService.logAction(
-                saved.getTrainerId() != null ? saved.getTrainerId() : "TRAINER",
-                saved.getTrainer() != null ? saved.getTrainer() : "Trainer",
+                saved.getTrainerId() != null ? saved.getTrainerId() : (saved.getCreatedBy() != null ? saved.getCreatedBy() : "TRAINER"),
+                saved.getTrainer() != null ? saved.getTrainer() : (saved.getCreatedBy() != null ? saved.getCreatedBy() : "Trainer"),
                 "ASSIGNMENT_CREATED",
                 "Created assignment: " + saved.getTitle() + " for " + saved.getCourse(),
                 "System"
         );
 
-        notificationService.createNotification(com.zoroacademy.entity.Notification.builder()
-                .id("notif_" + java.util.UUID.randomUUID())
-                .recipientRole("STUDENT")
-                .title("New Assignment Posted")
-                .message("New assignment '" + saved.getTitle() + "' posted for " + saved.getCourse() + ".")
-                .readStatus(false)
-                .build());
-
         java.util.Set<String> recipientStudentIds = new java.util.HashSet<>();
-        if (saved.getBatchId() != null && studentCourseBatchRepository != null) {
-            studentCourseBatchRepository.findByBatchId(saved.getBatchId()).forEach(scb -> {
-                if (scb.getStudentId() != null && !scb.getStudentId().isBlank()) {
-                    recipientStudentIds.add(scb.getStudentId());
+
+        if ("student".equalsIgnoreCase(saved.getTargetType())) {
+            // Targeted only to specific student(s)
+            String rawIds = saved.getRawTargetStudentIds();
+            if (rawIds != null && !rawIds.isBlank()) {
+                for (String id : rawIds.split(",")) {
+                    String clean = id.trim().replace("[", "").replace("]", "").replace("\"", "");
+                    if (!clean.isEmpty()) {
+                        recipientStudentIds.add(clean);
+                    }
                 }
-            });
-        }
-        if (saved.getCourseId() != null && enrollmentRepository != null) {
-            enrollmentRepository.findByCourseId(saved.getCourseId()).stream()
-                .filter(e -> "Active".equalsIgnoreCase(e.getStatus()) || e.getStatus() == null)
-                .forEach(e -> {
-                    if (e.getStudentId() != null && !e.getStudentId().isBlank()) {
-                        recipientStudentIds.add(e.getStudentId());
+            }
+            String rawEmails = saved.getRawTargetStudentEmails();
+            if (rawEmails != null && !rawEmails.isBlank() && userRepository != null) {
+                for (String email : rawEmails.split(",")) {
+                    String clean = email.trim().replace("[", "").replace("]", "").replace("\"", "");
+                    if (!clean.isEmpty()) {
+                        userRepository.findByEmailIgnoreCase(clean).ifPresent(u -> recipientStudentIds.add(u.getId()));
+                    }
+                }
+            }
+        } else {
+            // Target audience is Entire Batch
+            if (saved.getBatchId() != null && studentCourseBatchRepository != null) {
+                studentCourseBatchRepository.findByBatchId(saved.getBatchId()).forEach(scb -> {
+                    if (scb.getStudentId() != null && !scb.getStudentId().isBlank()) {
+                        recipientStudentIds.add(scb.getStudentId());
                     }
                 });
+            }
+            if (enrollmentRepository != null && saved.getCourseId() != null) {
+                enrollmentRepository.findByCourseId(saved.getCourseId()).stream()
+                    .filter(e -> ("Active".equalsIgnoreCase(e.getStatus()) || e.getStatus() == null))
+                    .filter(e -> {
+                        if (saved.getBatchId() != null && !saved.getBatchId().isBlank() && !"All".equalsIgnoreCase(saved.getBatchId())) {
+                            return saved.getBatchId().equalsIgnoreCase(e.getBatchId()) ||
+                                   (saved.getBatch() != null && saved.getBatch().equalsIgnoreCase(e.getBatchName()));
+                        }
+                        if (saved.getBatch() != null && !saved.getBatch().isBlank() && !"All".equalsIgnoreCase(saved.getBatch())) {
+                            return saved.getBatch().equalsIgnoreCase(e.getBatchName());
+                        }
+                        return true;
+                    })
+                    .forEach(e -> {
+                        if (e.getStudentId() != null && !e.getStudentId().isBlank()) {
+                            recipientStudentIds.add(e.getStudentId());
+                        }
+                    });
+            }
         }
+
         for (String sId : recipientStudentIds) {
             notificationService.createNotification(com.zoroacademy.entity.Notification.builder()
                     .id("notif_" + java.util.UUID.randomUUID())
@@ -170,6 +202,13 @@ public class AssignmentService {
         if (updated.getBatch() != null) existing.setBatch(updated.getBatch());
         if (updated.getTrainerId() != null) existing.setTrainerId(updated.getTrainerId());
         if (updated.getTrainer() != null) existing.setTrainer(updated.getTrainer());
+        if (updated.getTargetType() != null) existing.setTargetType(updated.getTargetType());
+        if (updated.getTargetName() != null) existing.setTargetName(updated.getTargetName());
+        if (updated.getRawTargetStudentIds() != null) existing.setTargetStudentIds(updated.getRawTargetStudentIds());
+        if (updated.getRawTargetStudentEmails() != null) existing.setTargetStudentEmails(updated.getRawTargetStudentEmails());
+        if (updated.getRawTargetStudentNames() != null) existing.setTargetStudentNames(updated.getRawTargetStudentNames());
+        if (updated.getCreatedBy() != null) existing.setCreatedBy(updated.getCreatedBy());
+        if (updated.getCreatorRole() != null) existing.setCreatorRole(updated.getCreatorRole());
 
         // Re-resolve course if needed
         if (existing.getCourseId() != null && !existing.getCourseId().isBlank()) {
@@ -191,15 +230,97 @@ public class AssignmentService {
 
     @Transactional(readOnly = true)
     public List<Assignment> getAssignmentsForStudent(String studentId) {
-        List<com.zoroacademy.entity.StudentCourseBatch> scbs = studentCourseBatchRepository.findByStudentId(studentId);
-        java.util.Set<String> courseIds = scbs.stream().map(com.zoroacademy.entity.StudentCourseBatch::getCourseId).collect(java.util.stream.Collectors.toSet());
-        java.util.Set<String> batchIds = scbs.stream().map(com.zoroacademy.entity.StudentCourseBatch::getBatchId).collect(java.util.stream.Collectors.toSet());
+        if (studentId == null || studentId.isBlank()) {
+            return java.util.Collections.emptyList();
+        }
+
+        com.zoroacademy.entity.User student = userRepository.findById(studentId)
+                .or(() -> userRepository.findByEmailIgnoreCase(studentId))
+                .orElse(null);
+        String actualId = student != null ? student.getId() : studentId;
+        String actualEmail = (student != null && student.getEmail() != null) ? student.getEmail().toLowerCase() : studentId.toLowerCase();
+
+        java.util.Set<String> courseIds = new java.util.HashSet<>();
+        java.util.Set<String> courseTitles = new java.util.HashSet<>();
+        java.util.Set<String> batchIds = new java.util.HashSet<>();
+        java.util.Set<String> batchNames = new java.util.HashSet<>();
+
+        if (studentCourseBatchRepository != null) {
+            List<com.zoroacademy.entity.StudentCourseBatch> scbs = new java.util.ArrayList<>(studentCourseBatchRepository.findByStudentId(actualId));
+            if (!actualId.equalsIgnoreCase(actualEmail)) {
+                scbs.addAll(studentCourseBatchRepository.findByStudentId(actualEmail));
+            }
+            for (com.zoroacademy.entity.StudentCourseBatch scb : scbs) {
+                if (scb.getCourseId() != null) courseIds.add(scb.getCourseId());
+                if (scb.getBatchId() != null) batchIds.add(scb.getBatchId());
+            }
+        }
+
+        if (enrollmentRepository != null) {
+            List<com.zoroacademy.entity.Enrollment> enrs = enrollmentRepository.findByStudentId(actualId).stream()
+                    .filter(e -> "Active".equalsIgnoreCase(e.getStatus()) || e.getStatus() == null)
+                    .collect(java.util.stream.Collectors.toList());
+            if (!actualId.equalsIgnoreCase(actualEmail)) {
+                enrs.addAll(enrollmentRepository.findByStudentId(actualEmail).stream()
+                        .filter(e -> "Active".equalsIgnoreCase(e.getStatus()) || e.getStatus() == null)
+                        .collect(java.util.stream.Collectors.toList()));
+            }
+            for (com.zoroacademy.entity.Enrollment e : enrs) {
+                if (e.getCourseId() != null) courseIds.add(e.getCourseId());
+                if (e.getCourseTitle() != null) courseTitles.add(e.getCourseTitle().toLowerCase());
+                if (e.getBatchId() != null) batchIds.add(e.getBatchId());
+                if (e.getBatchName() != null) batchNames.add(e.getBatchName().toLowerCase());
+            }
+        }
 
         return assignmentRepository.findAll().stream()
                 .filter(a -> {
-                    boolean matchCourse = a.getCourseId() != null && courseIds.contains(a.getCourseId());
-                    boolean matchBatch = a.getBatchId() == null || "All".equalsIgnoreCase(a.getBatchId()) || batchIds.contains(a.getBatchId());
-                    return matchCourse && matchBatch;
+                    // Check target type
+                    String targetType = a.getTargetType();
+                    if ("student".equalsIgnoreCase(targetType)) {
+                        // Strict targeting: ONLY specified students
+                        String rawIds = a.getRawTargetStudentIds();
+                        if (rawIds != null) {
+                            for (String part : rawIds.split(",")) {
+                                String clean = part.trim().replace("[", "").replace("]", "").replace("\"", "");
+                                if (!clean.isEmpty() && (clean.equalsIgnoreCase(actualId) || clean.equalsIgnoreCase(actualEmail))) {
+                                    return true;
+                                }
+                            }
+                        }
+                        String rawEmails = a.getRawTargetStudentEmails();
+                        if (rawEmails != null) {
+                            for (String part : rawEmails.split(",")) {
+                                String clean = part.trim().replace("[", "").replace("]", "").replace("\"", "");
+                                if (!clean.isEmpty() && clean.equalsIgnoreCase(actualEmail)) {
+                                    return true;
+                                }
+                            }
+                        }
+                        String singular = a.getTargetStudentEmail();
+                        if (singular != null && singular.equalsIgnoreCase(actualEmail)) {
+                            return true;
+                        }
+                        return false; // Student not in targeted student list
+                    }
+
+                    // Otherwise, target audience is Entire Batch
+                    boolean matchCourse = (a.getCourseId() != null && courseIds.contains(a.getCourseId()))
+                            || (a.getCourse() != null && courseTitles.contains(a.getCourse().toLowerCase()));
+                    if (!matchCourse) {
+                        return false;
+                    }
+
+                    boolean isBatchAll = a.getBatchId() == null || "All".equalsIgnoreCase(a.getBatchId())
+                            || a.getBatch() == null || "All".equalsIgnoreCase(a.getBatch());
+                    if (isBatchAll) {
+                        return true;
+                    }
+
+                    boolean matchBatchId = a.getBatchId() != null && batchIds.contains(a.getBatchId());
+                    boolean matchBatchName = a.getBatch() != null && batchNames.contains(a.getBatch().toLowerCase());
+
+                    return matchBatchId || matchBatchName;
                 })
                 .collect(java.util.stream.Collectors.toList());
     }

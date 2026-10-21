@@ -1000,6 +1000,12 @@ export default function CompetitionMockTestsPage() {
                       <span className="text-slate-400">Total Marks:</span>
                       <span className="font-semibold text-slate-800">{test.totalMarks || 50} Marks</span>
                     </div>
+                    <div className="flex items-center justify-between text-indigo-700 bg-indigo-50/70 px-2.5 py-1 rounded-xl">
+                      <span className="font-bold">Questions:</span>
+                      <span className="font-black font-mono">
+                        {test.questionCount ?? 0} / {test.targetQuestions ?? test.totalMarks ?? 20}
+                      </span>
+                    </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-400">Format:</span>
                       <span className="font-semibold text-slate-800">MCQ & Voice Speaking</span>

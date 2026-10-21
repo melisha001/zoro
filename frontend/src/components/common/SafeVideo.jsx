@@ -4,6 +4,8 @@ import { resolveFileUrl } from '../../api/fileApi';
 
 export default function SafeVideo({
   src,
+  embedUrl,
+  libraryId = '784226',
   poster,
   title = 'Video Player',
   className = 'w-full aspect-video rounded-xl',
@@ -17,9 +19,9 @@ export default function SafeVideo({
 }) {
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const effectiveIframe = isIframe || Boolean(bunnyVideoId);
+  const effectiveIframe = isIframe || Boolean(bunnyVideoId) || Boolean(embedUrl) || (src && src.includes('mediadelivery.net'));
   const resolvedSrc = src ? resolveFileUrl(src) : '';
-  const effectiveSrc = resolvedSrc || (bunnyVideoId ? (bunnyVideoId.includes('http') ? bunnyVideoId : `https://iframe.mediadelivery.net/embed/770045/${bunnyVideoId}`) : '');
+  const effectiveSrc = embedUrl || (bunnyVideoId ? (bunnyVideoId.includes('http') ? bunnyVideoId : `https://iframe.mediadelivery.net/embed/${libraryId}/${bunnyVideoId}`) : resolvedSrc);
 
   return (
     <div className={`relative overflow-hidden bg-slate-900 rounded-xl ${containerClassName}`}>

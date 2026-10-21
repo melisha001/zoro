@@ -40,6 +40,9 @@ public class MeController {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private CompetitionSetRepository competitionSetRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.zoroacademy.service.AssignmentService assignmentService;
+
     @org.springframework.beans.factory.annotation.Autowired
     public MeController(UserRepository userRepository,
                         CourseRepository courseRepository,
@@ -115,10 +118,14 @@ public class MeController {
 
     private void checkLearningAccess(User user) {
         String role = user.getRole() != null ? user.getRole().toUpperCase() : "STUDENT";
-        if ("STUDENT".equals(role) && "COMPETITION".equalsIgnoreCase(user.getOrigin())) {
+        if ("STUDENT".equals(role)) {
             boolean hasActive = enrollmentRepository.findByStudentId(user.getId()).stream()
-                    .anyMatch(e -> "Active".equalsIgnoreCase(e.getStatus()));
-            if (!hasActive) {
+                    .anyMatch(e -> !"Cancelled".equalsIgnoreCase(e.getStatus()) && !"Dropped".equalsIgnoreCase(e.getStatus()));
+            boolean hasBatch = studentCourseBatchRepository != null && !studentCourseBatchRepository.findByStudentId(user.getId()).isEmpty();
+            boolean hasCourseField = user.getCourse() != null && !user.getCourse().isBlank();
+            boolean isNotCompetitionOrigin = !"COMPETITION".equalsIgnoreCase(user.getOrigin());
+            boolean hasLearningAccess = hasActive || hasBatch || (isNotCompetitionOrigin && (hasCourseField || user.getOrigin() == null || "LEARNING".equalsIgnoreCase(user.getOrigin())));
+            if (!hasLearningAccess) {
                 throw new com.zoroacademy.exception.ForbiddenException("Access denied: You do not have an active learning enrollment");
             }
         }
@@ -129,17 +136,31 @@ public class MeController {
         User user = getCurrentUser();
         String role = user.getRole() != null ? user.getRole().toUpperCase() : "STUDENT";
 
-        boolean hasActiveEnrollment = enrollmentRepository.findByStudentId(user.getId()).stream()
-                .anyMatch(e -> "Active".equalsIgnoreCase(e.getStatus()));
-
-        boolean learning;
-        if (!"STUDENT".equals(role)) {
-            learning = true;
-        } else if (!"COMPETITION".equalsIgnoreCase(user.getOrigin())) {
-            learning = true;
-        } else {
-            learning = hasActiveEnrollment;
+        if ("ADMIN".equals(role) || "SUPER_ADMIN".equals(role)) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("learning", true);
+            response.put("competition", false);
+            response.put("competitions", Collections.emptyList());
+            response.put("defaultPortal", "admin");
+            return ApiResponse.ok(response);
         }
+
+        if ("TRAINER".equals(role)) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("learning", true);
+            response.put("competition", false);
+            response.put("competitions", Collections.emptyList());
+            response.put("defaultPortal", "trainer");
+            return ApiResponse.ok(response);
+        }
+
+        boolean hasActiveEnrollment = enrollmentRepository.findByStudentId(user.getId()).stream()
+                .anyMatch(e -> !"Cancelled".equalsIgnoreCase(e.getStatus()) && !"Dropped".equalsIgnoreCase(e.getStatus()));
+        boolean hasBatch = studentCourseBatchRepository != null && !studentCourseBatchRepository.findByStudentId(user.getId()).isEmpty();
+        boolean hasCourseField = user.getCourse() != null && !user.getCourse().isBlank();
+        boolean isNotCompetitionOrigin = !"COMPETITION".equalsIgnoreCase(user.getOrigin());
+
+        boolean learning = hasActiveEnrollment || hasBatch || (isNotCompetitionOrigin && (hasCourseField || user.getOrigin() == null || "LEARNING".equalsIgnoreCase(user.getOrigin())));
 
         List<CompetitionRegistration> regs = new ArrayList<>(competitionRegistrationRepository.findByStudentId(user.getId()));
         if (user.getEmail() != null) {
@@ -167,37 +188,15 @@ public class MeController {
                 .filter(m -> m.get("id") != null)
                 .collect(Collectors.toList());
 
-        if ("ADMIN".equals(role) || "SUPER_ADMIN".equals(role)) {
-            if (competitionRepository != null) {
-                for (Competition c : competitionRepository.findAll()) {
-                    if (paidCompetitions.stream().noneMatch(m -> c.getId().equals(m.get("id")))) {
-                        Map<String, Object> compMap = new HashMap<>();
-                        compMap.put("id", c.getId());
-                        compMap.put("title", c.getTitle());
-                        compMap.put("registrationId", "admin_" + user.getId());
-                        paidCompetitions.add(compMap);
-                    }
-                }
-            }
-        } else if ("TRAINER".equals(role)) {
-            if (competitionSetRepository != null && competitionRepository != null) {
-                List<CompetitionSet> trainerSets = competitionSetRepository.findByTrainerId(user.getId());
-                Set<String> compIds = trainerSets.stream().map(CompetitionSet::getCompetitionId).collect(Collectors.toSet());
-                for (String cId : compIds) {
-                    competitionRepository.findById(cId).ifPresent(c -> {
-                        if (paidCompetitions.stream().noneMatch(m -> c.getId().equals(m.get("id")))) {
-                            Map<String, Object> compMap = new HashMap<>();
-                            compMap.put("id", c.getId());
-                            compMap.put("title", c.getTitle());
-                            compMap.put("registrationId", "trainer_" + user.getId());
-                            paidCompetitions.add(compMap);
-                        }
-                    });
-                }
+        boolean competition = !paidCompetitions.isEmpty();
+
+        if (!learning && !competition) {
+            if ("COMPETITION".equalsIgnoreCase(user.getOrigin())) {
+                competition = false;
+            } else {
+                learning = true;
             }
         }
-
-        boolean competition = !paidCompetitions.isEmpty();
 
         String defaultPortal = null;
         if (learning && !competition) {
@@ -349,8 +348,12 @@ public class MeController {
             return ApiResponse.ok(assignmentRepository.findByTrainerIdOrTrainerIgnoreCase(user.getId(), user.getName()));
         }
 
-        // STUDENT: assignments matching student's enrolled courses and batches
+        // STUDENT: assignments matching student's enrolled courses and batches or specific targeting
         checkLearningAccess(user);
+        if (assignmentService != null) {
+            return ApiResponse.ok(assignmentService.getAssignmentsForStudent(user.getId()));
+        }
+
         List<Enrollment> enrollments = enrollmentRepository.findByStudentId(user.getId()).stream()
                 .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
                 .toList();

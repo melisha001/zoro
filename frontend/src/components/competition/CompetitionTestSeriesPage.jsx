@@ -866,19 +866,17 @@ export default function CompetitionTestSeriesPage() {
 
                   {/* Title & Stats */}
                   <h3 className="text-base font-black text-slate-900 mb-1">{test.title}</h3>
-                  <div className="flex items-center space-x-3 text-xs text-slate-500 mb-4">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mb-4">
                     <span className="flex items-center space-x-1">
                       <Clock className="w-3.5 h-3.5 text-slate-400" />
                       <span>{test.durationMinutes || 20} mins</span>
                     </span>
                     <span>•</span>
                     <span>{test.totalMarks || 20} Marks</span>
-                    {test.questionCount > 0 && (
-                      <>
-                        <span>•</span>
-                        <span>{test.questionCount} Qs</span>
-                      </>
-                    )}
+                    <span>•</span>
+                    <span className="font-bold text-indigo-600">
+                      Questions: {test.questionCount ?? 0} / {test.targetQuestions ?? test.totalMarks ?? 20}
+                    </span>
                   </div>
 
                   {/* Status Badges */}

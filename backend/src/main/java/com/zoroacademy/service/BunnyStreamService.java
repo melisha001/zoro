@@ -16,9 +16,11 @@ import com.zoroacademy.repository.VideoRepository;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -159,6 +161,108 @@ public class BunnyStreamService {
                 .title(videoTitle)
                 .status("Created")
                 .build();
+    }
+
+    /**
+     * Directly uploads a video binary to Bunny Stream and saves the Video entity.
+     */
+    @Transactional
+    public Map<String, Object> uploadVideoBinary(MultipartFile file, String title) {
+        String videoTitle = (title != null && !title.isBlank())
+                ? title
+                : (file.getOriginalFilename() != null ? file.getOriginalFilename() : "Video_" + System.currentTimeMillis());
+
+        int libraryId = 0;
+        try {
+            if (properties.getLibraryId() != null && !properties.getLibraryId().isBlank()) {
+                libraryId = Integer.parseInt(properties.getLibraryId());
+            }
+        } catch (NumberFormatException ignored) {}
+
+        String videoId = null;
+        boolean uploadedToBunny = false;
+
+        // Step 1: Create Video entry in Bunny Stream API
+        if (properties.getApiKey() != null && !properties.getApiKey().isBlank() && libraryId > 0) {
+            try {
+                String createUrl = String.format("https://video.bunnycdn.com/library/%d/videos", libraryId);
+                HttpHeaders createHeaders = new HttpHeaders();
+                createHeaders.setContentType(MediaType.APPLICATION_JSON);
+                createHeaders.set("AccessKey", properties.getApiKey());
+                createHeaders.set("Accept", "application/json");
+
+                Map<String, String> body = new HashMap<>();
+                body.put("title", videoTitle);
+
+                HttpEntity<Map<String, String>> createEntity = new HttpEntity<>(body, createHeaders);
+                String response = restTemplate.postForObject(createUrl, createEntity, String.class);
+                if (response != null) {
+                    JsonNode root = objectMapper.readTree(response);
+                    videoId = root.path("guid").asText();
+                }
+            } catch (Exception e) {
+                log.warn("Could not create video on Bunny Stream API: {}", e.getMessage());
+            }
+        }
+
+        if (videoId == null || videoId.isBlank()) {
+            videoId = UUID.randomUUID().toString();
+        }
+
+        // Step 2: Upload raw video bytes to Bunny Stream
+        if (properties.getApiKey() != null && !properties.getApiKey().isBlank() && libraryId > 0) {
+            try {
+                String uploadUrl = String.format("https://video.bunnycdn.com/library/%d/videos/%s", libraryId, videoId);
+                HttpHeaders uploadHeaders = new HttpHeaders();
+                uploadHeaders.set("AccessKey", properties.getApiKey());
+                uploadHeaders.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+
+                byte[] bytes = file.getBytes();
+                HttpEntity<byte[]> uploadEntity = new HttpEntity<>(bytes, uploadHeaders);
+                ResponseEntity<String> uploadResp = restTemplate.exchange(uploadUrl, org.springframework.http.HttpMethod.PUT, uploadEntity, String.class);
+                if (uploadResp.getStatusCode().is2xxSuccessful()) {
+                    uploadedToBunny = true;
+                    log.info("Successfully uploaded video binary to Bunny Stream: videoId={}", videoId);
+                }
+            } catch (Exception e) {
+                log.warn("Direct binary upload to Bunny Stream failed: {}", e.getMessage());
+            }
+        }
+
+        String streamUrl = String.format("https://%s/%s/playlist.m3u8", properties.getCdnHost(), videoId);
+        String embedUrl = String.format("https://iframe.mediadelivery.net/embed/%s/%s", libraryId, videoId);
+
+        Video video = Video.builder()
+                .id(videoId)
+                .bunnyVideoId(videoId)
+                .libraryId(libraryId)
+                .title(videoTitle)
+                .durationSeconds(0)
+                .status(uploadedToBunny ? 2 : 0) // 2 = Processing, 0 = Created
+                .statusLabel(uploadedToBunny ? "Processing" : "Created")
+                .storageKey("bunny_" + videoId)
+                .directStreamUrl(streamUrl)
+                .hlsPlaylistUrl(streamUrl)
+                .thumbnailUrl(String.format("https://%s/%s/thumbnail.jpg", properties.getCdnHost(), videoId))
+                .build();
+
+        videoRepository.save(video);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("storageType", "BUNNY_STREAM");
+        result.put("id", videoId);
+        result.put("videoId", videoId);
+        result.put("bunnyVideoId", videoId);
+        result.put("libraryId", libraryId);
+        result.put("title", videoTitle);
+        result.put("fileName", file.getOriginalFilename());
+        result.put("url", streamUrl);
+        result.put("embedUrl", embedUrl);
+        result.put("directStreamUrl", streamUrl);
+        result.put("contentType", file.getContentType());
+        result.put("size", file.getSize());
+        result.put("status", video.getStatusLabel());
+        return result;
     }
 
     @Transactional

@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class CompetitionService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CompetitionService.class);
 
     private final CompetitionRepository competitionRepository;
     private final CompetitionModuleRepository moduleRepository;
@@ -65,6 +66,9 @@ public class CompetitionService {
 
     @Autowired(required = false)
     private EmailService emailService;
+
+    @Autowired(required = false)
+    private BunnyStreamService bunnyStreamService;
 
     @Autowired
     public CompetitionService(
@@ -654,7 +658,35 @@ public class CompetitionService {
 
     @Transactional
     public void deleteGuidanceVideo(String videoId) {
-        guidanceVideoRepository.deleteById(videoId);
+        Optional<CompetitionGuidanceVideo> videoOpt = guidanceVideoRepository.findById(videoId);
+        if (videoOpt.isPresent()) {
+            CompetitionGuidanceVideo v = videoOpt.get();
+            if (bunnyStreamService != null && v.getBunnyVideoId() != null && !v.getBunnyVideoId().isBlank()) {
+                try {
+                    bunnyStreamService.deleteVideo(v.getBunnyVideoId());
+                } catch (Exception e) {
+                    log.warn("Failed to delete video from Bunny Stream: {}", e.getMessage());
+                }
+            }
+            guidanceVideoRepository.delete(v);
+        }
+    }
+
+    @Transactional
+    public List<CompetitionGuidanceVideo> reorderGuidanceVideos(String compId, List<String> videoIds) {
+        if (videoIds == null || videoIds.isEmpty()) {
+            return getGuidanceVideos(compId);
+        }
+        for (int i = 0; i < videoIds.size(); i++) {
+            String vid = videoIds.get(i);
+            Optional<CompetitionGuidanceVideo> opt = guidanceVideoRepository.findById(vid);
+            if (opt.isPresent()) {
+                CompetitionGuidanceVideo v = opt.get();
+                v.setSortOrder(i + 1);
+                guidanceVideoRepository.save(v);
+            }
+        }
+        return getGuidanceVideos(compId);
     }
 
     // --- Study Materials (Phase 6) ---
@@ -719,7 +751,13 @@ public class CompetitionService {
     // --- Assessments (Phase 7) ---
     @Transactional(readOnly = true)
     public List<CompetitionAssessment> getAssessments(String compId) {
-        return assessmentRepository.findByCompetitionIdOrderBySequenceNoAsc(compId);
+        List<CompetitionAssessment> list = assessmentRepository.findByCompetitionIdOrderBySequenceNoAsc(compId);
+        for (CompetitionAssessment a : list) {
+            long count = questionRepository.countByAssessmentId(a.getId());
+            a.setQuestionCount(count);
+            a.setTargetQuestions(a.getTotalMarks() != null && a.getTotalMarks() > 0 ? a.getTotalMarks() : 20);
+        }
+        return list;
     }
 
     @Transactional(readOnly = true)
@@ -1188,6 +1226,7 @@ public class CompetitionService {
             boolean isPublished = "PUBLISHED".equalsIgnoreCase(a.getStatus());
             long questionCount = questionRepository.countByAssessmentId(a.getId());
             item.put("questionCount", questionCount);
+            item.put("targetQuestions", a.getTotalMarks() != null && a.getTotalMarks() > 0 ? a.getTotalMarks() : 20);
 
             if (!isPublished) {
                 item.put("attemptStatus", "UNPUBLISHED");
@@ -1268,6 +1307,7 @@ public class CompetitionService {
             boolean isPublished = "PUBLISHED".equalsIgnoreCase(a.getStatus());
             long questionCount = questionRepository.countByAssessmentId(a.getId());
             item.put("questionCount", questionCount);
+            item.put("targetQuestions", a.getTotalMarks() != null && a.getTotalMarks() > 0 ? a.getTotalMarks() : 20);
 
             // Determine Window Status & Attempt Status
             String windowStatus = "UPCOMING";
@@ -1410,6 +1450,7 @@ public class CompetitionService {
         boolean isPublished = "PUBLISHED".equalsIgnoreCase(finalAsmt.getStatus());
         long questionCount = questionRepository.countByAssessmentId(finalAsmt.getId());
         item.put("questionCount", questionCount);
+        item.put("targetQuestions", finalAsmt.getTotalMarks() != null && finalAsmt.getTotalMarks() > 0 ? finalAsmt.getTotalMarks() : 20);
 
         // Window status
         String windowStatus = "UPCOMING";
@@ -2116,6 +2157,16 @@ public class CompetitionService {
                 item.put("setId", setId);
                 item.put("setCode", cSet != null ? cSet.getCode() : "");
                 item.put("setName", cSet != null ? "Set " + cSet.getCode() : "");
+                item.put("competitionId", competitionId);
+                Competition comp = competitionRepository.findById(competitionId).orElse(null);
+                item.put("competitionTitle", comp != null ? comp.getTitle() : "");
+                if (cSet != null && cSet.getTrainerId() != null && userRepository != null) {
+                    item.put("trainerId", cSet.getTrainerId());
+                    userRepository.findById(cSet.getTrainerId()).ifPresent(tr -> {
+                        item.put("trainerName", tr.getName());
+                        item.put("trainerEmail", tr.getEmail());
+                    });
+                }
                 item.put("voiceQuestionsCount", voiceCount);
                 item.put("voiceEvaluatedCount", voiceEvaluatedCount);
                 item.put("voicePendingCount", voicePendingCount);
@@ -2229,6 +2280,13 @@ public class CompetitionService {
                 ansMap.put("trainerFeedback", ans.getTrainerFeedback());
                 ansMap.put("evaluatedBy", ans.getEvaluatedBy());
                 ansMap.put("evaluatedAt", ans.getEvaluatedAt());
+                if (ans.getEvaluatedBy() != null && userRepository != null) {
+                    userRepository.findById(ans.getEvaluatedBy()).ifPresent(ev -> {
+                        ansMap.put("evaluatorName", ev.getName());
+                        ansMap.put("evaluatorEmail", ev.getEmail());
+                        ansMap.put("evaluatorRole", ev.getRole());
+                    });
+                }
 
                 if (ans.getVoiceFileId() != null && !ans.getVoiceFileId().isBlank()) {
                     String audioUrl = null;
@@ -2417,6 +2475,199 @@ public class CompetitionService {
         resp.put("feedback", answer.getFeedback());
         resp.put("serverNow", now);
         return resp;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getAdminCompetitionEvaluations(
+            String competitionId,
+            String examType,
+            String setCode,
+            String status,
+            String search) {
+
+        List<Competition> comps;
+        if (competitionId != null && !competitionId.isBlank() && !"all".equalsIgnoreCase(competitionId)) {
+            comps = Collections.singletonList(getCompetitionById(competitionId));
+        } else {
+            comps = competitionRepository.findAll();
+        }
+
+        List<Map<String, Object>> allSubmissions = new ArrayList<>();
+        User adminUser = new User();
+        adminUser.setId("admin");
+        adminUser.setRole("ADMIN");
+
+        for (Competition c : comps) {
+            try {
+                List<Map<String, Object>> compSubs = getTrainerPendingSubmissions(c.getId(), adminUser);
+                allSubmissions.addAll(compSubs);
+            } catch (Exception ignored) {}
+        }
+
+        // Apply filters
+        return allSubmissions.stream().filter(sub -> {
+            // Exam Type filter
+            if (examType != null && !examType.isBlank() && !"all".equalsIgnoreCase(examType)) {
+                String subType = (String) sub.get("assessmentType");
+                if (subType == null || !subType.equalsIgnoreCase(examType)) {
+                    return false;
+                }
+            }
+            // Set Code filter
+            if (setCode != null && !setCode.isBlank() && !"all".equalsIgnoreCase(setCode)) {
+                String subSet = (String) sub.get("setCode");
+                if (subSet == null || !subSet.equalsIgnoreCase(setCode)) {
+                    return false;
+                }
+            }
+            // Status filter
+            if (status != null && !status.isBlank() && !"all".equalsIgnoreCase(status)) {
+                String subStatus = (String) sub.get("status");
+                if ("PENDING".equalsIgnoreCase(status) || "EVALUATION_PENDING".equalsIgnoreCase(status)) {
+                    if (!"EVALUATION_PENDING".equalsIgnoreCase(subStatus)) return false;
+                } else if ("EVALUATED".equalsIgnoreCase(status) || "COMPLETED".equalsIgnoreCase(status)) {
+                    if (!"COMPLETED".equalsIgnoreCase(subStatus)) return false;
+                }
+            }
+            // Search filter
+            if (search != null && !search.isBlank()) {
+                String q = search.toLowerCase().trim();
+                String studentName = (String) sub.getOrDefault("studentName", "");
+                String studentEmail = (String) sub.getOrDefault("studentEmail", "");
+                String asmtTitle = (String) sub.getOrDefault("assessmentTitle", "");
+                String trainerName = (String) sub.getOrDefault("trainerName", "");
+                boolean matches = (studentName != null && studentName.toLowerCase().contains(q))
+                        || (studentEmail != null && studentEmail.toLowerCase().contains(q))
+                        || (asmtTitle != null && asmtTitle.toLowerCase().contains(q))
+                        || (trainerName != null && trainerName.toLowerCase().contains(q));
+                if (!matches) return false;
+            }
+            return true;
+        }).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getTrainerAssignedCompetitions(User user) {
+        if (user == null) {
+            throw new org.springframework.security.access.AccessDeniedException("Authentication required");
+        }
+        String role = (user.getRole() != null ? user.getRole() : "").toUpperCase();
+        if (!"TRAINER".equals(role) && !"ADMIN".equals(role) && !"SUPER_ADMIN".equals(role)) {
+            throw new ForbiddenException("Only trainers and admins can view assigned competitions");
+        }
+
+        List<CompetitionSet> assignedSets;
+        if ("TRAINER".equals(role)) {
+            assignedSets = setRepository.findAll().stream()
+                    .filter(s -> user.getId().equals(s.getTrainerId()))
+                    .collect(Collectors.toList());
+        } else {
+            assignedSets = setRepository.findAll();
+        }
+
+        if (assignedSets.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<String, List<CompetitionSet>> compSetsMap = assignedSets.stream()
+                .collect(Collectors.groupingBy(CompetitionSet::getCompetitionId));
+
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (Map.Entry<String, List<CompetitionSet>> entry : compSetsMap.entrySet()) {
+            String compId = entry.getKey();
+            Competition comp = competitionRepository.findById(compId).orElse(null);
+            if (comp == null) continue;
+
+            Map<String, Object> cMap = new HashMap<>();
+            cMap.put("id", comp.getId());
+            cMap.put("title", comp.getTitle());
+            cMap.put("category", comp.getCategory());
+            cMap.put("status", comp.getStatus());
+            cMap.put("startDate", comp.getStartDate());
+            cMap.put("endDate", comp.getEndDate());
+
+            List<Map<String, Object>> setsList = entry.getValue().stream()
+                    .sorted(Comparator.comparing(CompetitionSet::getCode))
+                    .map(s -> {
+                        Map<String, Object> sm = new HashMap<>();
+                        sm.put("id", s.getId());
+                        sm.put("code", s.getCode());
+                        sm.put("name", "Set " + s.getCode());
+                        return sm;
+                    })
+                    .collect(Collectors.toList());
+
+            cMap.put("assignedSets", setsList);
+            cMap.put("totalAssignedSets", setsList.size());
+            results.add(cMap);
+        }
+
+        results.sort(Comparator.comparing(c -> (String) c.get("title")));
+        return results;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getTrainerEvaluationsWithFilters(
+            String competitionId,
+            String examType,
+            String setCode,
+            String status,
+            String search,
+            User user) {
+        if (user == null) {
+            throw new org.springframework.security.access.AccessDeniedException("Authentication required");
+        }
+        String role = (user.getRole() != null ? user.getRole() : "").toUpperCase();
+        if (!"TRAINER".equals(role) && !"ADMIN".equals(role) && !"SUPER_ADMIN".equals(role)) {
+            throw new ForbiddenException("Only trainers and admins can view evaluation submissions");
+        }
+
+        List<Map<String, Object>> allSubmissions = new ArrayList<>();
+        if (competitionId != null && !competitionId.isBlank() && !"ALL".equalsIgnoreCase(competitionId)) {
+            allSubmissions.addAll(getTrainerPendingSubmissions(competitionId, user));
+        } else {
+            List<Map<String, Object>> assignedComps = getTrainerAssignedCompetitions(user);
+            for (Map<String, Object> ac : assignedComps) {
+                String cId = (String) ac.get("id");
+                try {
+                    allSubmissions.addAll(getTrainerPendingSubmissions(cId, user));
+                } catch (Exception ignored) {}
+            }
+        }
+
+        return allSubmissions.stream().filter(sub -> {
+            if (examType != null && !examType.isBlank() && !"ALL".equalsIgnoreCase(examType)) {
+                String subType = (String) sub.get("assessmentType");
+                if (subType == null || !subType.equalsIgnoreCase(examType)) return false;
+            }
+
+            if (setCode != null && !setCode.isBlank() && !"ALL".equalsIgnoreCase(setCode)) {
+                String subSet = (String) sub.get("setCode");
+                if (subSet == null || !subSet.equalsIgnoreCase(setCode)) return false;
+            }
+
+            if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
+                String subStatus = (String) sub.get("status");
+                if ("PENDING".equalsIgnoreCase(status)) {
+                    if (!"EVALUATION_PENDING".equalsIgnoreCase(subStatus)) return false;
+                } else if ("EVALUATED".equalsIgnoreCase(status) || "COMPLETED".equalsIgnoreCase(status)) {
+                    if (!"EVALUATED".equalsIgnoreCase(subStatus) && !"COMPLETED".equalsIgnoreCase(subStatus)) return false;
+                }
+            }
+
+            if (search != null && !search.isBlank()) {
+                String q = search.trim().toLowerCase();
+                String studentName = (String) sub.getOrDefault("studentName", "");
+                String studentEmail = (String) sub.getOrDefault("studentEmail", "");
+                String asmtTitle = (String) sub.getOrDefault("assessmentTitle", "");
+                boolean matches = (studentName != null && studentName.toLowerCase().contains(q))
+                        || (studentEmail != null && studentEmail.toLowerCase().contains(q))
+                        || (asmtTitle != null && asmtTitle.toLowerCase().contains(q));
+                if (!matches) return false;
+            }
+
+            return true;
+        }).collect(Collectors.toList());
     }
 
     // =========================================================================

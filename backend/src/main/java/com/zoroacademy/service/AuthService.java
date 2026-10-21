@@ -5,9 +5,13 @@ import com.zoroacademy.dto.LoginResponse;
 import com.zoroacademy.dto.RegisterRequest;
 import com.zoroacademy.dto.UserDto;
 import com.zoroacademy.entity.User;
+import com.zoroacademy.entity.CompetitionRegistration;
 import com.zoroacademy.exception.ConflictException;
 import com.zoroacademy.exception.UnauthorizedException;
 import com.zoroacademy.repository.UserRepository;
+import com.zoroacademy.repository.EnrollmentRepository;
+import com.zoroacademy.repository.CompetitionRegistrationRepository;
+import com.zoroacademy.repository.StudentCourseBatchRepository;
 import com.zoroacademy.security.JwtTokenProvider;
 import com.zoroacademy.util.PhoneValidator;
 import io.jsonwebtoken.Claims;
@@ -15,7 +19,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -33,6 +39,12 @@ public class AuthService {
     private NotificationService notificationService;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private EmailService emailService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private EnrollmentRepository enrollmentRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CompetitionRegistrationRepository competitionRegistrationRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private StudentCourseBatchRepository studentCourseBatchRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider, RefreshTokenService refreshTokenService) {
@@ -85,12 +97,17 @@ public class AuthService {
                 user.getId(), user.getEmail(), user.getRole(), user.getName());
         String refreshToken = refreshTokenService != null ? refreshTokenService.createRefreshToken(user, userAgent) : null;
 
+        UserDto userDto = UserDto.fromEntity(user);
+        enrichUserAccessFlags(user, userDto);
+
         return LoginResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .token(accessToken)
                 .tokenType("Bearer")
-                .user(UserDto.fromEntity(user))
+                .user(userDto)
+                .hasCourseEnrollment(userDto.getHasCourseEnrollment())
+                .hasCompetitionRegistration(userDto.getHasCompetitionRegistration())
                 .build();
     }
 
@@ -106,12 +123,17 @@ public class AuthService {
         String newAccessToken = tokenProvider.generateToken(
                 user.getId(), user.getEmail(), user.getRole(), user.getName());
 
+        UserDto userDto = UserDto.fromEntity(user);
+        enrichUserAccessFlags(user, userDto);
+
         return LoginResponse.builder()
                 .accessToken(newAccessToken)
                 .refreshToken(result.getNewRefreshToken())
                 .token(newAccessToken)
                 .tokenType("Bearer")
-                .user(UserDto.fromEntity(user))
+                .user(userDto)
+                .hasCourseEnrollment(userDto.getHasCourseEnrollment())
+                .hasCompetitionRegistration(userDto.getHasCompetitionRegistration())
                 .build();
     }
 
@@ -200,6 +222,64 @@ public class AuthService {
         User user = userRepository.findByEmailIgnoreCase(emailOrId)
                 .or(() -> userRepository.findById(emailOrId))
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + emailOrId));
-        return UserDto.fromEntity(user);
+        UserDto dto = UserDto.fromEntity(user);
+        enrichUserAccessFlags(user, dto);
+        return dto;
+    }
+
+    public void enrichUserAccessFlags(User user, UserDto dto) {
+        if (user == null || dto == null) return;
+        String role = (user.getRole() != null ? user.getRole() : "STUDENT").toUpperCase();
+        if ("ADMIN".equals(role) || "SUPER_ADMIN".equals(role)) {
+            dto.setHasCourseEnrollment(true);
+            dto.setHasCompetitionRegistration(false);
+            return;
+        }
+        if ("TRAINER".equals(role)) {
+            dto.setHasCourseEnrollment(true);
+            dto.setHasCompetitionRegistration(false);
+            return;
+        }
+
+        // Student role
+        boolean hasActiveEnrollment = false;
+        if (enrollmentRepository != null) {
+            hasActiveEnrollment = enrollmentRepository.findByStudentId(user.getId()).stream()
+                    .anyMatch(e -> !"Cancelled".equalsIgnoreCase(e.getStatus()) && !"Dropped".equalsIgnoreCase(e.getStatus()));
+        }
+
+        boolean hasBatch = false;
+        if (studentCourseBatchRepository != null) {
+            hasBatch = !studentCourseBatchRepository.findByStudentId(user.getId()).isEmpty();
+        }
+
+        boolean hasCourseField = user.getCourse() != null && !user.getCourse().isBlank();
+        boolean isNotCompetitionOrigin = !"COMPETITION".equalsIgnoreCase(user.getOrigin());
+
+        boolean hasCourse = hasActiveEnrollment || hasBatch || (isNotCompetitionOrigin && (hasCourseField || user.getOrigin() == null || "LEARNING".equalsIgnoreCase(user.getOrigin())));
+
+        boolean hasCompetition = false;
+        if (competitionRegistrationRepository != null) {
+            List<CompetitionRegistration> regs = new ArrayList<>(competitionRegistrationRepository.findByStudentId(user.getId()));
+            if (user.getEmail() != null) {
+                for (CompetitionRegistration r : competitionRegistrationRepository.findByStudentEmailIgnoreCase(user.getEmail())) {
+                    if (regs.stream().noneMatch(existing -> existing.getId().equals(r.getId()))) {
+                        regs.add(r);
+                    }
+                }
+            }
+            hasCompetition = regs.stream().anyMatch(r -> "PAID".equalsIgnoreCase(r.getPaymentStatus()));
+        }
+
+        if (!hasCourse && !hasCompetition) {
+            if ("COMPETITION".equalsIgnoreCase(user.getOrigin())) {
+                hasCompetition = false;
+            } else {
+                hasCourse = true;
+            }
+        }
+
+        dto.setHasCourseEnrollment(hasCourse);
+        dto.setHasCompetitionRegistration(hasCompetition);
     }
 }

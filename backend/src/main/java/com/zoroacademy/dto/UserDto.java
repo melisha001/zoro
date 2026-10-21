@@ -20,6 +20,8 @@ public class UserDto {
     private String salaryCreditDate;
     private String course;
     private String origin = "LEARNING";
+    private Boolean hasCourseEnrollment;
+    private Boolean hasCompetitionRegistration;
     @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
     private String password;
     private Boolean mustChangePassword = false;
@@ -83,6 +85,10 @@ public class UserDto {
     public void setPassword(String password) { this.password = password; }
     public String getOrigin() { return origin != null ? origin : "LEARNING"; }
     public void setOrigin(String origin) { this.origin = origin != null ? origin : "LEARNING"; }
+    public Boolean getHasCourseEnrollment() { return hasCourseEnrollment; }
+    public void setHasCourseEnrollment(Boolean hasCourseEnrollment) { this.hasCourseEnrollment = hasCourseEnrollment; }
+    public Boolean getHasCompetitionRegistration() { return hasCompetitionRegistration; }
+    public void setHasCompetitionRegistration(Boolean hasCompetitionRegistration) { this.hasCompetitionRegistration = hasCompetitionRegistration; }
     public java.util.List<java.util.Map<String, Object>> getCourseBatches() { return courseBatches; }
     public void setCourseBatches(java.util.List<java.util.Map<String, Object>> courseBatches) { this.courseBatches = courseBatches; }
 
@@ -128,6 +134,8 @@ public class UserDto {
         private String salaryCreditDate;
         private String course;
         private String origin = "LEARNING";
+        private Boolean hasCourseEnrollment;
+        private Boolean hasCompetitionRegistration;
         private Boolean mustChangePassword = false;
         private String password;
 
@@ -147,6 +155,8 @@ public class UserDto {
         public Builder salaryCreditDate(String salaryCreditDate) { this.salaryCreditDate = salaryCreditDate; return this; }
         public Builder course(String course) { this.course = course; return this; }
         public Builder origin(String origin) { this.origin = origin != null ? origin : "LEARNING"; return this; }
+        public Builder hasCourseEnrollment(Boolean hasCourseEnrollment) { this.hasCourseEnrollment = hasCourseEnrollment; return this; }
+        public Builder hasCompetitionRegistration(Boolean hasCompetitionRegistration) { this.hasCompetitionRegistration = hasCompetitionRegistration; return this; }
         public Builder mustChangePassword(Boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; return this; }
         public Builder password(String password) { this.password = password; return this; }
 
@@ -154,6 +164,8 @@ public class UserDto {
             UserDto dto = new UserDto(id, email, username, name, role, phone, avatar, status, address, joinedOn, specialty, code, salaryAmount, salaryCreditDate, course);
             dto.setPassword(password);
             dto.setOrigin(origin);
+            dto.setHasCourseEnrollment(hasCourseEnrollment);
+            dto.setHasCompetitionRegistration(hasCompetitionRegistration);
             dto.setMustChangePassword(mustChangePassword);
             return dto;
         }

@@ -6,6 +6,8 @@ public class LoginResponse {
     private String token;
     private String tokenType = "Bearer";
     private UserDto user;
+    private Boolean hasCourseEnrollment;
+    private Boolean hasCompetitionRegistration;
 
     public LoginResponse() {}
 
@@ -42,6 +44,12 @@ public class LoginResponse {
     public UserDto getUser() { return user; }
     public void setUser(UserDto user) { this.user = user; }
 
+    public Boolean getHasCourseEnrollment() { return hasCourseEnrollment; }
+    public void setHasCourseEnrollment(Boolean hasCourseEnrollment) { this.hasCourseEnrollment = hasCourseEnrollment; }
+
+    public Boolean getHasCompetitionRegistration() { return hasCompetitionRegistration; }
+    public void setHasCompetitionRegistration(Boolean hasCompetitionRegistration) { this.hasCompetitionRegistration = hasCompetitionRegistration; }
+
     public static Builder builder() { return new Builder(); }
 
     public static class Builder {
@@ -50,6 +58,8 @@ public class LoginResponse {
         private String token;
         private String tokenType = "Bearer";
         private UserDto user;
+        private Boolean hasCourseEnrollment;
+        private Boolean hasCompetitionRegistration;
 
         public Builder accessToken(String accessToken) {
             this.accessToken = accessToken;
@@ -82,9 +92,22 @@ public class LoginResponse {
             return this;
         }
 
+        public Builder hasCourseEnrollment(Boolean hasCourseEnrollment) {
+            this.hasCourseEnrollment = hasCourseEnrollment;
+            return this;
+        }
+
+        public Builder hasCompetitionRegistration(Boolean hasCompetitionRegistration) {
+            this.hasCompetitionRegistration = hasCompetitionRegistration;
+            return this;
+        }
+
         public LoginResponse build() {
             String effAccess = accessToken != null ? accessToken : token;
-            return new LoginResponse(effAccess, refreshToken, tokenType, user);
+            LoginResponse resp = new LoginResponse(effAccess, refreshToken, tokenType, user);
+            resp.setHasCourseEnrollment(hasCourseEnrollment);
+            resp.setHasCompetitionRegistration(hasCompetitionRegistration);
+            return resp;
         }
     }
 }

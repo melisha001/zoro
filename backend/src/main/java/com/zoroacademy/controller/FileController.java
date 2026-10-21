@@ -33,6 +33,9 @@ public class FileController {
     private final FileAccessService fileAccessService;
     private final CompetitionRepository competitionRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.zoroacademy.service.BunnyStreamService bunnyStreamService;
+
     @Value("${cors.allowed-origins:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}")
     private String allowedOrigins;
 
@@ -118,6 +121,56 @@ public class FileController {
         result.put("refCount", storedFile.getRefCount());
 
         return ApiResponse.ok(result, "File uploaded successfully");
+    }
+
+    @PostMapping(value = "/unified-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Map<String, Object>> unifiedUpload(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "category", required = false, defaultValue = "auto") String category,
+            @RequestParam(value = "title", required = false) String title,
+            @AuthenticationPrincipal Object principal
+    ) {
+        if (file == null || file.isEmpty()) {
+            throw new com.zoroacademy.exception.BadRequestException("File cannot be empty");
+        }
+
+        String origName = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        String contentType = file.getContentType() != null ? file.getContentType().toLowerCase() : "";
+        String cat = (category != null ? category.trim().toLowerCase() : "auto");
+
+        boolean isVideo = cat.contains("video")
+                || contentType.startsWith("video/")
+                || origName.endsWith(".mp4")
+                || origName.endsWith(".mov")
+                || origName.endsWith(".avi")
+                || origName.endsWith(".webm")
+                || origName.endsWith(".mkv");
+
+        if (isVideo && bunnyStreamService != null) {
+            Map<String, Object> videoResult = bunnyStreamService.uploadVideoBinary(file, title);
+            return ApiResponse.ok(videoResult, "Video uploaded to Bunny Stream successfully");
+        }
+
+        UserPrincipal currentUser = resolvePrincipal(principal);
+        String ownerId = (currentUser != null ? currentUser.getId() : null);
+        String targetCategory = ("auto".equals(cat) || isVideo) ? "document" : cat;
+        StoredFile storedFile = fileStorageService.storeFile(file, targetCategory, ownerId);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("storageType", "BUNNY_STORAGE");
+        result.put("id", storedFile.getId());
+        result.put("fileId", storedFile.getId());
+        result.put("url", fileStorageService.getFileUrl(storedFile));
+        result.put("name", storedFile.getOriginalName());
+        result.put("fileName", storedFile.getOriginalName());
+        result.put("size", storedFile.getSizeBytes());
+        result.put("contentType", storedFile.getContentType());
+        result.put("category", storedFile.getCategory());
+        result.put("isPublic", storedFile.getIsPublic());
+        result.put("storagePath", storedFile.getStoragePath());
+
+        return ApiResponse.ok(result, "File uploaded to storage successfully");
     }
 
     @GetMapping("/{id}/meta")

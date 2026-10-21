@@ -33,7 +33,7 @@ const toLocalInput = (isoStr) => {
   }
 };
 
-export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
+export default function AdminCompetitionPage() {
   const navigate = useNavigate();
   const { showSuccess, showError, showWarning } = useDialog();
 
@@ -541,18 +541,6 @@ export default function AdminCompetitionPage({ setSelectedCompIdForModules }) {
                   >
                     <Eye className="w-3.5 h-3.5 text-slate-600" />
                     <span>View Details</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      if (setSelectedCompIdForModules) setSelectedCompIdForModules(comp.id);
-                      navigate(`/admin/competitions/${comp.id}/modules`);
-                    }}
-                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold px-3 py-2 rounded-xl border border-emerald-200 flex items-center justify-center space-x-1.5 text-xs cursor-pointer"
-                    title="Manage Competition Modules"
-                  >
-                    <Layers className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Modules</span>
                   </button>
 
                   <button

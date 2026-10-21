@@ -36,7 +36,7 @@ export default function StudentDashboard({ setActiveScreen }) {
       const [feeRes, schRes, asgRes, subRes, dbtRes, attRes] = await Promise.all([
         getMyFeeRecords(),
         getSchedules(),
-        getAssignments(),
+        getAssignments(user?.id || user?.email),
         getSubmissions(),
         getDoubts(),
         getMyAttendanceRecords()

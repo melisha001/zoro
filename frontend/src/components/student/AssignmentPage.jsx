@@ -86,19 +86,8 @@ export default function AssignmentPage({ setActiveScreen }) {
       setSubmissions(studentSubs);
 
       // 4. Fetch extra assignments targeted to student
-      const asgRes = await getCreatedAssignments();
-      const allAsgs = asgRes.data || [];
-      const targetedAsgs = allAsgs.filter(asg => {
-        const isBatchAll = !asg.batch || asg.batch === 'All' || asg.targetBatch === 'All';
-        if (asg.targetType === 'course' || isBatchAll) return true;
-        if ((asg.targetType === 'batch' || asg.batch) && (asg.batch === studentBatch || asg.targetBatch === studentBatch || asg.targetName === studentBatch)) return true;
-        if (asg.targetType === 'student') {
-          if (asg.targetStudentEmail && asg.targetStudentEmail.toLowerCase() === studentIdentifier.toLowerCase()) return true;
-          if (Array.isArray(asg.targetStudentEmails) && asg.targetStudentEmails.some(e => e.toLowerCase() === studentIdentifier.toLowerCase())) return true;
-          if (Array.isArray(asg.targetStudentNames) && asg.targetStudentNames.some(n => n.toLowerCase() === studentName.toLowerCase())) return true;
-        }
-        return false;
-      });
+      const asgRes = await getCreatedAssignments(user?.id || user?.email);
+      const targetedAsgs = asgRes.data || [];
       setCreatedAssignments(targetedAsgs);
     } catch (err) {
       console.error('Error loading student assignments:', err);

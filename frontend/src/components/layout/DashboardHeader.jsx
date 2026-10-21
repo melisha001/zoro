@@ -11,7 +11,7 @@ export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScr
   const { academyName } = useWebsiteSettings();
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [notifList, setNotifList] = useState([]);
-  const [hasCompetitionAccess, setHasCompetitionAccess] = useState(false);
+  const [canSwitchToCompetition, setCanSwitchToCompetition] = useState(false);
 
   const currentDateStr = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
@@ -26,13 +26,24 @@ export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScr
   }, [user]);
 
   const checkPortals = async () => {
+    const roleUpper = String(user?.role || '').toUpperCase();
+    if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN' || roleUpper === 'TRAINER') {
+      setCanSwitchToCompetition(false);
+      return;
+    }
     try {
       const res = await getMyPortals();
       if (res.success && res.data) {
-        setHasCompetitionAccess(Boolean(res.data.competition));
+        const hasLearning = Boolean(res.data.learning ?? user?.hasCourseEnrollment);
+        const hasCompetition = Boolean(res.data.competition ?? user?.hasCompetitionRegistration);
+        setCanSwitchToCompetition(hasLearning && hasCompetition);
+      } else if (user) {
+        setCanSwitchToCompetition(Boolean(user.hasCourseEnrollment && user.hasCompetitionRegistration));
       }
     } catch (e) {
-      // ignore
+      if (user) {
+        setCanSwitchToCompetition(Boolean(user.hasCourseEnrollment && user.hasCompetitionRegistration));
+      }
     }
   };
 
@@ -98,8 +109,8 @@ export default function DashboardHeader({ user, onMobileMenuToggle, setActiveScr
           <span>{currentDateStr}</span>
         </div>
 
-        {/* Switch to Competition Portal button (shown only when user has competition access) */}
-        {hasCompetitionAccess && (
+        {/* Switch to Competition Portal button (shown only to students registered in BOTH a course and a competition) */}
+        {canSwitchToCompetition && (
           <button
             onClick={() => navigate('/competition')}
             className="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition cursor-pointer shadow-2xs"

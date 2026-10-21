@@ -1111,9 +1111,12 @@ export default function CompetitionFinalAssessmentPage() {
             </ul>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <div className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
             <span>Duration: <strong className="text-slate-800">{assessmentData?.durationMinutes || 60} Minutes</strong></span>
             <span>Total Marks: <strong className="text-slate-800">{assessmentData?.totalMarks || 100} Marks</strong></span>
+            <span className="text-indigo-700 bg-indigo-50/70 px-2.5 py-1 rounded-xl">
+              Questions: <strong className="font-mono text-indigo-900">{assessmentData?.questionCount ?? 0} / {assessmentData?.targetQuestions ?? assessmentData?.totalMarks ?? 25}</strong>
+            </span>
           </div>
         </div>
       </div>

@@ -12,20 +12,43 @@ export default function PortalSelectPage() {
   const [portals, setPortals] = useState({ learning: false, competition: false, competitions: [] });
 
   useEffect(() => {
+    const roleUpper = (user?.role || '').toUpperCase();
+    if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN') {
+      navigate('/admin', { replace: true });
+      return;
+    }
+    if (roleUpper === 'TRAINER') {
+      navigate('/trainer', { replace: true });
+      return;
+    }
+
     async function fetchPortals() {
       try {
         const res = await getMyPortals();
         if (res.success && res.data) {
-          setPortals(res.data);
-          // If only one portal is available, direct immediately
-          if (res.data.learning && !res.data.competition) {
-            goToLearning();
-          } else if (!res.data.learning && res.data.competition) {
-            navigate('/competition');
+          const learning = Boolean(res.data.learning ?? user?.hasCourseEnrollment);
+          const competition = Boolean(res.data.competition ?? user?.hasCompetitionRegistration);
+          setPortals({ ...res.data, learning, competition });
+
+          // If student has only one portal, redirect immediately
+          if (learning && !competition) {
+            navigate('/student', { replace: true });
+            return;
+          }
+          if (!learning && competition) {
+            navigate('/competition', { replace: true });
+            return;
           }
         }
       } catch (err) {
         console.error('Failed to load portals:', err);
+        if (user?.hasCourseEnrollment && !user?.hasCompetitionRegistration) {
+          navigate('/student', { replace: true });
+          return;
+        } else if (!user?.hasCourseEnrollment && user?.hasCompetitionRegistration) {
+          navigate('/competition', { replace: true });
+          return;
+        }
       } finally {
         setLoading(false);
       }

@@ -5,6 +5,7 @@ import com.zoroacademy.entity.*;
 import com.zoroacademy.repository.UserRepository;
 import com.zoroacademy.security.UserPrincipal;
 import com.zoroacademy.service.CompetitionService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -65,16 +66,6 @@ public class CompetitionController {
         return ApiResponse.ok(competitionService.createCompetition(competition), "Competition created");
     }
 
-    @GetMapping("/{id}/modules")
-    public ApiResponse<List<CompetitionModule>> getModules(@PathVariable String id) {
-        return ApiResponse.ok(competitionService.getModules(id));
-    }
-
-    @PostMapping("/{id}/modules")
-    public ApiResponse<CompetitionModule> addModule(@PathVariable String id, @RequestBody CompetitionModule module) {
-        return ApiResponse.ok(competitionService.addModule(id, module), "Module added");
-    }
-
     @GetMapping("/{id}/registrations")
     public ApiResponse<List<CompetitionRegistration>> getRegistrations(@PathVariable String id) {
         return ApiResponse.ok(competitionService.getRegistrations(id));
@@ -94,17 +85,6 @@ public class CompetitionController {
     public ApiResponse<Boolean> deleteCompetition(@PathVariable String id) {
         competitionService.deleteCompetition(id);
         return ApiResponse.ok(true, "Competition deleted");
-    }
-
-    @PutMapping("/modules/{moduleId}")
-    public ApiResponse<CompetitionModule> updateModule(@PathVariable String moduleId, @RequestBody CompetitionModule module) {
-        return ApiResponse.ok(competitionService.updateModule(moduleId, module), "Module updated");
-    }
-
-    @DeleteMapping("/modules/{moduleId}")
-    public ApiResponse<Boolean> deleteModule(@PathVariable String moduleId) {
-        competitionService.deleteModule(moduleId);
-        return ApiResponse.ok(true, "Module deleted");
     }
 
     @PutMapping("/registrations/{regId}")
@@ -170,6 +150,13 @@ public class CompetitionController {
             @PathVariable String id,
             @RequestBody CompetitionGuidanceVideo video) {
         return ApiResponse.ok(competitionService.saveGuidanceVideo(id, video), "Guidance video saved");
+    }
+
+    @PutMapping("/{id}/guidance-videos/reorder")
+    public ApiResponse<List<CompetitionGuidanceVideo>> reorderGuidanceVideos(
+            @PathVariable String id,
+            @RequestBody List<String> videoIds) {
+        return ApiResponse.ok(competitionService.reorderGuidanceVideos(id, videoIds), "Guidance videos reordered");
     }
 
     @DeleteMapping("/guidance-videos/{videoId}")
@@ -399,6 +386,36 @@ public class CompetitionController {
             @RequestBody Map<String, Object> payload) {
         User user = getCurrentUser();
         return ApiResponse.ok(competitionService.evaluateVoiceAnswer(attemptId, answerId, payload, user));
+    }
+
+    @GetMapping("/admin/evaluations")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<List<Map<String, Object>>> getAdminEvaluations(
+            @RequestParam(required = false) String competitionId,
+            @RequestParam(required = false) String examType,
+            @RequestParam(required = false) String setCode,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search) {
+        return ApiResponse.ok(competitionService.getAdminCompetitionEvaluations(competitionId, examType, setCode, status, search));
+    }
+
+    @GetMapping("/trainer/assigned-competitions")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<List<Map<String, Object>>> getTrainerAssignedCompetitions() {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getTrainerAssignedCompetitions(user));
+    }
+
+    @GetMapping("/trainer/submissions")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<List<Map<String, Object>>> getTrainerFilteredSubmissions(
+            @RequestParam(required = false) String competitionId,
+            @RequestParam(required = false) String examType,
+            @RequestParam(required = false) String setCode,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getTrainerEvaluationsWithFilters(competitionId, examType, setCode, status, search, user));
     }
 
     // =========================================================================

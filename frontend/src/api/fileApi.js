@@ -280,6 +280,98 @@ export async function deleteFile(fileId) {
 }
 
 /**
+ * Unified Upload to Bunny Stream (for videos) or Bunny Storage (for audio, images, documents).
+ * Supports cancellation via abortController signal or direct abort handle.
+ *
+ * @param {File} file
+ * @param {Object} [options]
+ * @param {string} [options.category='auto']
+ * @param {string} [options.title]
+ * @param {function} [options.onProgress] - (percent: number) => void
+ * @param {AbortSignal} [options.signal]
+ * @returns {Promise<Object>}
+ */
+export async function unifiedUpload(file, { category = 'auto', title = '', onProgress = null, signal = null } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error('No file provided for upload.'));
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('category', category);
+    if (title) {
+      formData.append('title', title);
+    }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_BASE_URL}/files/unified-upload`);
+
+    const token = getAuthToken();
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    if (signal) {
+      if (signal.aborted) {
+        xhr.abort();
+        reject(new Error('Upload cancelled'));
+        return;
+      }
+      signal.addEventListener('abort', () => {
+        xhr.abort();
+        reject(new Error('Upload cancelled'));
+      });
+    }
+
+    if (xhr.upload && typeof onProgress === 'function') {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          onProgress(percent);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      try {
+        const response = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300 && response.success) {
+          const data = response.data || {};
+          resolve({
+            ...data,
+            url: data.url ? resolveFileUrl(data.url) : resolveFileUrl(`/api/files/${data.id}`),
+            name: data.name || data.fileName || file.name,
+            size: data.size || file.size,
+            contentType: data.contentType || file.type
+          });
+        } else {
+          const msg = response.message || `Upload failed with status ${xhr.status}`;
+          reject(new Error(msg));
+        }
+      } catch {
+        reject(new Error('Failed to parse upload server response'));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during file upload'));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new Error('Upload request timed out'));
+    };
+
+    xhr.onabort = () => {
+      reject(new Error('Upload cancelled'));
+    };
+
+    xhr.send(formData);
+  });
+}
+
+/**
  * Returns absolute download URL for a public rules document.
  * 
  * @param {string} rulesPdfUrl

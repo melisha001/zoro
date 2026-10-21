@@ -11,9 +11,24 @@ export function normalizeAssignment(a) {
   if (!a) return a;
   const parsedAtt = parseJsonField(a.attachment);
   const attObj = parsedAtt || (typeof a.attachment === 'string' && a.attachment.trim() && !a.attachment.startsWith('{') ? { name: 'Assignment Attachment', fileUrl: a.attachment } : null);
+
+  let targetStudentIds = a.targetStudentIds;
+  if (typeof targetStudentIds === 'string') {
+    const parsed = parseJsonField(targetStudentIds);
+    targetStudentIds = Array.isArray(parsed) ? parsed : targetStudentIds.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  let targetStudentEmails = a.targetStudentEmails;
+  if (typeof targetStudentEmails === 'string') {
+    const parsed = parseJsonField(targetStudentEmails);
+    targetStudentEmails = Array.isArray(parsed) ? parsed : targetStudentEmails.split(',').map(s => s.trim()).filter(Boolean);
+  }
+
   return {
     ...a,
-    attachment: attObj
+    attachment: attObj,
+    targetType: a.targetType || 'batch',
+    targetStudentIds: Array.isArray(targetStudentIds) ? targetStudentIds : [],
+    targetStudentEmails: Array.isArray(targetStudentEmails) ? targetStudentEmails : []
   };
 }
 

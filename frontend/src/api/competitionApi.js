@@ -211,6 +211,14 @@ export const deleteCompetitionGuidanceVideo = async (videoId) => {
   return apiResponse(false, false, res?.message || 'Failed to delete guidance video');
 };
 
+export const reorderCompetitionGuidanceVideos = async (competitionId, videoIds) => {
+  const res = await apiPut(`/competitions/${encodeURIComponent(competitionId)}/guidance-videos/reorder`, videoIds);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to reorder guidance videos');
+};
+
 // --- STUDY MATERIALS ---
 export const getCompetitionStudyMaterials = async (competitionId) => {
   const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/study-materials`);
@@ -482,6 +490,22 @@ export const evaluateVoiceAnswer = async (attemptId, answerId, payload) => {
   return apiResponse(null, false, res?.message || 'Failed to evaluate voice answer');
 };
 
+export const getAdminCompetitionEvaluations = async ({ competitionId = '', examType = '', setCode = '', status = '', search = '' } = {}) => {
+  const params = new URLSearchParams();
+  if (competitionId && competitionId !== 'all') params.append('competitionId', competitionId);
+  if (examType && examType !== 'all') params.append('examType', examType);
+  if (setCode && setCode !== 'all') params.append('setCode', setCode);
+  if (status && status !== 'all') params.append('status', status);
+  if (search) params.append('search', search);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const res = await apiGet(`/competitions/admin/evaluations${query}`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch admin evaluations');
+};
+
 // --- PHASE 5: LEADERBOARD API ---
 export const getCompetitionLeaderboard = async (competitionId) => {
   const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/leaderboard`);
@@ -522,6 +546,31 @@ export const toggleCompetitionAnswerReview = async (competitionId) => {
   }
   return apiResponse(null, false, res?.message || 'Failed to toggle answer review');
 };
+
+export const getTrainerAssignedCompetitions = async () => {
+  const res = await apiGet('/competitions/trainer/assigned-competitions');
+  if (res && res.success && Array.isArray(res.data)) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch assigned competitions');
+};
+
+export const getTrainerFilteredSubmissions = async (filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.competitionId && filters.competitionId !== 'ALL') params.append('competitionId', filters.competitionId);
+  if (filters.examType && filters.examType !== 'ALL') params.append('examType', filters.examType);
+  if (filters.setCode && filters.setCode !== 'ALL') params.append('setCode', filters.setCode);
+  if (filters.status && filters.status !== 'ALL') params.append('status', filters.status);
+  if (filters.search) params.append('search', filters.search);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const res = await apiGet(`/competitions/trainer/submissions${query}`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse([], false, res?.message || 'Failed to fetch trainer submissions');
+};
+
 
 
 

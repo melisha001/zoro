@@ -36,7 +36,7 @@ const AdminDailyReportPage = lazy(() => import('./components/admin/AdminDailyRep
 const AdminCompetitionPage = lazy(() => import('./components/admin/AdminCompetitionPage'));
 const AdminCompetitionManagementPage = lazy(() => import('./components/admin/AdminCompetitionManagementPage'));
 const AdminCompetitionRegistrationsPage = lazy(() => import('./components/admin/AdminCompetitionRegistrationsPage'));
-const AdminCompetitionModulesPage = lazy(() => import('./components/admin/AdminCompetitionModulesPage'));
+const AdminCompetitionEvaluationsPage = lazy(() => import('./components/admin/AdminCompetitionEvaluationsPage'));
 const AdminAssignmentsPage = lazy(() => import('./components/admin/AdminAssignmentsPage'));
 const AdminTrainerAssignmentsPage = lazy(() => import('./components/admin/AdminTrainerAssignmentsPage'));
 const AdminDoubtsPage = lazy(() => import('./components/admin/AdminDoubtsPage'));
@@ -47,6 +47,7 @@ const AdminSettingsPage = lazy(() => import('./components/admin/AdminSettingsPag
 
 const TrainerDashboard = lazy(() => import('./components/trainer/TrainerDashboard'));
 const TrainerCoursesPage = lazy(() => import('./components/trainer/TrainerCoursesPage'));
+const TrainerCompetitionsPage = lazy(() => import('./components/trainer/TrainerCompetitionsPage'));
 const TrainerStudentsPage = lazy(() => import('./components/trainer/TrainerStudentsPage'));
 const TrainerSchedulePage = lazy(() => import('./components/trainer/TrainerSchedulePage'));
 const TrainerSessionsPage = lazy(() => import('./components/trainer/TrainerSessionsPage'));
@@ -118,14 +119,15 @@ function getActiveScreenFromPath(path) {
   if (path === '/admin/daily-reports') return 'admin-daily-reports';
   if (path === '/admin/competitions') return 'admin-competition';
   if (path === '/admin/competition-management') return 'admin-competition-management';
-  if (path.includes('/admin/competitions/') && path.includes('/modules')) return 'admin-competition-modules';
   if (path === '/admin/competitions/registrations') return 'admin-competition-registrations';
+  if (path === '/admin/competition-evaluations' || path === '/admin/competitions/evaluations') return 'admin-competition-evaluations';
   if (path === '/admin/reports') return 'admin-reports';
   if (path === '/admin/notifications') return 'admin-notifications';
   if (path === '/admin/settings') return 'admin-settings';
 
   if (path === '/trainer' || path === '/trainer/') return 'trainer-dash';
   if (path === '/trainer/courses') return 'trainer-courses';
+  if (path === '/trainer/competitions') return 'trainer-competitions';
   if (path === '/trainer/students') return 'trainer-students';
   if (path === '/trainer/schedules' || path === '/trainer/schedule') return 'trainer-schedule';
   if (path === '/trainer/sessions' || path === '/trainer/session') return 'trainer-sessions';
@@ -177,8 +179,8 @@ function screenToPath(screen, params = {}) {
     case 'admin-daily-reports': return '/admin/daily-reports';
     case 'admin-competition': return '/admin/competitions';
     case 'admin-competition-management': return '/admin/competition-management';
-    case 'admin-competition-modules': return params.competitionId ? `/admin/competitions/${params.competitionId}/modules` : '/admin/competitions';
     case 'admin-competition-registrations': return '/admin/competitions/registrations';
+    case 'admin-competition-evaluations': return '/admin/competition-evaluations';
     case 'admin-reports': return '/admin/reports';
     case 'admin-notifications': return '/admin/notifications';
     case 'admin-settings': return '/admin/settings';
@@ -186,6 +188,7 @@ function screenToPath(screen, params = {}) {
     // Trainer
     case 'trainer-dash': return '/trainer';
     case 'trainer-courses': return '/trainer/courses';
+    case 'trainer-competitions': return '/trainer/competitions';
     case 'trainer-students': return '/trainer/students';
     case 'trainer-schedule': return '/trainer/schedules';
     case 'trainer-sessions': return '/trainer/sessions';
@@ -217,10 +220,11 @@ function ProtectedRoute({ allowedRoles, portalType, children }) {
   const { user, role, loading } = useAuth();
   const location = useLocation();
   const [portalAccess, setPortalAccess] = useState(null);
-  const [checkingPortals, setCheckingPortals] = useState(Boolean(portalType && user));
+  const isPortalCheckRoute = Boolean(portalType || location.pathname === '/portal-select');
+  const [checkingPortals, setCheckingPortals] = useState(Boolean(isPortalCheckRoute && user));
 
   useEffect(() => {
-    if (!portalType || !user) {
+    if (!isPortalCheckRoute || !user) {
       setCheckingPortals(false);
       return;
     }
@@ -234,7 +238,7 @@ function ProtectedRoute({ allowedRoles, portalType, children }) {
       if (isMounted) setCheckingPortals(false);
     });
     return () => { isMounted = false; };
-  }, [portalType, user]);
+  }, [isPortalCheckRoute, user]);
 
   if (loading || checkingPortals) {
     return (
@@ -261,14 +265,41 @@ function ProtectedRoute({ allowedRoles, portalType, children }) {
     }
   }
 
-  // Guard: if portalType is 'learning', competition-only student cannot enter
-  if (portalType === 'learning' && currentRole === 'STUDENT' && portalAccess && !portalAccess.learning && portalAccess.competition) {
-    return <Navigate to="/competition" replace />;
+  const hasLearning = Boolean(portalAccess?.learning ?? user?.hasCourseEnrollment);
+  const hasCompetition = Boolean(portalAccess?.competition ?? user?.hasCompetitionRegistration);
+
+  // Portal selection page: only for students registered in BOTH
+  if (location.pathname === '/portal-select') {
+    if (currentRole === 'ADMIN' || currentRole === 'SUPER_ADMIN') {
+      return <Navigate to="/admin" replace />;
+    }
+    if (currentRole === 'TRAINER') {
+      return <Navigate to="/trainer" replace />;
+    }
+    if (hasLearning && !hasCompetition) {
+      return <Navigate to="/student" replace />;
+    }
+    if (!hasLearning && hasCompetition) {
+      return <Navigate to="/competition" replace />;
+    }
   }
 
-  // Guard: if portalType is 'competition', user without competition registrations cannot enter
-  if (portalType === 'competition' && currentRole === 'STUDENT' && portalAccess && !portalAccess.competition) {
-    return <Navigate to="/student" replace />;
+  // Competition portal: only for registered students (admins & trainers stay in their own portals)
+  if (portalType === 'competition') {
+    if (currentRole === 'ADMIN' || currentRole === 'SUPER_ADMIN') {
+      return <Navigate to="/admin" replace />;
+    }
+    if (currentRole === 'TRAINER') {
+      return <Navigate to="/trainer" replace />;
+    }
+    if (currentRole === 'STUDENT' && !hasCompetition) {
+      return <Navigate to="/student" replace />;
+    }
+  }
+
+  // Learning portal: competition-only students cannot enter
+  if (portalType === 'learning' && currentRole === 'STUDENT' && !hasLearning && hasCompetition) {
+    return <Navigate to="/competition" replace />;
   }
 
   return children;
@@ -361,8 +392,6 @@ function DashboardLayout({ expectedRole }) {
       navigate(selectedCourseIdRef.current ? `/admin/courses/${selectedCourseIdRef.current}/edit` : '/admin/courses');
     } else if (screen === 'admin-course-content') {
       navigate(selectedCourseIdRef.current ? `/admin/courses/${selectedCourseIdRef.current}/content` : '/admin/courses');
-    } else if (screen === 'admin-competition-modules') {
-      navigate(selectedCompIdRef.current ? `/admin/competitions/${selectedCompIdRef.current}/modules` : '/admin/competitions');
     } else {
       navigate(screenToPath(screen));
     }
@@ -372,9 +401,6 @@ function DashboardLayout({ expectedRole }) {
     selectedCourseIdRef.current = id;
   };
 
-  const setSelectedCompIdForModules = (id) => {
-    selectedCompIdRef.current = id;
-  };
 
   return (
     <div className="h-screen w-full flex overflow-hidden bg-slate-50 font-sans antialiased text-slate-900">
@@ -396,8 +422,7 @@ function DashboardLayout({ expectedRole }) {
             <ErrorBoundary>
               <Outlet context={{ 
                 setActiveScreen: handleSetActiveScreen, 
-                setSelectedCourseIdForEdit, 
-                setSelectedCompIdForModules 
+                setSelectedCourseIdForEdit 
               }} />
             </ErrorBoundary>
           </Suspense>
@@ -420,11 +445,6 @@ function CourseContentWrapper() {
   return <CourseContentPage courseId={courseId} setActiveScreen={(s) => navigate(screenToPath(s))} />;
 }
 
-function CompetitionModulesWrapper() {
-  const { competitionId } = useParams();
-  const navigate = useNavigate();
-  return <AdminCompetitionModulesPage competitionId={competitionId} setActiveScreen={(s) => navigate(screenToPath(s))} />;
-}
 
 function PublicHomeWrapper() {
   const navigate = useNavigate();
@@ -498,27 +518,39 @@ function AppRoutes() {
   const handleLoginSuccess = async (loggedUser) => {
     setIsLoginOpen(false);
     const roleUpper = (loggedUser?.role || '').toUpperCase();
+    if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN') {
+      navigate('/admin');
+      return;
+    }
+    if (roleUpper === 'TRAINER') {
+      navigate('/trainer');
+      return;
+    }
+
     try {
       const pRes = await getMyPortals();
       const p = pRes?.data;
-      if (p?.learning && p?.competition) {
+      const hasLearning = Boolean(p?.learning ?? loggedUser?.hasCourseEnrollment);
+      const hasCompetition = Boolean(p?.competition ?? loggedUser?.hasCompetitionRegistration);
+
+      if (hasLearning && hasCompetition) {
         navigate('/portal-select');
         return;
       }
-      if (p?.competition && !p?.learning) {
+      if (!hasLearning && hasCompetition) {
         navigate('/competition');
         return;
       }
-    } catch (e) {
-      // fallback to role routes
-    }
-
-    if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN') {
-      navigate('/admin');
-    } else if (roleUpper === 'TRAINER') {
-      navigate('/trainer');
-    } else {
       navigate('/student');
+      return;
+    } catch (e) {
+      if (loggedUser?.hasCourseEnrollment && loggedUser?.hasCompetitionRegistration) {
+        navigate('/portal-select');
+      } else if (!loggedUser?.hasCourseEnrollment && loggedUser?.hasCompetitionRegistration) {
+        navigate('/competition');
+      } else {
+        navigate('/student');
+      }
     }
   };
 
@@ -567,10 +599,11 @@ function AppRoutes() {
           <Route path="expenses" element={<AdminExpensesPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="salary" element={<AdminSalaryPage />} />
           <Route path="daily-reports" element={<AdminDailyReportPage />} />
-          <Route path="competitions" element={<AdminCompetitionPage setActiveScreen={(s) => navigate(screenToPath(s))} setSelectedCompIdForModules={(id) => navigate(`/admin/competitions/${id}/modules`)} />} />
+          <Route path="competitions" element={<AdminCompetitionPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="competition-management" element={<AdminCompetitionManagementPage />} />
-          <Route path="competitions/:competitionId/modules" element={<CompetitionModulesWrapper />} />
           <Route path="competitions/registrations" element={<AdminCompetitionRegistrationsPage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
+          <Route path="competition-evaluations" element={<AdminCompetitionEvaluationsPage />} />
+          <Route path="competitions/evaluations" element={<AdminCompetitionEvaluationsPage />} />
           <Route path="reports" element={<AdminReportsPage />} />
           <Route path="notifications" element={<AdminNotificationsPage />} />
           <Route path="settings" element={<AdminSettingsPage />} />
@@ -585,6 +618,7 @@ function AppRoutes() {
         }>
           <Route index element={<TrainerDashboard setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="courses" element={<TrainerCoursesPage />} />
+          <Route path="competitions" element={<TrainerCompetitionsPage />} />
           <Route path="students" element={<TrainerStudentsPage />} />
           <Route path="schedules" element={<TrainerSchedulePage setActiveScreen={(s) => navigate(screenToPath(s))} />} />
           <Route path="schedule" element={<TrainerSchedulePage setActiveScreen={(s) => navigate(screenToPath(s))} />} />

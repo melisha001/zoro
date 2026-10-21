@@ -8,6 +8,7 @@ import { getTrainerStudents } from '../../api/userApi';
 import { useAuth } from '../../context/AuthContext';
 import { getTrainerAllocatedCourses, getTrainerAllocatedBatches, filterStudentsByCourseAndBatch } from '../../utils/trainerFilterHelper';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import UnifiedUploader from '../common/UnifiedUploader';
 import { useDialog } from '../../context/DialogContext';
 
 export default function TrainerAssignmentsPage() {
@@ -197,15 +198,18 @@ export default function TrainerAssignmentsPage() {
   const handleConfirmAssignmentSubmit = async () => {
     setSavingAsg(true);
 
+    const matchedCourse = coursesList.find(c => (c.title || c.name) === formData.course);
+    const courseId = matchedCourse?.id || null;
+    const matchedBatch = batchesList.find(b => (b.name || b.title) === formData.targetBatch);
+    const batchId = matchedBatch?.id || null;
+
     let targetName = formData.targetBatch;
     let targetStudentEmail = null;
     let targetStudentIds = [];
     let targetStudentNames = [];
     let targetStudentEmails = [];
 
-    if (formData.targetType === 'course') {
-      targetName = `All Enrolled Students (${formData.course})`;
-    } else if (formData.targetType === 'student') {
+    if (formData.targetType === 'student') {
       targetStudentIds = selectedStudentObjects.map(s => s.id || s.email);
       targetStudentNames = selectedStudentObjects.map(s => s.name);
       targetStudentEmails = selectedStudentObjects.map(s => s.email);
@@ -222,13 +226,17 @@ export default function TrainerAssignmentsPage() {
       title: formData.title,
       description: formData.description,
       course: formData.course,
+      courseId,
       targetType: formData.targetType,
       targetName,
-      batch: formData.targetType === 'batch' ? formData.targetBatch : 'General',
+      batch: formData.targetType === 'batch' ? formData.targetBatch : null,
+      batchId: formData.targetType === 'batch' ? batchId : null,
       targetStudentEmail,
       targetStudentIds,
       targetStudentNames,
       targetStudentEmails,
+      trainer: trainerName,
+      trainerId: user?.id || null,
       createdBy: trainerName,
       creatorRole: 'TRAINER',
       dueDate: formData.dueDate,
@@ -498,7 +506,7 @@ export default function TrainerAssignmentsPage() {
               {/* TARGET AUDIENCE SELECTION */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <label className="block text-slate-900 font-extrabold">Assign Target Audience *</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, targetType: 'batch' })}
@@ -509,17 +517,6 @@ export default function TrainerAssignmentsPage() {
                     }`}
                   >
                     Entire Batch
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, targetType: 'course' })}
-                    className={`py-2 px-3 rounded-xl border text-center transition-all cursor-pointer ${
-                      formData.targetType === 'course'
-                        ? 'bg-blue-600 text-white border-blue-600 font-extrabold shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    All Course Students
                   </button>
                   <button
                     type="button"
@@ -593,17 +590,23 @@ export default function TrainerAssignmentsPage() {
               </div>
 
               <div>
-                <label className="block mb-1">Attach Reference File (PDF, Image, Video, Audio, Doc, Spreadsheet)</label>
-                <input
-                  type="file"
-                  onChange={handleFileUploadMock}
-                  className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                <label className="block mb-1 text-slate-700 font-bold text-xs">Attach Reference File (PDF, Image, Video, Audio, Doc, Spreadsheet)</label>
+                <UnifiedUploader
+                  category="assignment"
+                  title={formData.title || 'Assignment Reference'}
+                  accept="*/*"
+                  onUploadSuccess={(fileData) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      attachmentName: fileData.fileName || fileData.name,
+                      attachmentUrl: fileData.fileUrl || fileData.url,
+                      attachmentType: fileData.fileType || fileData.type,
+                      attachmentSize: fileData.fileSize ? `${(fileData.fileSize / 1024).toFixed(1)} KB` : ''
+                    }));
+                  }}
+                  existingUrl={formData.attachmentUrl}
+                  existingFileName={formData.attachmentName}
                 />
-                {formData.attachmentName && (
-                  <div className="text-[11px] text-emerald-700 font-bold mt-1">
-                    Attached: {formData.attachmentName} ({formData.attachmentSize})
-                  </div>
-                )}
               </div>
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100">
@@ -773,7 +776,6 @@ export default function TrainerAssignmentsPage() {
                 <span className="text-slate-400 font-bold block text-[10px] uppercase">Target Audience</span>
                 <div className="font-extrabold text-purple-900 mt-0.5">
                   {formData.targetType === 'batch' && `Entire Batch: ${formData.targetBatch}`}
-                  {formData.targetType === 'course' && `All Course Students (${formData.course})`}
                   {formData.targetType === 'student' && (
                     <span>
                       Specific Students ({selectedStudentObjects.length}): {selectedStudentObjects.map(s => s.name).join(', ')}

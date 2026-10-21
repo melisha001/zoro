@@ -164,6 +164,55 @@ public class UserService {
                 dto.setCourse(readable);
             }
         }
+
+        String roleUpper = (user.getRole() != null ? user.getRole() : "STUDENT").toUpperCase();
+        if ("ADMIN".equals(roleUpper) || "SUPER_ADMIN".equals(roleUpper)) {
+            dto.setHasCourseEnrollment(true);
+            dto.setHasCompetitionRegistration(false);
+        } else if ("TRAINER".equals(roleUpper)) {
+            dto.setHasCourseEnrollment(true);
+            dto.setHasCompetitionRegistration(false);
+        } else {
+            boolean hasActiveEnrollment = false;
+            if (enrollmentRepository != null) {
+                hasActiveEnrollment = enrollmentRepository.findByStudentId(user.getId()).stream()
+                        .anyMatch(e -> !"Cancelled".equalsIgnoreCase(e.getStatus()) && !"Dropped".equalsIgnoreCase(e.getStatus()));
+            }
+
+            boolean hasBatch = false;
+            if (studentCourseBatchRepository != null) {
+                hasBatch = !studentCourseBatchRepository.findByStudentId(user.getId()).isEmpty();
+            }
+
+            boolean hasCourseField = user.getCourse() != null && !user.getCourse().isBlank();
+            boolean isNotCompetitionOrigin = !"COMPETITION".equalsIgnoreCase(user.getOrigin());
+
+            boolean hasCourse = hasActiveEnrollment || hasBatch || (isNotCompetitionOrigin && (hasCourseField || user.getOrigin() == null || "LEARNING".equalsIgnoreCase(user.getOrigin())));
+
+            boolean hasCompetition = false;
+            if (competitionRegistrationRepository != null) {
+                List<CompetitionRegistration> regs = new ArrayList<>(competitionRegistrationRepository.findByStudentId(user.getId()));
+                if (user.getEmail() != null) {
+                    for (CompetitionRegistration r : competitionRegistrationRepository.findByStudentEmailIgnoreCase(user.getEmail())) {
+                        if (regs.stream().noneMatch(existing -> existing.getId().equals(r.getId()))) {
+                            regs.add(r);
+                        }
+                    }
+                }
+                hasCompetition = regs.stream().anyMatch(r -> "PAID".equalsIgnoreCase(r.getPaymentStatus()));
+            }
+
+            if (!hasCourse && !hasCompetition) {
+                if ("COMPETITION".equalsIgnoreCase(user.getOrigin())) {
+                    hasCompetition = false;
+                } else {
+                    hasCourse = true;
+                }
+            }
+
+            dto.setHasCourseEnrollment(hasCourse);
+            dto.setHasCompetitionRegistration(hasCompetition);
+        }
         return dto;
     }
 

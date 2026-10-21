@@ -43,6 +43,12 @@ public class CompetitionAssessment {
     @Column(name = "total_marks", nullable = false)
     private Integer totalMarks = 0;
 
+    @Transient
+    private Long questionCount = 0L;
+
+    @Transient
+    private Integer targetQuestions = 20;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
@@ -82,6 +88,12 @@ public class CompetitionAssessment {
 
     public Integer getTotalMarks() { return totalMarks; }
     public void setTotalMarks(Integer totalMarks) { this.totalMarks = totalMarks; }
+
+    public Long getQuestionCount() { return questionCount; }
+    public void setQuestionCount(Long questionCount) { this.questionCount = questionCount; }
+
+    public Integer getTargetQuestions() { return targetQuestions; }
+    public void setTargetQuestions(Integer targetQuestions) { this.targetQuestions = targetQuestions; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
