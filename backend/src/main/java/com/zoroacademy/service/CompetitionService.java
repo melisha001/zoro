@@ -70,6 +70,9 @@ public class CompetitionService {
     @Autowired(required = false)
     private BunnyStreamService bunnyStreamService;
 
+    @Autowired(required = false)
+    private com.zoroacademy.config.BunnyStreamProperties bunnyStreamProperties;
+
     @Autowired
     public CompetitionService(
             CompetitionRepository competitionRepository,
@@ -640,20 +643,193 @@ public class CompetitionService {
         });
     }
 
-    // --- Guidance Videos (Phase 6) ---
+    // --- Guidance Videos (Phase 6 & Admin Guidance Videos Redesign) ---
     @Transactional(readOnly = true)
     public List<CompetitionGuidanceVideo> getGuidanceVideos(String compId) {
         return guidanceVideoRepository.findByCompetitionIdOrderBySortOrderAsc(compId);
     }
 
+    private void ensureVideoUrls(CompetitionGuidanceVideo video) {
+        if (video.getBunnyVideoId() != null && !video.getBunnyVideoId().isBlank()) {
+            String libId = (bunnyStreamProperties != null && bunnyStreamProperties.getLibraryId() != null && !bunnyStreamProperties.getLibraryId().isBlank())
+                    ? bunnyStreamProperties.getLibraryId() : "784226";
+            String cdn = (bunnyStreamProperties != null && bunnyStreamProperties.getCdnHost() != null && !bunnyStreamProperties.getCdnHost().isBlank())
+                    ? bunnyStreamProperties.getCdnHost() : "video.bunnycdn.com";
+            if (video.getEmbedUrl() == null || video.getEmbedUrl().isBlank()) {
+                video.setEmbedUrl("https://iframe.mediadelivery.net/embed/" + libId + "/" + video.getBunnyVideoId());
+            }
+            if (video.getPlaybackUrl() == null || video.getPlaybackUrl().isBlank()) {
+                video.setPlaybackUrl("https://" + cdn + "/" + video.getBunnyVideoId() + "/playlist.m3u8");
+            }
+        }
+    }
+
     @Transactional
     public CompetitionGuidanceVideo saveGuidanceVideo(String compId, CompetitionGuidanceVideo video) {
         Competition comp = getCompetitionById(compId);
+        String caption = video.getCaption();
+        if (caption == null || caption.isBlank()) {
+            caption = video.getTitle();
+        }
+        if (caption == null || caption.isBlank()) {
+            caption = "Guidance Video";
+        }
+        String title = (video.getTitle() != null && !video.getTitle().isBlank()) ? video.getTitle() : caption;
+        String bunnyVideoId = video.getBunnyVideoId() != null ? video.getBunnyVideoId().trim() : null;
+
+        // 1. Check if updating by ID
+        if (video.getId() != null && !video.getId().isBlank()) {
+            Optional<CompetitionGuidanceVideo> existingById = guidanceVideoRepository.findById(video.getId());
+            if (existingById.isPresent()) {
+                CompetitionGuidanceVideo ev = existingById.get();
+                ev.setTitle(title);
+                ev.setCaption(caption);
+                if (bunnyVideoId != null && !bunnyVideoId.isBlank()) {
+                    ev.setBunnyVideoId(bunnyVideoId);
+                }
+                if (video.getDuration() != null) ev.setDuration(video.getDuration());
+                if (video.getSortOrder() != null && video.getSortOrder() > 0) ev.setSortOrder(video.getSortOrder());
+                if (video.getStatus() != null) ev.setStatus(video.getStatus());
+                if (video.getEmbedUrl() != null) ev.setEmbedUrl(video.getEmbedUrl());
+                if (video.getPlaybackUrl() != null) ev.setPlaybackUrl(video.getPlaybackUrl());
+                ensureVideoUrls(ev);
+                return guidanceVideoRepository.save(ev);
+            }
+        }
+
+        // 2. Check if video with same bunnyVideoId already exists for this competition (de-duplicate / idempotent)
+        if (bunnyVideoId != null && !bunnyVideoId.isBlank()) {
+            Optional<CompetitionGuidanceVideo> existingByBunny = guidanceVideoRepository
+                    .findByCompetitionIdAndBunnyVideoId(comp.getId(), bunnyVideoId);
+            if (existingByBunny.isPresent()) {
+                CompetitionGuidanceVideo ev = existingByBunny.get();
+                ev.setTitle(title);
+                ev.setCaption(caption);
+                if (video.getDuration() != null) ev.setDuration(video.getDuration());
+                if (video.getSortOrder() != null && video.getSortOrder() > 0) ev.setSortOrder(video.getSortOrder());
+                if (video.getStatus() != null) ev.setStatus(video.getStatus());
+                if (video.getEmbedUrl() != null) ev.setEmbedUrl(video.getEmbedUrl());
+                if (video.getPlaybackUrl() != null) ev.setPlaybackUrl(video.getPlaybackUrl());
+                ensureVideoUrls(ev);
+                return guidanceVideoRepository.save(ev);
+            }
+        }
+
+        // 3. Brand new guidance video entry
         if (video.getId() == null || video.getId().isBlank()) {
             video.setId("cgv_" + UUID.randomUUID());
         }
         video.setCompetitionId(comp.getId());
+        video.setTitle(title);
+        video.setCaption(caption);
+        if (video.getSortOrder() == null || video.getSortOrder() <= 0) {
+            int currentCount = guidanceVideoRepository.findByCompetitionIdOrderBySortOrderAsc(comp.getId()).size();
+            video.setSortOrder(currentCount + 1);
+        }
+        ensureVideoUrls(video);
         return guidanceVideoRepository.save(video);
+    }
+
+    @Transactional
+    public CompetitionGuidanceVideo uploadGuidanceVideo(String compId, org.springframework.web.multipart.MultipartFile file, String caption, Integer sortOrder) {
+        if (file == null || file.isEmpty()) {
+            throw new com.zoroacademy.exception.BadRequestException("Video file cannot be empty");
+        }
+        String origName = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        if (!origName.endsWith(".mp4") && !origName.endsWith(".webm") && !origName.endsWith(".mov")) {
+            throw new com.zoroacademy.exception.BadRequestException("Only MP4, WebM, and MOV video formats are allowed");
+        }
+        if (caption == null || caption.trim().isBlank()) {
+            throw new com.zoroacademy.exception.BadRequestException("Caption is required for guidance video");
+        }
+
+        if (bunnyStreamService == null) {
+            throw new com.zoroacademy.exception.BadRequestException("Bunny Stream service is not configured");
+        }
+
+        Map<String, Object> uploadResult;
+        try {
+            uploadResult = bunnyStreamService.uploadVideoBinary(file, caption.trim());
+        } catch (Exception e) {
+            log.error("Failed to upload guidance video to Bunny Stream: {}", e.getMessage(), e);
+            throw new com.zoroacademy.exception.BadRequestException("Failed to upload video to Bunny Stream: " + e.getMessage());
+        }
+
+        String bunnyVideoId = uploadResult.get("bunnyVideoId") != null ? uploadResult.get("bunnyVideoId").toString() : null;
+        if (bunnyVideoId == null || bunnyVideoId.isBlank()) {
+            bunnyVideoId = uploadResult.get("id") != null ? uploadResult.get("id").toString() : null;
+        }
+
+        CompetitionGuidanceVideo cgv = new CompetitionGuidanceVideo();
+        cgv.setCaption(caption.trim());
+        cgv.setTitle(caption.trim());
+        cgv.setBunnyVideoId(bunnyVideoId);
+        cgv.setDuration(uploadResult.get("duration") != null ? uploadResult.get("duration").toString() : null);
+        cgv.setSortOrder(sortOrder != null ? sortOrder : 0);
+        cgv.setEmbedUrl(uploadResult.get("embedUrl") != null ? uploadResult.get("embedUrl").toString() : null);
+        cgv.setPlaybackUrl(uploadResult.get("directStreamUrl") != null ? uploadResult.get("directStreamUrl").toString() : null);
+
+        return saveGuidanceVideo(compId, cgv);
+    }
+
+    @Transactional
+    public CompetitionGuidanceVideo updateGuidanceVideo(String videoId, String caption, Integer sortOrder) {
+        CompetitionGuidanceVideo v = guidanceVideoRepository.findById(videoId)
+                .orElseThrow(() -> new com.zoroacademy.exception.ResourceNotFoundException("Guidance video not found: " + videoId));
+        if (caption != null && !caption.trim().isBlank()) {
+            v.setCaption(caption.trim());
+            v.setTitle(caption.trim());
+        }
+        if (sortOrder != null) {
+            v.setSortOrder(sortOrder);
+        }
+        ensureVideoUrls(v);
+        return guidanceVideoRepository.save(v);
+    }
+
+    @Transactional
+    public CompetitionGuidanceVideo replaceGuidanceVideoFile(String videoId, org.springframework.web.multipart.MultipartFile file, String caption) {
+        CompetitionGuidanceVideo v = guidanceVideoRepository.findById(videoId)
+                .orElseThrow(() -> new com.zoroacademy.exception.ResourceNotFoundException("Guidance video not found: " + videoId));
+
+        if (file == null || file.isEmpty()) {
+            throw new com.zoroacademy.exception.BadRequestException("Replacement video file cannot be empty");
+        }
+        String origName = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        if (!origName.endsWith(".mp4") && !origName.endsWith(".webm") && !origName.endsWith(".mov")) {
+            throw new com.zoroacademy.exception.BadRequestException("Only MP4, WebM, and MOV video formats are allowed");
+        }
+
+        String oldBunnyId = v.getBunnyVideoId();
+        String effectiveCaption = (caption != null && !caption.trim().isBlank()) ? caption.trim() : v.getCaption();
+
+        Map<String, Object> uploadResult = bunnyStreamService.uploadVideoBinary(file, effectiveCaption);
+        String newBunnyId = uploadResult.get("bunnyVideoId") != null ? uploadResult.get("bunnyVideoId").toString() : null;
+        if (newBunnyId == null || newBunnyId.isBlank()) {
+            newBunnyId = uploadResult.get("id") != null ? uploadResult.get("id").toString() : null;
+        }
+
+        // Delete old video from Bunny Stream
+        if (oldBunnyId != null && !oldBunnyId.isBlank() && !oldBunnyId.equals(newBunnyId)) {
+            try {
+                bunnyStreamService.deleteVideo(oldBunnyId);
+            } catch (Exception e) {
+                log.warn("Failed to delete old replaced video from Bunny Stream: {}", e.getMessage());
+            }
+        }
+
+        v.setBunnyVideoId(newBunnyId);
+        v.setCaption(effectiveCaption);
+        v.setTitle(effectiveCaption);
+        v.setDuration(uploadResult.get("duration") != null ? uploadResult.get("duration").toString() : null);
+        if (uploadResult.get("embedUrl") != null) {
+            v.setEmbedUrl(uploadResult.get("embedUrl").toString());
+        }
+        if (uploadResult.get("directStreamUrl") != null) {
+            v.setPlaybackUrl(uploadResult.get("directStreamUrl").toString());
+        }
+        ensureVideoUrls(v);
+        return guidanceVideoRepository.save(v);
     }
 
     @Transactional

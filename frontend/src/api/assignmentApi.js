@@ -217,3 +217,43 @@ export const getMyTrainerSubmissions = async () => {
 export const getCreatedAssignments = getAssignments;
 export const createExtraAssignment = createAssignment;
 
+// --- TRAINER EXTRA ASSIGNMENT ALLOCATIONS ---
+export const getTrainerAllocatedCourses = async () => {
+  const res = await apiGet('/me/trainer-allocated-courses');
+  if (res && res.success && Array.isArray(res.data)) {
+    return apiResponse(res.data);
+  }
+  return {
+    success: false,
+    message: res?.message || 'Failed to fetch allocated courses',
+    data: []
+  };
+};
+
+export const getTrainerBatchesForCourse = async (courseId) => {
+  if (!courseId) return { success: true, data: [] };
+  const res = await apiGet(`/me/courses/${encodeURIComponent(courseId)}/trainer-batches`);
+  if (res && res.success && Array.isArray(res.data)) {
+    return apiResponse(res.data);
+  }
+  return {
+    success: false,
+    message: res?.message || 'Failed to fetch batches for course',
+    data: []
+  };
+};
+
+export const getTrainerStudentsForCourse = async (courseId, batchId = '') => {
+  if (!courseId) return { success: true, data: [] };
+  const query = batchId && batchId !== 'All' ? `?batchId=${encodeURIComponent(batchId)}` : '';
+  const res = await apiGet(`/me/courses/${encodeURIComponent(courseId)}/trainer-students${query}`);
+  if (res && res.success && Array.isArray(res.data)) {
+    return apiResponse(res.data);
+  }
+  return {
+    success: false,
+    message: res?.message || 'Failed to fetch students for course',
+    data: []
+  };
+};
+

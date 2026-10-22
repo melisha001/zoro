@@ -98,8 +98,10 @@ public class TrainerSessionsWorkflowTest {
         live.setBatch("Trainer Cohort 1");
         live.setTrainer("Admin");
         live.setDate(now.format(dateFmt));
-        ZonedDateTime liveStart = now.minusMinutes(15);
-        ZonedDateTime liveEnd = now.plusMinutes(45);
+        ZonedDateTime liveStart = now.minusMinutes(5);
+        ZonedDateTime liveEnd = (now.getHour() == 23 && now.getMinute() >= 50)
+                ? now.withMinute(59)
+                : now.plusMinutes(10);
         live.setTime(liveStart.format(timeFmt) + " - " + liveEnd.format(timeFmt));
         live.setMeetLink("https://meet.google.com/pqr-stuv-wxy");
         live.setAudience("TRAINER");

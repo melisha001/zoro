@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiDelete, apiResponse } from './client';
+import { apiGet, apiPost, apiPut, apiDelete, apiResponse, getAuthToken, API_BASE_URL } from './client';
 import { logActivity } from './activityLogApi';
 
 export const getCompetitions = async () => {
@@ -217,6 +217,65 @@ export const reorderCompetitionGuidanceVideos = async (competitionId, videoIds) 
     return apiResponse(res.data);
   }
   return apiResponse([], false, res?.message || 'Failed to reorder guidance videos');
+};
+
+export const uploadCompetitionGuidanceVideo = async (competitionId, file, caption, sortOrder = 0) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('caption', caption);
+  if (sortOrder) formData.append('sortOrder', sortOrder);
+
+  const token = getAuthToken();
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/competitions/${encodeURIComponent(competitionId)}/guidance-videos/upload`, {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json && json.success) {
+      return apiResponse(json.data);
+    }
+    return apiResponse(null, false, json?.message || 'Failed to upload guidance video');
+  } catch (err) {
+    return apiResponse(null, false, err.message || 'Upload failed');
+  }
+};
+
+export const updateCompetitionGuidanceVideo = async (videoId, { caption, sortOrder }) => {
+  const res = await apiPut(`/competitions/guidance-videos/${encodeURIComponent(videoId)}`, { caption, sortOrder });
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to update guidance video');
+};
+
+export const replaceCompetitionGuidanceVideo = async (videoId, file, caption = '') => {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (caption) formData.append('caption', caption);
+
+  const token = getAuthToken();
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/competitions/guidance-videos/${encodeURIComponent(videoId)}/replace`, {
+      method: 'PUT',
+      headers,
+      body: formData
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json && json.success) {
+      return apiResponse(json.data);
+    }
+    return apiResponse(null, false, json?.message || 'Failed to replace guidance video');
+  } catch (err) {
+    return apiResponse(null, false, err.message || 'Replacement failed');
+  }
 };
 
 // --- STUDY MATERIALS ---

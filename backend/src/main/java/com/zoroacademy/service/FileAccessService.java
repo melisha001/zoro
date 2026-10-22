@@ -156,8 +156,13 @@ public class FileAccessService {
             // 3. Schedules: if student is in ANY referencing schedule's batch/course, check unlock
             if (!schedules.isEmpty()) {
                 for (Schedule sched : schedules) {
-                    if (isStudentInBatch(userId, userEmail, sched.getBatchId(), sched.getBatch(), sched.getCourseId(), sched.getCourse())) {
+                    if (isStudentEnrolledInCourse(userId, userEmail, sched.getCourseId(), sched.getCourse())) {
                         anyCourseMatched = true;
+                        if (sched.getBatchId() != null && !sched.getBatchId().isBlank()
+                                && !isStudentInBatch(userId, userEmail, sched.getBatchId(), sched.getBatch(), sched.getCourseId(), sched.getCourse())) {
+                            bestDenialResult = FileAccessResult.forbidden("This schedule resource is for another batch");
+                            continue;
+                        }
                         if (scheduleService != null && scheduleService.isScheduleLockedForStudent(sched, userId, userEmail)) {
                             String unlockLabel = com.zoroacademy.util.ScheduleTimeUtil.formatUnlockTime(
                                     sched.getDate(), sched.getTime(), scheduleService.getResourcesUnlockMinutes()

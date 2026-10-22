@@ -26,6 +26,7 @@ import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import UnifiedUploader from '../common/UnifiedUploader';
 import SafeVideo from '../common/SafeVideo';
+import GuidanceVideoManager from './GuidanceVideoManager';
 import { useDialog } from '../../context/DialogContext';
 import { formatDate } from '../../utils/dateFormatter';
 
@@ -1042,134 +1043,10 @@ export default function AdminCompetitionManagementPage() {
 
       {/* SUB-TAB 4: GUIDANCE VIDEOS */}
       {activeTab === 'videos' && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <Video className="w-4 h-4 text-indigo-600" />
-                <span>Competition Guidance Videos</span>
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">
-                Upload and organize video guides for competition participants. Videos stream directly via Bunny CDN.
-              </p>
-            </div>
-            {videos.length > 1 && (
-              <span className="text-[11px] font-semibold text-slate-400">
-                Use ↑ and ↓ arrows to reorder videos
-              </span>
-            )}
-          </div>
-
-          {/* Unified Drag & Drop Multi-file Uploader */}
-          <UnifiedUploader
-            accept="video/*"
-            multiple={true}
-            category="guidance-video"
-            maxSizeMB={500}
-            label="Upload Guidance Videos (Multi-file Drag & Drop)"
-            helperText="Drag & drop MP4, WebM or MOV video files. Videos are automatically transcoded and streamed via Bunny Stream."
-            onUploadComplete={handleGuidanceVideoUploadComplete}
-            onMultiUploadComplete={handleGuidanceMultiUploadComplete}
-          />
-
-          {videos.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
-              No guidance videos added yet. Drag & drop video files above to upload directly to Bunny Stream.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {videos.map((vid, index) => (
-                <div
-                  key={vid.id}
-                  className="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3 flex flex-col justify-between transition-all hover:border-slate-300"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 shrink-0">
-                          #{index + 1}
-                        </span>
-                        <h4 className="font-black text-xs text-slate-900 truncate" title={vid.title}>
-                          {vid.title}
-                        </h4>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          disabled={index === 0 || reorderingVideos}
-                          onClick={() => handleMoveVideo(index, -1)}
-                          className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 rounded cursor-pointer"
-                          title="Move Up"
-                        >
-                          <ChevronUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={index === videos.length - 1 || reorderingVideos}
-                          onClick={() => handleMoveVideo(index, 1)}
-                          className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 rounded cursor-pointer"
-                          title="Move Down"
-                        >
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteVideo(vid.id)}
-                          className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer ml-1"
-                          title="Delete Video"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-400 font-mono truncate">
-                      Bunny ID: {vid.bunnyVideoId}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px]">
-                    <span className="font-bold text-slate-500">
-                      {vid.duration ? `Duration: ${vid.duration}` : 'Stream Ready'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewingVideo(vid)}
-                      className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg flex items-center gap-1 cursor-pointer"
-                    >
-                      <Eye className="w-3 h-3" />
-                      <span>Preview</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Video Preview Modal */}
-          {previewingVideo && (
-            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-4 space-y-3 shadow-2xl">
-                <div className="flex items-center justify-between text-white pb-2 border-b border-slate-800">
-                  <span className="font-bold text-xs truncate">
-                    {previewingVideo.title}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewingVideo(null)}
-                    className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <SafeVideo
-                  bunnyVideoId={previewingVideo.bunnyVideoId}
-                  className="w-full aspect-video rounded-xl"
-                  autoPlay
-                />
-              </div>
-            </div>
-          )}
-        </div>
+        <GuidanceVideoManager
+          competitionId={selectedCompetition.id}
+          competitionTitle={selectedCompetition.title}
+        />
       )}
 
       {/* SUB-TAB 5: STUDY MATERIALS */}

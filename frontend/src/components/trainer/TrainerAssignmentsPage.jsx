@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, BookOpen, AlertTriangle, X, Eye, Users, Layers, Check, Edit, Trash2, FileText } from 'lucide-react';
-import { getCreatedAssignments, createExtraAssignment, updateAssignment, deleteAssignment } from '../../api/assignmentApi';
+import { 
+  getCreatedAssignments, 
+  createExtraAssignment, 
+  updateAssignment, 
+  deleteAssignment,
+  getTrainerAllocatedCourses as fetchTrainerAllocatedCoursesApi,
+  getTrainerBatchesForCourse,
+  getTrainerStudentsForCourse
+} from '../../api/assignmentApi';
 import { uploadFile } from '../../api/fileApi';
 import { getCourses, getTrainerCourseRequests } from '../../api/courseApi';
 import { getBatches } from '../../api/batchApi';
 import { getTrainerStudents } from '../../api/userApi';
 import { useAuth } from '../../context/AuthContext';
-import { getTrainerAllocatedCourses, getTrainerAllocatedBatches, filterStudentsByCourseAndBatch } from '../../utils/trainerFilterHelper';
+import { getTrainerAllocatedCourses as getTrainerAllocatedCoursesHelper, getTrainerAllocatedBatches, filterStudentsByCourseAndBatch } from '../../utils/trainerFilterHelper';
 import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 import UnifiedUploader from '../common/UnifiedUploader';
 import { useDialog } from '../../context/DialogContext';
@@ -27,6 +35,12 @@ export default function TrainerAssignmentsPage() {
   const [batchesList, setBatchesList] = useState([]);
   const [studentsList, setStudentsList] = useState([]);
 
+  // Modal dependent state
+  const [modalBatches, setModalBatches] = useState([]);
+  const [modalStudents, setModalStudents] = useState([]);
+  const [loadingModalBatches, setLoadingModalBatches] = useState(false);
+  const [loadingModalStudents, setLoadingModalStudents] = useState(false);
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showStudentSelector, setShowStudentSelector] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -43,8 +57,10 @@ export default function TrainerAssignmentsPage() {
     title: '',
     description: '',
     course: '',
-    targetType: 'batch', // 'batch' | 'course' | 'student'
+    courseId: '',
+    targetType: 'batch', // 'batch' | 'student'
     targetBatch: '',
+    batchId: '',
     dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
     attachmentName: '',
     attachmentUrl: '',
@@ -55,30 +71,58 @@ export default function TrainerAssignmentsPage() {
   const loadAllData = async () => {
     try {
       const asgRes = await getCreatedAssignments();
-      setAssignments(asgRes.data || []);
+      setAssignments(asgRes?.data || []);
 
-      const [cRes, bRes, stdRes, reqsRes] = await Promise.all([
-        getCourses(),
-        getBatches(),
-        getTrainerStudents(),
-        getTrainerCourseRequests()
-      ]);
+      // Fetch allocated Online/Hybrid courses from backend
+      let allocatedCrs = [];
+      try {
+        if (typeof fetchTrainerAllocatedCoursesApi === 'function') {
+          const cRes = await fetchTrainerAllocatedCoursesApi();
+          if (cRes && cRes.success && Array.isArray(cRes.data)) {
+            allocatedCrs = cRes.data;
+          }
+        }
+      } catch (err) {
+        console.warn('Backend trainer allocated courses fetch failed, checking fallback:', err);
+      }
 
-      const allCourses = cRes.data || [];
-      const allBatches = bRes.data || [];
-      const approvedReqs = reqsRes.data || [];
+      // Fallback if backend returned empty or in mock mode
+      if (allocatedCrs.length === 0) {
+        try {
+          const [cRes, bRes, reqsRes] = await Promise.all([
+            getCourses(),
+            getBatches(),
+            getTrainerCourseRequests()
+          ]);
+          const allCourses = (cRes?.data || []).filter(c => (c.mode || '').toLowerCase() !== 'recorded');
+          const allBatches = bRes?.data || [];
+          const approvedReqs = reqsRes?.data || [];
+          allocatedCrs = getTrainerAllocatedCoursesHelper(user, allCourses, allBatches, approvedReqs);
+        } catch (e) {
+          console.error(e);
+        }
+      }
 
-      const allocatedCrs = getTrainerAllocatedCourses(user, allCourses, allBatches, approvedReqs);
       setCoursesList(allocatedCrs);
 
       if (allocatedCrs.length > 0 && !formData.course) {
-        setFormData(prev => ({ ...prev, course: allocatedCrs[0].title }));
+        const first = allocatedCrs[0];
+        setFormData(prev => ({
+          ...prev,
+          course: first.title || first.name,
+          courseId: first.id
+        }));
       }
 
+      // Load all batches for top filter bar
+      const bRes = await getBatches();
+      const allBatches = bRes?.data || [];
       const allocatedBtcs = getTrainerAllocatedBatches(user, 'All', allocatedCrs, allBatches);
       setBatchesList(allocatedBtcs);
 
-      const activeStudents = (stdRes.data || []).filter(s => (s.status || '').toLowerCase() !== 'inactive' && !s.isDeleted);
+      // Students
+      const stdRes = await getTrainerStudents();
+      const activeStudents = (stdRes?.data || []).filter(s => (s.status || '').toLowerCase() !== 'inactive' && !s.isDeleted);
       setStudentsList(activeStudents);
     } catch (err) {
       console.error('Failed to load assignments page data:', err);
@@ -97,6 +141,81 @@ export default function TrainerAssignmentsPage() {
     const isCurrentBatchValid = newBatches.some(b => (b.name || b.title) === selectedBatch);
     if (!isCurrentBatchValid) {
       setSelectedBatch('All');
+    }
+  };
+
+  const loadModalBatches = async (courseId, cTitle = '') => {
+    setLoadingModalBatches(true);
+    try {
+      let batches = [];
+      if (typeof getTrainerBatchesForCourse === 'function' && courseId) {
+        const res = await getTrainerBatchesForCourse(courseId);
+        if (res && res.success && Array.isArray(res.data)) {
+          batches = res.data;
+        }
+      }
+      if (batches.length === 0) {
+        batches = getTrainerAllocatedBatches(user, cTitle || formData.course || 'All', coursesList, batchesList);
+      }
+      setModalBatches(batches);
+      return batches;
+    } catch (err) {
+      console.error('Failed to load trainer batches for course:', err);
+      const fallback = getTrainerAllocatedBatches(user, cTitle || formData.course || 'All', coursesList, batchesList);
+      setModalBatches(fallback);
+      return fallback;
+    } finally {
+      setLoadingModalBatches(false);
+    }
+  };
+
+  const loadModalStudents = async (courseId, batchId = 'All', cTitle = '') => {
+    setLoadingModalStudents(true);
+    try {
+      let students = [];
+      if (typeof getTrainerStudentsForCourse === 'function' && courseId) {
+        const res = await getTrainerStudentsForCourse(courseId, batchId);
+        if (res && res.success && Array.isArray(res.data)) {
+          students = res.data;
+        }
+      }
+      if (students.length === 0) {
+        students = filterStudentsByCourseAndBatch(studentsList, cTitle || formData.course || 'All', batchId);
+      }
+      setModalStudents(students);
+      return students;
+    } catch (err) {
+      console.error('Failed to load trainer students for course:', err);
+      const fallback = filterStudentsByCourseAndBatch(studentsList, cTitle || formData.course || 'All', batchId);
+      setModalStudents(fallback);
+      return fallback;
+    } finally {
+      setLoadingModalStudents(false);
+    }
+  };
+
+  const handleModalCourseChange = (courseTitle) => {
+    const matched = coursesList.find(c => (c.title || c.name) === courseTitle);
+    const newCourseId = matched?.id || '';
+
+    // Requirement 6: Reset batch and student selections whenever course changes
+    setFormData(prev => ({
+      ...prev,
+      course: courseTitle,
+      courseId: newCourseId,
+      targetBatch: '',
+      batchId: ''
+    }));
+    setSelectedStudentObjects([]);
+    setStudentSearchTerm('');
+    setStudentBatchFilter('All');
+
+    if (newCourseId) {
+      loadModalBatches(newCourseId, courseTitle);
+      loadModalStudents(newCourseId, 'All', courseTitle);
+    } else {
+      setModalBatches([]);
+      setModalStudents([]);
     }
   };
 
@@ -129,16 +248,18 @@ export default function TrainerAssignmentsPage() {
   };
 
   const handleOpenCreateModal = () => {
-    const firstCourse = coursesList.length > 0 ? coursesList[0].title : '';
-    const firstCourseBatches = firstCourse ? getTrainerAllocatedBatches(user, firstCourse, coursesList, batchesList) : [];
-    const firstBatch = firstCourseBatches.length > 0 ? (firstCourseBatches[0].name || firstCourseBatches[0].title) : '';
+    const firstCourse = coursesList.length > 0 ? coursesList[0] : null;
+    const firstCourseTitle = firstCourse ? (firstCourse.title || firstCourse.name) : '';
+    const firstCourseId = firstCourse ? firstCourse.id : '';
 
     setFormData({
       title: '',
       description: '',
-      course: firstCourse,
+      course: firstCourseTitle,
+      courseId: firstCourseId,
       targetType: 'batch',
-      targetBatch: firstBatch,
+      targetBatch: '',
+      batchId: '',
       dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       attachmentName: '',
       attachmentUrl: '',
@@ -147,27 +268,60 @@ export default function TrainerAssignmentsPage() {
     });
     setEditingAssignmentId(null);
     setSelectedStudentObjects([]);
+    setStudentSearchTerm('');
+    setStudentBatchFilter('All');
     setShowCreateModal(true);
     setShowPreviewModal(false);
+
+    if (firstCourseId) {
+      loadModalBatches(firstCourseId, firstCourseTitle);
+      loadModalStudents(firstCourseId, 'All', firstCourseTitle);
+    } else {
+      setModalBatches([]);
+      setModalStudents([]);
+    }
   };
 
   const handleEditAssignment = (item) => {
     setEditingAssignmentId(item.id);
+    const matchedCourse = coursesList.find(c => (c.title || c.name) === item.course || c.id === item.courseId);
+    const courseId = item.courseId || (matchedCourse ? matchedCourse.id : '');
+
     setFormData({
       title: item.title || '',
       description: item.description || '',
-      course: item.course || '',
+      course: item.course || (matchedCourse ? matchedCourse.title : ''),
+      courseId: courseId,
       targetType: item.targetType || 'batch',
       targetBatch: item.batch || '',
+      batchId: item.batchId || '',
       dueDate: item.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       attachmentName: item.attachment?.name || '',
       attachmentUrl: item.attachment?.url || '',
       attachmentType: item.attachment?.type || 'application/pdf',
       attachmentSize: item.attachment?.size || ''
     });
-    setSelectedStudentObjects([]);
+
+    if (item.targetType === 'student' && Array.isArray(item.targetStudentIds) && item.targetStudentIds.length > 0) {
+      const restored = item.targetStudentIds.map((id, idx) => ({
+        id,
+        name: item.targetStudentNames?.[idx] || id,
+        email: item.targetStudentEmails?.[idx] || ''
+      }));
+      setSelectedStudentObjects(restored);
+    } else {
+      setSelectedStudentObjects([]);
+    }
+
+    setStudentSearchTerm('');
+    setStudentBatchFilter('All');
     setShowCreateModal(true);
     setShowPreviewModal(false);
+
+    if (courseId) {
+      loadModalBatches(courseId, item.course);
+      loadModalStudents(courseId, 'All', item.course);
+    }
   };
 
   const handleDeleteAssignment = async (id) => {
@@ -187,85 +341,112 @@ export default function TrainerAssignmentsPage() {
 
   const handleFormNextOrSubmit = (e) => {
     e.preventDefault();
-    if (!formData.title.trim()) return;
-    if (formData.targetType === 'student' && selectedStudentObjects.length === 0) {
-      showWarning('Please select at least one student when target is Specific Student.', 'Student Required');
+    if (!formData.title.trim()) {
+      showWarning('Please enter an assignment title.', 'Title Required');
       return;
+    }
+    if (!formData.course) {
+      showWarning('Please select a course.', 'Course Required');
+      return;
+    }
+    if (formData.targetType === 'batch') {
+      if (!formData.batchId && !formData.targetBatch) {
+        showWarning('Please select a batch to assign this assignment to.', 'Batch Required');
+        return;
+      }
+    } else if (formData.targetType === 'student') {
+      if (selectedStudentObjects.length === 0) {
+        showWarning('Please select at least one student when target is Specific Student.', 'Student Required');
+        return;
+      }
     }
     setShowPreviewModal(true);
   };
 
   const handleConfirmAssignmentSubmit = async () => {
     setSavingAsg(true);
+    try {
+      const matchedCourse = coursesList.find(c => (c.title || c.name) === formData.course);
+      const courseId = matchedCourse?.id || formData.courseId || null;
+      const matchedBatch = modalBatches.find(b => String(b.id) === String(formData.batchId) || (b.name || b.title) === formData.targetBatch);
+      const batchId = matchedBatch?.id || formData.batchId || null;
+      const batchName = matchedBatch ? (matchedBatch.name || matchedBatch.title) : formData.targetBatch;
 
-    const matchedCourse = coursesList.find(c => (c.title || c.name) === formData.course);
-    const courseId = matchedCourse?.id || null;
-    const matchedBatch = batchesList.find(b => (b.name || b.title) === formData.targetBatch);
-    const batchId = matchedBatch?.id || null;
+      let targetName = batchName;
+      let targetStudentEmail = null;
+      let targetStudentIds = [];
+      let targetStudentNames = [];
+      let targetStudentEmails = [];
 
-    let targetName = formData.targetBatch;
-    let targetStudentEmail = null;
-    let targetStudentIds = [];
-    let targetStudentNames = [];
-    let targetStudentEmails = [];
+      if (formData.targetType === 'student') {
+        targetStudentIds = selectedStudentObjects.map(s => s.id || s.email);
+        targetStudentNames = selectedStudentObjects.map(s => s.name);
+        targetStudentEmails = selectedStudentObjects.map(s => s.email);
+        targetStudentEmail = targetStudentEmails[0] || null;
 
-    if (formData.targetType === 'student') {
-      targetStudentIds = selectedStudentObjects.map(s => s.id || s.email);
-      targetStudentNames = selectedStudentObjects.map(s => s.name);
-      targetStudentEmails = selectedStudentObjects.map(s => s.email);
-      targetStudentEmail = targetStudentEmails[0] || null;
-
-      if (selectedStudentObjects.length === 1) {
-        targetName = selectedStudentObjects[0].name;
-      } else {
-        targetName = `${selectedStudentObjects.length} Students (${selectedStudentObjects.map(s => s.name).join(', ')})`;
+        if (selectedStudentObjects.length === 1) {
+          targetName = selectedStudentObjects[0].name;
+        } else {
+          targetName = `${selectedStudentObjects.length} Students (${selectedStudentObjects.map(s => s.name).join(', ')})`;
+        }
       }
-    }
 
-    const payload = {
-      title: formData.title,
-      description: formData.description,
-      course: formData.course,
-      courseId,
-      targetType: formData.targetType,
-      targetName,
-      batch: formData.targetType === 'batch' ? formData.targetBatch : null,
-      batchId: formData.targetType === 'batch' ? batchId : null,
-      targetStudentEmail,
-      targetStudentIds,
-      targetStudentNames,
-      targetStudentEmails,
-      trainer: trainerName,
-      trainerId: user?.id || null,
-      createdBy: trainerName,
-      creatorRole: 'TRAINER',
-      dueDate: formData.dueDate,
-      attachment: formData.attachmentName ? {
-        name: formData.attachmentName,
-        url: formData.attachmentUrl || '',
-        type: formData.attachmentType,
-        size: formData.attachmentSize || ''
-      } : null
-    };
+      const payload = {
+        title: formData.title,
+        description: formData.description,
+        course: formData.course,
+        courseId,
+        targetType: formData.targetType,
+        targetName,
+        batch: formData.targetType === 'batch' ? batchName : null,
+        batchId: formData.targetType === 'batch' ? batchId : null,
+        targetStudentEmail,
+        targetStudentIds,
+        targetStudentNames,
+        targetStudentEmails,
+        trainer: trainerName,
+        trainerId: user?.id || null,
+        createdBy: trainerName,
+        creatorRole: 'TRAINER',
+        dueDate: formData.dueDate,
+        attachment: formData.attachmentName ? {
+          name: formData.attachmentName,
+          url: formData.attachmentUrl || '',
+          type: formData.attachmentType,
+          size: formData.attachmentSize || ''
+        } : null
+      };
 
-    if (editingAssignmentId) {
-      await updateAssignment(editingAssignmentId, payload);
-      setToastMsg('Assignment updated successfully!');
-    } else {
-      await createExtraAssignment(payload);
-      setToastMsg('Extra Assignment created successfully & synced to Admin Portal!');
+      let res;
+      if (editingAssignmentId) {
+        res = await updateAssignment(editingAssignmentId, payload);
+      } else {
+        res = await createExtraAssignment(payload);
+      }
+
+      if (res && res.success) {
+        setToastMsg(editingAssignmentId ? 'Assignment updated successfully!' : 'Extra Assignment created successfully & synced to Admin Portal!');
+        setShowPreviewModal(false);
+        setShowCreateModal(false);
+        setTimeout(() => setToastMsg(''), 3000);
+        loadAllData();
+      } else {
+        showError(res?.message || 'Failed to save assignment', 'Submission Error');
+      }
+    } catch (err) {
+      console.error('Failed to save assignment:', err);
+      showError(err.message || 'Failed to save assignment', 'Submission Error');
+    } finally {
+      setSavingAsg(false);
     }
-    setSavingAsg(false);
-    setShowPreviewModal(false);
-    setShowCreateModal(false);
-    setTimeout(() => setToastMsg(''), 3000);
-    loadAllData();
   };
 
-  // Requirement 7: Batches in student selection dialog MUST belong ONLY to the selected Course in form
-  const modalAvailableBatches = getTrainerAllocatedBatches(user, formData.course || 'All', coursesList, batchesList);
+  // Batches in modal belong to selected course & current trainer
+  const modalAvailableBatches = modalBatches.length > 0
+    ? modalBatches
+    : getTrainerAllocatedBatches(user, formData.course || 'All', coursesList, batchesList);
 
-  const modalFilteredStudents = filterStudentsByCourseAndBatch(studentsList, formData.course || 'All', studentBatchFilter)
+  const modalFilteredStudents = (modalStudents.length > 0 ? modalStudents : filterStudentsByCourseAndBatch(studentsList, formData.course || 'All', studentBatchFilter))
     .filter(s => (s.name || '').toLowerCase().includes(studentSearchTerm.toLowerCase()));
 
   const filteredAssignments = assignments.filter(item => {
@@ -484,76 +665,109 @@ export default function TrainerAssignmentsPage() {
                 />
               </div>
 
-              {/* Requirement 5: Course dropdown MUST show ONLY courses allocated to current trainer */}
+              {/* Course dropdown showing ONLY courses allocated to current trainer */}
               <div>
                 <label className="block mb-1">Select Course *</label>
                 <select
                   value={formData.course}
-                  onChange={(e) => {
-                    const newCourse = e.target.value;
-                    const cBatches = getTrainerAllocatedBatches(user, newCourse, coursesList, batchesList);
-                    const newBatch = cBatches.length > 0 ? (cBatches[0].name || cBatches[0].title) : '';
-                    setFormData({ ...formData, course: newCourse, targetBatch: newBatch });
-                  }}
+                  onChange={(e) => handleModalCourseChange(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 cursor-pointer"
+                  required
                 >
                   {coursesList.map(c => (
-                    <option key={c.id || c.title} value={c.title}>{c.title}</option>
+                    <option key={c.id || c.title} value={c.title || c.name}>{c.title || c.name}</option>
                   ))}
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Only active Online and Hybrid courses assigned to you are available.
+                </p>
               </div>
 
               {/* TARGET AUDIENCE SELECTION */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <label className="block text-slate-900 font-extrabold">Assign Target Audience *</label>
-                <div className="grid grid-cols-2 gap-3">
+                <label className="block text-slate-900 font-extrabold text-xs">Assign Target Audience *</label>
+                <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Assign Target Audience">
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, targetType: 'batch' })}
-                    className={`py-2 px-3 rounded-xl border text-center transition-all cursor-pointer ${
+                    role="button"
+                    onClick={() => setFormData(prev => ({ ...prev, targetType: 'batch' }))}
+                    className={`py-2.5 px-3 rounded-xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
                       formData.targetType === 'batch'
                         ? 'bg-blue-600 text-white border-blue-600 font-extrabold shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100 font-bold'
                     }`}
                   >
-                    Entire Batch
+                    <input
+                      type="radio"
+                      name="targetType"
+                      checked={formData.targetType === 'batch'}
+                      onChange={() => setFormData(prev => ({ ...prev, targetType: 'batch' }))}
+                      className="w-3.5 h-3.5 cursor-pointer"
+                    />
+                    <span>Entire Batch</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, targetType: 'student' })}
-                    className={`py-2 px-3 rounded-xl border text-center transition-all cursor-pointer ${
+                    role="button"
+                    onClick={() => setFormData(prev => ({ ...prev, targetType: 'student' }))}
+                    className={`py-2.5 px-3 rounded-xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
                       formData.targetType === 'student'
                         ? 'bg-blue-600 text-white border-blue-600 font-extrabold shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100 font-bold'
                     }`}
                   >
-                    Specific Student
+                    <input
+                      type="radio"
+                      name="targetType"
+                      checked={formData.targetType === 'student'}
+                      onChange={() => setFormData(prev => ({ ...prev, targetType: 'student' }))}
+                      className="w-3.5 h-3.5 cursor-pointer"
+                    />
+                    <span>Specific Student</span>
                   </button>
                 </div>
 
                 {formData.targetType === 'batch' && (
                   <div>
-                    <label className="block text-[11px] mb-1 text-slate-500">Choose Batch</label>
-                    <select
-                      value={formData.targetBatch}
-                      onChange={(e) => setFormData({ ...formData, targetBatch: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-bold cursor-pointer"
-                    >
-                      {getTrainerAllocatedBatches(user, formData.course, coursesList, batchesList).length > 0 ? (
-                        getTrainerAllocatedBatches(user, formData.course, coursesList, batchesList).map(b => (
-                          <option key={b.id || b.name} value={b.name || b.title}>{b.name || b.title}</option>
-                        ))
-                      ) : (
-                        <option value="">No batches available</option>
-                      )}
-                    </select>
+                    <label className="block text-[11px] mb-1 text-slate-600 font-bold">
+                      Choose Batch for {formData.course} *
+                    </label>
+                    {loadingModalBatches ? (
+                      <div className="py-2 text-xs text-slate-400">Loading batches...</div>
+                    ) : modalBatches.length > 0 ? (
+                      <select
+                        value={formData.batchId || ''}
+                        onChange={(e) => {
+                          const bId = e.target.value;
+                          const matched = modalBatches.find(b => String(b.id) === String(bId));
+                          setFormData(prev => ({
+                            ...prev,
+                            batchId: bId,
+                            targetBatch: matched ? (matched.name || matched.title) : ''
+                          }));
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-bold cursor-pointer"
+                        required
+                      >
+                        <option value="">-- Select Batch --</option>
+                        {modalBatches.map(b => (
+                          <option key={b.id || b.name} value={b.id}>{b.name || b.title}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="p-2.5 bg-amber-50 text-amber-800 text-[11px] rounded-xl border border-amber-200 font-semibold">
+                        No active batches found for this course and trainer.
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {formData.targetType === 'student' && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="block text-[11px] text-slate-500">Select Specific Students ({formData.course})</label>
+                      <label className="block text-[11px] text-slate-600 font-bold">
+                        Select Specific Students ({formData.course}) *
+                      </label>
                       <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
                         {selectedStudentObjects.length} Selected
                       </span>
@@ -572,7 +786,7 @@ export default function TrainerAssignmentsPage() {
                             : 'Click to select students...'}
                         </span>
                       </div>
-                      <span className="text-xs text-blue-600 font-extrabold shrink-0 ml-2">Choose &rarr;</span>
+                      <span className="text-xs text-blue-600 font-extrabold shrink-0 ml-2">Choose Students &rarr;</span>
                     </button>
                   </div>
                 )}

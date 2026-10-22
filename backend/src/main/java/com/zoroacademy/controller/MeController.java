@@ -653,4 +653,169 @@ public class MeController {
         }
         return ApiResponse.ok(enquiryRepository.findByEmailIgnoreCaseOrNameIgnoreCase(user.getEmail(), user.getName()));
     }
+
+    // --- TRAINER EXTRA ASSIGNMENTS ALLOCATION ENDPOINTS ---
+
+    @GetMapping({"/trainer-allocated-courses", "/trainer/courses/allocated-active"})
+    public ApiResponse<List<Course>> getMyTrainerAllocatedCourses() {
+        User user = getCurrentUser();
+        String role = user.getRole() != null ? user.getRole().toUpperCase() : "STUDENT";
+
+        // Filter all courses: strictly Online and Hybrid modes, not Deleted
+        List<Course> allCourses = courseRepository.findAll().stream()
+                .filter(c -> c.getMode() != null && ("Online".equalsIgnoreCase(c.getMode()) || "Hybrid".equalsIgnoreCase(c.getMode())))
+                .filter(c -> c.getStatus() == null || !"Deleted".equalsIgnoreCase(c.getStatus()))
+                .toList();
+
+        if ("ADMIN".equals(role) || "SUPER_ADMIN".equals(role)) {
+            return ApiResponse.ok(allCourses);
+        }
+
+        if (!"TRAINER".equals(role)) {
+            throw new com.zoroacademy.exception.ForbiddenException("Only trainers can access allocated courses");
+        }
+
+        String tId = user.getId();
+        String tName = user.getName() != null ? user.getName().trim() : "";
+        String tEmail = user.getEmail() != null ? user.getEmail().trim() : "";
+
+        // Approved requests
+        Set<String> approvedCourseIds = new HashSet<>();
+        if (trainerCourseRequestRepository != null) {
+            List<TrainerCourseRequest> reqs = new ArrayList<>(trainerCourseRequestRepository.findByTrainerId(tId));
+            if (!tEmail.isEmpty()) {
+                reqs.addAll(trainerCourseRequestRepository.findByTrainerEmailIgnoreCase(tEmail));
+            }
+            for (TrainerCourseRequest r : reqs) {
+                if ("Approved".equalsIgnoreCase(r.getStatus()) || "Accepted".equalsIgnoreCase(r.getStatus())) {
+                    if (r.getCourseId() != null) approvedCourseIds.add(r.getCourseId());
+                }
+            }
+        }
+
+        // Batches handled by trainer
+        List<Batch> trainerBatches = batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(tId, tName);
+        Set<String> batchCourseIdsOrTitles = new HashSet<>();
+        for (Batch b : trainerBatches) {
+            if (b.getCourseId() != null) batchCourseIdsOrTitles.add(b.getCourseId());
+            if (b.getCourseName() != null) batchCourseIdsOrTitles.add(b.getCourseName().toLowerCase());
+        }
+
+        List<Course> allocated = allCourses.stream().filter(c -> {
+            boolean isDirect = (c.getTrainerId() != null && c.getTrainerId().equals(tId))
+                    || (c.getAssignedTrainer() != null && !tName.isEmpty() && c.getAssignedTrainer().equalsIgnoreCase(tName));
+            boolean isRequested = approvedCourseIds.contains(c.getId());
+            boolean isBatchMatch = batchCourseIdsOrTitles.contains(c.getId()) || (c.getTitle() != null && batchCourseIdsOrTitles.contains(c.getTitle().toLowerCase()));
+            return isDirect || isRequested || isBatchMatch;
+        }).toList();
+
+        return ApiResponse.ok(allocated);
+    }
+
+    @GetMapping({"/courses/{courseId}/trainer-batches", "/trainer/courses/{courseId}/batches"})
+    public ApiResponse<List<Batch>> getMyTrainerBatchesForCourse(@PathVariable String courseId) {
+        User user = getCurrentUser();
+        String role = user.getRole() != null ? user.getRole().toUpperCase() : "STUDENT";
+
+        Course course = courseRepository.findById(courseId)
+                .or(() -> courseRepository.findByTitleIgnoreCase(courseId))
+                .orElseThrow(() -> new com.zoroacademy.exception.ResourceNotFoundException("Course not found: " + courseId));
+
+        List<Batch> courseBatches = batchRepository.findByCourseId(course.getId());
+        if (courseBatches.isEmpty()) {
+            courseBatches = batchRepository.findByCourseNameIgnoreCase(course.getTitle());
+        }
+
+        if ("ADMIN".equals(role) || "SUPER_ADMIN".equals(role)) {
+            return ApiResponse.ok(courseBatches);
+        }
+
+        if (!"TRAINER".equals(role)) {
+            throw new com.zoroacademy.exception.ForbiddenException("Only trainers can access course batches");
+        }
+
+        String tId = user.getId();
+        String tName = user.getName() != null ? user.getName().trim() : "";
+
+        List<Batch> trainerBatches = courseBatches.stream()
+                .filter(b -> (b.getTrainerId() != null && b.getTrainerId().equals(tId))
+                        || (b.getTrainerName() != null && !tName.isEmpty() && b.getTrainerName().equalsIgnoreCase(tName)))
+                .toList();
+
+        return ApiResponse.ok(trainerBatches);
+    }
+
+    @GetMapping({"/courses/{courseId}/trainer-students", "/trainer/courses/{courseId}/students"})
+    public ApiResponse<List<UserDto>> getMyTrainerStudentsForCourse(
+            @PathVariable String courseId,
+            @RequestParam(required = false) String batchId) {
+        User user = getCurrentUser();
+        String role = user.getRole() != null ? user.getRole().toUpperCase() : "STUDENT";
+
+        Course course = courseRepository.findById(courseId)
+                .or(() -> courseRepository.findByTitleIgnoreCase(courseId))
+                .orElseThrow(() -> new com.zoroacademy.exception.ResourceNotFoundException("Course not found: " + courseId));
+
+        if ("Recorded".equalsIgnoreCase(course.getMode())) {
+            return ApiResponse.ok(Collections.emptyList());
+        }
+
+        List<Batch> allowedBatches;
+        if ("ADMIN".equals(role) || "SUPER_ADMIN".equals(role)) {
+            allowedBatches = batchRepository.findByCourseId(course.getId());
+            if (allowedBatches.isEmpty()) allowedBatches = batchRepository.findByCourseNameIgnoreCase(course.getTitle());
+        } else {
+            String tId = user.getId();
+            String tName = user.getName() != null ? user.getName().trim() : "";
+            List<Batch> allCourseBatches = batchRepository.findByCourseId(course.getId());
+            if (allCourseBatches.isEmpty()) allCourseBatches = batchRepository.findByCourseNameIgnoreCase(course.getTitle());
+            allowedBatches = allCourseBatches.stream()
+                    .filter(b -> (b.getTrainerId() != null && b.getTrainerId().equals(tId))
+                            || (b.getTrainerName() != null && !tName.isEmpty() && b.getTrainerName().equalsIgnoreCase(tName)))
+                    .toList();
+        }
+
+        Set<String> targetBatchIds = new HashSet<>();
+        if (batchId != null && !batchId.isBlank() && !"all".equalsIgnoreCase(batchId)) {
+            allowedBatches.stream()
+                    .filter(b -> b.getId().equals(batchId) || b.getName().equalsIgnoreCase(batchId))
+                    .map(Batch::getId)
+                    .findFirst()
+                    .ifPresent(targetBatchIds::add);
+        } else {
+            allowedBatches.forEach(b -> targetBatchIds.add(b.getId()));
+        }
+
+        Set<String> studentIds = new HashSet<>();
+        for (String bId : targetBatchIds) {
+            studentCourseBatchRepository.findByBatchId(bId).forEach(scb -> {
+                if (scb.getStudentId() != null) studentIds.add(scb.getStudentId());
+            });
+        }
+
+        if (targetBatchIds.isEmpty() || studentIds.isEmpty()) {
+            enrollmentRepository.findByCourseId(course.getId()).stream()
+                    .filter(e -> "Active".equalsIgnoreCase(e.getStatus()))
+                    .forEach(e -> studentIds.add(e.getStudentId()));
+        }
+
+        List<User> students = userRepository.findAllById(studentIds).stream()
+                .filter(s -> !"Inactive".equalsIgnoreCase(s.getStatus()) && !"Deleted".equalsIgnoreCase(s.getStatus()))
+                .filter(s -> !"COMPETITION".equalsIgnoreCase(s.getOrigin()))
+                .toList();
+
+        List<UserDto> dtos = students.stream().map(s -> {
+            UserDto d = UserDto.fromEntity(s);
+            studentCourseBatchRepository.findByStudentId(s.getId()).stream()
+                    .filter(scb -> course.getId().equals(scb.getCourseId()) || (scb.getBatchId() != null && targetBatchIds.contains(scb.getBatchId())))
+                    .findFirst()
+                    .ifPresent(scb -> {
+                        d.setBatchId(scb.getBatchId());
+                        batchRepository.findById(scb.getBatchId()).ifPresent(b -> d.setBatch(b.getName()));
+                    });
+            return d;
+        }).toList();
+
+        return ApiResponse.ok(dtos);
+    }
 }

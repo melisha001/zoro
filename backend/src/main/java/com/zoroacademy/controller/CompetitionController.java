@@ -137,7 +137,7 @@ public class CompetitionController {
         return ApiResponse.ok(true, "Syllabus deleted");
     }
 
-    // --- Guidance Videos (Phase 6) ---
+    // --- Guidance Videos (Phase 6 & Admin Guidance Videos Redesign) ---
     @GetMapping("/{id}/guidance-videos")
     public ApiResponse<List<CompetitionGuidanceVideo>> getGuidanceVideos(@PathVariable String id) {
         User user = getCurrentUser();
@@ -150,6 +150,32 @@ public class CompetitionController {
             @PathVariable String id,
             @RequestBody CompetitionGuidanceVideo video) {
         return ApiResponse.ok(competitionService.saveGuidanceVideo(id, video), "Guidance video saved");
+    }
+
+    @PostMapping(value = "/{id}/guidance-videos/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<CompetitionGuidanceVideo> uploadGuidanceVideo(
+            @PathVariable String id,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam("caption") String caption,
+            @RequestParam(value = "sortOrder", required = false) Integer sortOrder) {
+        return ApiResponse.ok(competitionService.uploadGuidanceVideo(id, file, caption, sortOrder), "Guidance video uploaded successfully");
+    }
+
+    @PutMapping("/guidance-videos/{videoId}")
+    public ApiResponse<CompetitionGuidanceVideo> updateGuidanceVideo(
+            @PathVariable String videoId,
+            @RequestBody Map<String, Object> body) {
+        String caption = body.get("caption") != null ? body.get("caption").toString() : (body.get("title") != null ? body.get("title").toString() : null);
+        Integer sortOrder = body.get("sortOrder") != null ? Integer.parseInt(body.get("sortOrder").toString()) : null;
+        return ApiResponse.ok(competitionService.updateGuidanceVideo(videoId, caption, sortOrder), "Guidance video updated");
+    }
+
+    @PutMapping(value = "/guidance-videos/{videoId}/replace", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<CompetitionGuidanceVideo> replaceGuidanceVideo(
+            @PathVariable String videoId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam(value = "caption", required = false) String caption) {
+        return ApiResponse.ok(competitionService.replaceGuidanceVideoFile(videoId, file, caption), "Guidance video replaced successfully");
     }
 
     @PutMapping("/{id}/guidance-videos/reorder")

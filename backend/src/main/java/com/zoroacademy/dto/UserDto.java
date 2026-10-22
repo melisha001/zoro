@@ -19,6 +19,8 @@ public class UserDto {
     private BigDecimal salaryAmount;
     private String salaryCreditDate;
     private String course;
+    private String batch;
+    private String batchId;
     private String origin = "LEARNING";
     private Boolean hasCourseEnrollment;
     private Boolean hasCompetitionRegistration;
@@ -79,6 +81,10 @@ public class UserDto {
     public void setSalaryCreditDate(String salaryCreditDate) { this.salaryCreditDate = salaryCreditDate; }
     public String getCourse() { return course; }
     public void setCourse(String course) { this.course = course; }
+    public String getBatch() { return batch; }
+    public void setBatch(String batch) { this.batch = batch; }
+    public String getBatchId() { return batchId; }
+    public void setBatchId(String batchId) { this.batchId = batchId; }
     public Boolean getMustChangePassword() { return mustChangePassword != null ? mustChangePassword : false; }
     public void setMustChangePassword(Boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
     public String getPassword() { return password; }

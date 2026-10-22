@@ -19,6 +19,7 @@ import ButtonSpinner from '../common/ButtonSpinner';
 import InlineSpinner from '../common/InlineSpinner';
 import UnifiedUploader from '../common/UnifiedUploader';
 import SafeVideo from '../common/SafeVideo';
+import GuidanceVideoManager from './GuidanceVideoManager';
 import { useDialog } from '../../context/DialogContext';
 
 export default function AdminCompetitionPortalManagerModal({ competition, isOpen, onClose }) {
@@ -528,82 +529,10 @@ export default function AdminCompetitionPortalManagerModal({ competition, isOpen
 
               {/* TAB 3: GUIDANCE VIDEOS */}
               {activeTab === 'videos' && (
-                <div className="space-y-6">
-                  {/* Multi-file Drag & Drop Uploader */}
-                  <UnifiedUploader
-                    accept="video/*"
-                    multiple={true}
-                    category="guidance-video"
-                    maxSizeMB={500}
-                    label="Upload Guidance Videos (Bunny Stream)"
-                    helperText="Drag & drop video files. Videos are automatically transcoded and streamed via Bunny Stream."
-                    onUploadComplete={handleGuidanceVideoUploadComplete}
-                    onMultiUploadComplete={handleGuidanceMultiUploadComplete}
-                  />
-
-                  {/* Videos List */}
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-black uppercase text-slate-500">
-                      Published Guidance Videos ({videos.length})
-                    </h4>
-                    {videos.length === 0 ? (
-                      <p className="text-xs text-slate-400">No videos added yet.</p>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {videos.map((v, index) => (
-                          <div
-                            key={v.id}
-                            className="p-3 bg-white border border-slate-200 rounded-2xl flex items-center justify-between shadow-2xs"
-                          >
-                            <div className="min-w-0 pr-2">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">
-                                  #{index + 1}
-                                </span>
-                                <p className="font-bold text-xs text-slate-900 truncate">{v.title}</p>
-                              </div>
-                              <p className="text-[10px] text-slate-400 font-mono truncate">ID: {v.bunnyVideoId}</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => setPreviewingVideo(v)}
-                                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold cursor-pointer"
-                              >
-                                Preview
-                              </button>
-                              <button
-                                onClick={() => handleDeleteVideo(v.id)}
-                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {previewingVideo && (
-                    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
-                      <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-4 space-y-3 shadow-2xl">
-                        <div className="flex items-center justify-between text-white pb-2 border-b border-slate-800">
-                          <span className="font-bold text-xs truncate">{previewingVideo.title}</span>
-                          <button
-                            type="button"
-                            onClick={() => setPreviewingVideo(null)}
-                            className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <SafeVideo bunnyVideoId={previewingVideo.bunnyVideoId} className="w-full aspect-video rounded-xl" autoPlay />
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <GuidanceVideoManager
+                  competitionId={competition.id}
+                  competitionTitle={competition.title}
+                />
               )}
 
               {/* TAB 4: STUDY MATERIALS */}

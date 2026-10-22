@@ -2,6 +2,9 @@ package com.zoroacademy.service;
 
 import com.zoroacademy.entity.Assignment;
 import com.zoroacademy.entity.AssignmentSubmission;
+import com.zoroacademy.entity.Batch;
+import com.zoroacademy.entity.Course;
+import com.zoroacademy.entity.User;
 import com.zoroacademy.repository.AssignmentRepository;
 import com.zoroacademy.repository.AssignmentSubmissionRepository;
 import org.springframework.stereotype.Service;
@@ -9,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -29,6 +33,9 @@ public class AssignmentService {
     private final com.zoroacademy.repository.CourseModuleRepository courseModuleRepository;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.zoroacademy.repository.EnrollmentRepository enrollmentRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.zoroacademy.repository.TrainerCourseRequestRepository trainerCourseRequestRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     public AssignmentService(AssignmentRepository assignmentRepository,
@@ -74,41 +81,151 @@ public class AssignmentService {
         return assignmentRepository.findAll();
     }
 
+    private User resolveAuthenticatedUser() {
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated()) return null;
+            String identifier;
+            if (auth.getPrincipal() instanceof com.zoroacademy.security.UserPrincipal up) {
+                identifier = up.getId();
+            } else if (auth.getPrincipal() instanceof org.springframework.security.core.userdetails.UserDetails ud) {
+                identifier = ud.getUsername();
+            } else {
+                identifier = auth.getName();
+            }
+            if (userRepository == null) return null;
+            return userRepository.findById(identifier)
+                    .or(() -> userRepository.findByEmailIgnoreCase(identifier))
+                    .or(() -> userRepository.findByUsernameIgnoreCase(identifier))
+                    .orElse(null);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     @Transactional
     public Assignment createAssignment(Assignment assignment) {
         if (assignment.getId() == null || assignment.getId().isBlank()) {
             assignment.setId("asg_" + java.util.UUID.randomUUID());
         }
 
-        // Relational course resolution
+        // 1. Resolve and validate Course
+        Course course = null;
         if (assignment.getCourseId() != null && !assignment.getCourseId().isBlank()) {
-            courseRepository.findById(assignment.getCourseId()).ifPresent(c -> assignment.setCourse(c.getTitle()));
-        } else if (assignment.getCourse() != null && !assignment.getCourse().isBlank()) {
-            courseRepository.findByTitleIgnoreCase(assignment.getCourse()).ifPresent(c -> assignment.setCourseId(c.getId()));
+            course = courseRepository.findById(assignment.getCourseId()).orElse(null);
+        }
+        if (course == null && assignment.getCourse() != null && !assignment.getCourse().isBlank()) {
+            course = courseRepository.findByTitleIgnoreCase(assignment.getCourse()).orElse(null);
+        }
+        if (course == null) {
+            throw new com.zoroacademy.exception.BadRequestException("A valid course is required");
+        }
+        final Course finalCourse = course;
+        assignment.setCourseId(finalCourse.getId());
+        assignment.setCourse(finalCourse.getTitle());
+
+        // 2. Mode enforcement: Strictly exclude Recorded courses
+        if ("Recorded".equalsIgnoreCase(finalCourse.getMode())) {
+            throw new com.zoroacademy.exception.ForbiddenException(
+                    "Extra assignments are only permitted for Online and Hybrid courses. Recorded courses are excluded."
+            );
         }
 
-        // Relational batch resolution
-        if (assignment.getBatchId() != null && !assignment.getBatchId().isBlank()) {
-            batchRepository.findById(assignment.getBatchId()).ifPresent(b -> assignment.setBatch(b.getName()));
-        } else if (assignment.getBatch() != null && !assignment.getBatch().isBlank()) {
-            batchRepository.findByNameIgnoreCaseAndCourseId(assignment.getBatch(), assignment.getCourseId())
-                    .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(assignment.getBatch(), assignment.getCourse()))
-                    .ifPresent(b -> assignment.setBatchId(b.getId()));
+        // 3. User & Role validation (Trainer course/batch/student scoping)
+        User currentUser = resolveAuthenticatedUser();
+        String currentRole = (currentUser != null && currentUser.getRole() != null)
+                ? currentUser.getRole().toUpperCase() : null;
+
+        if ("TRAINER".equals(currentRole)) {
+            String tId = currentUser.getId();
+            String tName = currentUser.getName() != null ? currentUser.getName().trim() : "";
+            String tEmail = currentUser.getEmail() != null ? currentUser.getEmail().trim() : "";
+
+            // Check if trainer is allocated to course
+            boolean isDirect = (finalCourse.getTrainerId() != null && finalCourse.getTrainerId().equals(tId))
+                    || (finalCourse.getAssignedTrainer() != null && !tName.isEmpty() && finalCourse.getAssignedTrainer().equalsIgnoreCase(tName));
+
+            boolean isRequested = false;
+            if (trainerCourseRequestRepository != null) {
+                List<com.zoroacademy.entity.TrainerCourseRequest> reqs = new ArrayList<>(trainerCourseRequestRepository.findByTrainerId(tId));
+                if (!tEmail.isEmpty()) {
+                    reqs.addAll(trainerCourseRequestRepository.findByTrainerEmailIgnoreCase(tEmail));
+                }
+                isRequested = reqs.stream().anyMatch(r ->
+                        ("Approved".equalsIgnoreCase(r.getStatus()) || "Accepted".equalsIgnoreCase(r.getStatus()))
+                                && (finalCourse.getId().equals(r.getCourseId()) || (r.getCourseTitle() != null && r.getCourseTitle().equalsIgnoreCase(finalCourse.getTitle())))
+                );
+            }
+
+            boolean isBatchInstructor = false;
+            if (batchRepository != null) {
+                List<Batch> trainerBatches = batchRepository.findByTrainerIdOrTrainerNameIgnoreCase(tId, tName);
+                isBatchInstructor = trainerBatches.stream().anyMatch(b ->
+                        finalCourse.getId().equals(b.getCourseId()) || (b.getCourseName() != null && b.getCourseName().equalsIgnoreCase(finalCourse.getTitle()))
+                );
+            }
+
+            if (!isDirect && !isRequested && !isBatchInstructor) {
+                throw new com.zoroacademy.exception.ForbiddenException("You are not allocated to teach course: " + finalCourse.getTitle());
+            }
+
+            assignment.setTrainerId(currentUser.getId());
+            assignment.setTrainer(currentUser.getName());
+            assignment.setCreatedBy(currentUser.getId());
+            assignment.setCreatorRole("TRAINER");
+        } else {
+            // Relational trainer resolution for admin/system
+            if (assignment.getTrainerId() != null && !assignment.getTrainerId().isBlank()) {
+                userRepository.findById(assignment.getTrainerId()).ifPresent(u -> assignment.setTrainer(u.getName()));
+            } else if (assignment.getTrainer() != null && !assignment.getTrainer().isBlank()) {
+                userRepository.findByNameIgnoreCase(assignment.getTrainer()).stream()
+                        .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
+                        .findFirst()
+                        .ifPresent(u -> assignment.setTrainerId(u.getId()));
+            }
         }
 
-        // Relational trainer resolution
-        if (assignment.getTrainerId() != null && !assignment.getTrainerId().isBlank()) {
-            userRepository.findById(assignment.getTrainerId()).ifPresent(u -> assignment.setTrainer(u.getName()));
-        } else if (assignment.getTrainer() != null && !assignment.getTrainer().isBlank()) {
-            userRepository.findByNameIgnoreCase(assignment.getTrainer()).stream()
-                    .filter(u -> "TRAINER".equalsIgnoreCase(u.getRole()))
-                    .findFirst()
-                    .ifPresent(u -> assignment.setTrainerId(u.getId()));
-        }
-
-        // Target audience normalization (remove "course", keep "batch" and "student")
+        // 4. Target audience normalization and validation
         if (assignment.getTargetType() == null || "course".equalsIgnoreCase(assignment.getTargetType())) {
             assignment.setTargetType("batch");
+        }
+
+        if ("batch".equalsIgnoreCase(assignment.getTargetType())) {
+            Batch batch = null;
+            if (assignment.getBatchId() != null && !assignment.getBatchId().isBlank()) {
+                batch = batchRepository.findById(assignment.getBatchId()).orElse(null);
+            }
+            if (batch == null && assignment.getBatch() != null && !assignment.getBatch().isBlank()) {
+                batch = batchRepository.findByNameIgnoreCaseAndCourseId(assignment.getBatch(), finalCourse.getId())
+                        .or(() -> batchRepository.findByNameIgnoreCaseAndCourseNameIgnoreCase(assignment.getBatch(), finalCourse.getTitle()))
+                        .orElse(null);
+            }
+            if (batch == null) {
+                throw new com.zoroacademy.exception.BadRequestException("A valid batch is required when assigning to batch");
+            }
+            if (!finalCourse.getId().equals(batch.getCourseId()) && (batch.getCourseName() == null || !batch.getCourseName().equalsIgnoreCase(finalCourse.getTitle()))) {
+                throw new com.zoroacademy.exception.BadRequestException("Batch " + batch.getName() + " does not belong to course " + finalCourse.getTitle());
+            }
+            if ("TRAINER".equals(currentRole)) {
+                String tId = currentUser.getId();
+                String tName = currentUser.getName() != null ? currentUser.getName().trim() : "";
+                boolean batchOwner = (batch.getTrainerId() != null && batch.getTrainerId().equals(tId))
+                        || (batch.getTrainerName() != null && !tName.isEmpty() && batch.getTrainerName().equalsIgnoreCase(tName));
+                if (!batchOwner) {
+                    throw new com.zoroacademy.exception.ForbiddenException("You are not allocated as trainer for batch: " + batch.getName());
+                }
+            }
+            assignment.setBatchId(batch.getId());
+            assignment.setBatch(batch.getName());
+        } else if ("student".equalsIgnoreCase(assignment.getTargetType())) {
+            String rawIds = assignment.getRawTargetStudentIds();
+            String rawEmails = assignment.getRawTargetStudentEmails();
+            if ((rawIds == null || rawIds.isBlank()) && (rawEmails == null || rawEmails.isBlank())) {
+                throw new com.zoroacademy.exception.BadRequestException("At least one student must be selected when targeting specific students");
+            }
+            if (assignment.getBatchId() != null && !assignment.getBatchId().isBlank()) {
+                batchRepository.findById(assignment.getBatchId()).ifPresent(b -> assignment.setBatch(b.getName()));
+            }
         }
 
         Assignment saved = assignmentRepository.save(assignment);

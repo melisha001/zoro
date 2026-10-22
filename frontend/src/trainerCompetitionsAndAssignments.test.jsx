@@ -28,7 +28,19 @@ vi.mock('./api/assignmentApi', () => ({
   getAssignments: vi.fn().mockResolvedValue({ success: true, data: [] }),
   createExtraAssignment: vi.fn().mockResolvedValue({ success: true, data: {} }),
   updateAssignment: vi.fn().mockResolvedValue({ success: true, data: {} }),
-  deleteAssignment: vi.fn().mockResolvedValue({ success: true, data: {} })
+  deleteAssignment: vi.fn().mockResolvedValue({ success: true, data: {} }),
+  getTrainerAllocatedCourses: vi.fn().mockResolvedValue({
+    success: true,
+    data: [{ id: 'course_1', title: 'Speed Maths', name: 'Speed Maths', mode: 'Online' }]
+  }),
+  getTrainerBatchesForCourse: vi.fn().mockResolvedValue({
+    success: true,
+    data: [{ id: 'batch_1', name: 'Batch Alpha', courseId: 'course_1', trainerId: 'trainer_123' }]
+  }),
+  getTrainerStudentsForCourse: vi.fn().mockResolvedValue({
+    success: true,
+    data: [{ id: 'std_1', name: 'Alice', email: 'alice@student.com' }]
+  })
 }));
 
 vi.mock('./api/courseApi', () => ({

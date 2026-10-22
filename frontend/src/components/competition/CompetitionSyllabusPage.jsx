@@ -27,9 +27,22 @@ export default function CompetitionSyllabusPage() {
       ]);
       setSyllabus(sylRes?.data || null);
       const vids = vidRes?.data || [];
-      setVideos(vids);
-      if (vids.length > 0) {
-        setSelectedVideo((prev) => (prev && vids.some((v) => v.id === prev.id) ? prev : vids[0]));
+      // Deduplicate by bunnyVideoId / id and preserve order
+      const seen = new Set();
+      const uniqueVids = [];
+      for (const v of vids) {
+        const key = v.bunnyVideoId || v.id;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          uniqueVids.push(v);
+        } else if (!key) {
+          uniqueVids.push(v);
+        }
+      }
+      uniqueVids.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      setVideos(uniqueVids);
+      if (uniqueVids.length > 0) {
+        setSelectedVideo((prev) => (prev && uniqueVids.some((v) => v.id === prev.id) ? prev : uniqueVids[0]));
       }
     } catch (err) {
       console.error('Failed to load syllabus/videos:', err);
@@ -154,7 +167,7 @@ export default function CompetitionSyllabusPage() {
 
                   <div>
                     <h3 className="text-base font-black text-slate-900">
-                      {selectedVideo?.title || 'Guidance Video'}
+                      {selectedVideo?.caption || selectedVideo?.title || 'Guidance Video'}
                     </h3>
                     {selectedVideo?.duration && (
                       <p className="text-xs text-slate-500 font-medium mt-1">
@@ -190,7 +203,7 @@ export default function CompetitionSyllabusPage() {
                             <Play className="w-3.5 h-3.5 ml-0.5 fill-current" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold truncate leading-tight">{vid.title}</p>
+                            <p className="text-xs font-bold truncate leading-tight">{vid.caption || vid.title}</p>
                             <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
                               {vid.duration ? `${Math.round(vid.duration / 60)} min` : 'Guidance clip'}
                             </p>
