@@ -16,6 +16,7 @@ import { resolveFileUrl } from '../../api/fileApi';
 import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import SkeletonCard from '../common/SkeletonCard';
+import SafeVideo from '../common/SafeVideo';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 
 export default function CompetitionMockTestsPage() {
@@ -660,6 +661,23 @@ export default function CompetitionMockTestsPage() {
               </button>
             </div>
 
+            {/* Question Media Prompt (Audio or Video) */}
+            {currentQ.questionFormat === 'AUDIO' && currentQ.mediaRef && (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center space-x-3">
+                <Volume2 className="w-5 h-5 text-indigo-600 shrink-0" />
+                <audio controls src={resolveFileUrl(currentQ.mediaRef)} className="w-full" />
+              </div>
+            )}
+            {currentQ.questionFormat === 'VIDEO' && currentQ.mediaRef && (
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <SafeVideo
+                  bunnyVideoId={currentQ.mediaRef}
+                  src={resolveFileUrl(currentQ.mediaRef)}
+                  className="w-full aspect-video"
+                />
+              </div>
+            )}
+
             {/* Question Text */}
             <div className="text-base sm:text-lg font-medium text-slate-900 leading-relaxed">
               {currentQ.questionText}
@@ -710,8 +728,11 @@ export default function CompetitionMockTestsPage() {
                   </div>
                 )}
                 <VoiceAnswerRecorder
+                  key={currentQ.id}
                   questionId={currentQ.id}
                   maxDurationSeconds={currentQ.maxDurationSeconds || 120}
+                  savedVoiceFileId={currentAns?.voiceFileId}
+                  savedDurationSec={currentAns?.voiceDurationSec}
                   existingVoiceFileId={currentAns?.voiceFileId}
                   onUploadComplete={(fileId, duration) => handleVoiceUploadComplete(currentQ.id, fileId, duration)}
                 />
@@ -998,12 +1019,12 @@ export default function CompetitionMockTestsPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-400">Total Marks:</span>
-                      <span className="font-semibold text-slate-800">{test.totalMarks || 50} Marks</span>
+                      <span className="font-semibold text-slate-800">{test.totalMarks ?? 0} Marks</span>
                     </div>
                     <div className="flex items-center justify-between text-indigo-700 bg-indigo-50/70 px-2.5 py-1 rounded-xl">
-                      <span className="font-bold">Questions:</span>
+                      <span className="font-bold">Total Questions:</span>
                       <span className="font-black font-mono">
-                        {test.questionCount ?? 0} / {test.targetQuestions ?? test.totalMarks ?? 20}
+                        {test.questionCount ?? 0}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">

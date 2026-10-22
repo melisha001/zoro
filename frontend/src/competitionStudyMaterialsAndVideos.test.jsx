@@ -65,7 +65,7 @@ describe('Competition Syllabus & Guidance Videos (Phase 6)', () => {
 
     // Check Syllabus Section
     expect(await screen.findByText('2026 Official English Olympiad Syllabus')).toBeDefined();
-    expect(screen.getByText('Download Syllabus PDF')).toBeDefined();
+    expect(screen.getByText('View Syllabus PDF')).toBeDefined();
     expect(screen.getByText(/Olympiad_Syllabus_2026\.pdf/)).toBeDefined();
 
     // Check Guidance Videos Section
@@ -111,8 +111,8 @@ describe('Competition Syllabus & Guidance Videos (Phase 6)', () => {
     expect(await screen.findByText('Advanced Vocabulary & Idioms Handout')).toBeDefined();
     expect(screen.getByText('Phonetics & Intonation Guide')).toBeDefined();
 
-    const downloadLinks = screen.getAllByText('Download');
-    expect(downloadLinks.length).toBe(2);
+    const viewLinks = screen.getAllByText('View Material');
+    expect(viewLinks.length).toBe(2);
 
     unmount();
 

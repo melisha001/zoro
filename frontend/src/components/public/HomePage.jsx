@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Award, Users, Globe, CheckCircle, ArrowRight, Sparkles, BookOpen } from 'lucide-react';
+import { Award, Users, Globe, CheckCircle, ArrowRight, Sparkles, BookOpen, Trophy } from 'lucide-react';
 import { getCourses } from '../../api/courseApi';
 import { getCompetitions } from '../../api/competitionApi';
 import { getWebsiteSettings, getHeroImages } from '../../api/websiteSettingsApi';
@@ -8,11 +8,14 @@ import { formatDate } from '../../utils/dateFormatter';
 import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 import SafeImage from '../common/SafeImage';
 import HeroCarousel from './HeroCarousel';
+import CompetitionRegisterModal from './CompetitionRegisterModal';
 
 export default function HomePage({ setActiveScreen, onOpenEnquire }) {
   const { settings: globalSettings } = useWebsiteSettings();
   const [courses, setCourses] = useState([]);
   const [featuredComp, setFeaturedComp] = useState(null);
+  const [activeCompetitions, setActiveCompetitions] = useState([]);
+  const [registeringComp, setRegisteringComp] = useState(null);
   const [siteSettings, setSiteSettings] = useState(null);
   const [heroImages, setHeroImages] = useState([]);
 
@@ -38,7 +41,11 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
 
         if (compRes.status === 'fulfilled' && compRes.value?.success && Array.isArray(compRes.value?.data)) {
           // Filter ONLY Active competitions for Public Landing Page (Requirement #7 & #8)
-          const activeComps = compRes.value.data.filter(c => (c.status || '').toLowerCase() === 'active');
+          const activeComps = compRes.value.data.filter(c => {
+            const st = (c.status || '').toLowerCase();
+            return st === 'active' || st === 'registration open';
+          });
+          setActiveCompetitions(activeComps);
           if (activeComps.length > 0) {
             setFeaturedComp(activeComps[0]); // Dynamically select FIRST active competition
           } else {
@@ -290,17 +297,68 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
                   )}
                 </div>
               </div>
-              <button
-                onClick={() => setActiveScreen('public-competition')}
-                className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-8 py-4 rounded-xl text-base shadow-lg transition-transform transform hover:scale-105 shrink-0 cursor-pointer"
-              >
-                Explore Competition
-              </button>
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setRegisteringComp(featuredComp)}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-4 rounded-xl text-base shadow-lg transition-transform transform hover:scale-105 cursor-pointer flex items-center space-x-2"
+                >
+                  <Trophy className="w-5 h-5 text-slate-950" />
+                  <span>Register Now</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen('public-competition')}
+                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold px-6 py-4 rounded-xl text-base shadow-md transition-transform transform hover:scale-105 cursor-pointer"
+                >
+                  Explore Details
+                </button>
+              </div>
               </div>
             </div>
           </section>
         );
       })()}
+
+      {/* ALL ACTIVE COMPETITIONS LIST */}
+      {activeCompetitions.length > 1 && (
+        <section className="py-12 bg-slate-100 border-t border-slate-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-slate-900">All Active Championships & Competitions</h3>
+                <p className="text-xs text-slate-500 font-semibold">Register directly for any ongoing academy championship</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {activeCompetitions.map(comp => (
+                <div key={comp.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <span className="bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase">
+                      {comp.category || 'National Competition'}
+                    </span>
+                    <h4 className="text-base font-black text-slate-900">{comp.title || comp.name}</h4>
+                    {comp.description && (
+                      <p className="text-xs text-slate-500 line-clamp-2">{comp.description}</p>
+                    )}
+                    <div className="text-xs font-semibold text-slate-700 pt-1">
+                      Fee: <strong className="text-emerald-700">{Number(comp.registrationFee || 0) > 0 ? `₹${Number(comp.registrationFee).toLocaleString('en-IN')}` : 'FREE'}</strong>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRegisteringComp(comp)}
+                    className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition cursor-pointer flex items-center justify-center space-x-1.5"
+                  >
+                    <Trophy className="w-4 h-4 text-white" />
+                    <span>Register Now</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ABOUT SECTION (Database-backed from website settings) */}
       <section id="about" className="py-20 bg-slate-50 border-t border-slate-200">
@@ -413,6 +471,14 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
           </div>
         </div>
       </section>
+      {registeringComp && (
+        <CompetitionRegisterModal
+          competition={registeringComp}
+          isOpen={Boolean(registeringComp)}
+          onClose={() => setRegisteringComp(null)}
+          currentUser={null}
+        />
+      )}
     </div>
   );
 }

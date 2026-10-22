@@ -54,6 +54,12 @@ public class RazorpayPaymentService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
+    @Autowired(required = false)
+    private com.zoroacademy.security.AdminPasswordCryptoService adminPasswordCryptoService;
+
+    @Autowired(required = false)
+    private EmailService emailService;
+
     @Value("${razorpay.key-id:}")
     private String keyId;
 
@@ -95,6 +101,67 @@ public class RazorpayPaymentService {
             ObjectMapper objectMapper
     ) {
         this(competitionRepository, registrationRepository, null, null, null, restTemplate, objectMapper);
+    }
+
+    public void setAdminPasswordCryptoService(com.zoroacademy.security.AdminPasswordCryptoService adminPasswordCryptoService) {
+        this.adminPasswordCryptoService = adminPasswordCryptoService;
+    }
+
+    public void setEmailService(EmailService emailService) {
+        this.emailService = emailService;
+    }
+
+    public static String generateSecureRandomPassword() {
+        final String upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        final String lower = "abcdefghijkmnpqrstuvwxyz";
+        final String digits = "23456789";
+        final String symbols = "!@#$%&*";
+        final String all = upper + lower + digits + symbols;
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        StringBuilder sb = new StringBuilder();
+        sb.append(upper.charAt(random.nextInt(upper.length())));
+        sb.append(lower.charAt(random.nextInt(lower.length())));
+        sb.append(digits.charAt(random.nextInt(digits.length())));
+        sb.append(symbols.charAt(random.nextInt(symbols.length())));
+        for (int i = 4; i < 10; i++) {
+            sb.append(all.charAt(random.nextInt(all.length())));
+        }
+        char[] chars = sb.toString().toCharArray();
+        for (int i = chars.length - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            char temp = chars[i];
+            chars[i] = chars[j];
+            chars[j] = temp;
+        }
+        return new String(chars);
+    }
+
+    private void notifyRegistrationConfirmed(CompetitionRegistration reg, Competition comp) {
+        if (reg == null || emailService == null || reg.getStudentEmail() == null || reg.getStudentEmail().isBlank()) {
+            return;
+        }
+        try {
+            String compTitle = comp != null && comp.getTitle() != null ? comp.getTitle() : "Annual Competition";
+            User user = null;
+            if (userRepository != null && reg.getStudentId() != null) {
+                user = userRepository.findById(reg.getStudentId()).orElse(null);
+            }
+            if (user == null && userRepository != null && reg.getStudentEmail() != null) {
+                user = userRepository.findByEmailIgnoreCase(reg.getStudentEmail()).orElse(null);
+            }
+
+            boolean isNewCandidate = user != null && "COMPETITION".equalsIgnoreCase(user.getOrigin());
+            if (isNewCandidate && reg.getEncryptedPassword() != null) {
+                String plainPassword = (adminPasswordCryptoService != null)
+                        ? adminPasswordCryptoService.decrypt(reg.getEncryptedPassword())
+                        : reg.getEncryptedPassword();
+                emailService.sendCompetitionCredentials(reg.getStudentEmail(), reg.getStudentName(), plainPassword, compTitle);
+            } else {
+                emailService.sendCompetitionRegistrationConfirmation(reg);
+            }
+        } catch (Exception e) {
+            log.error("Failed to send competition confirmation / credentials email to {}: {}", reg.getStudentEmail(), e.getMessage());
+        }
     }
 
     public void checkRateLimit(String clientIp) {
@@ -184,37 +251,44 @@ public class RazorpayPaymentService {
         reg.setSchool(request.getSchool());
         reg.setCity(request.getCity());
 
-        // Account linkage / creation (Phase 2)
+        // Account linkage / creation (Part A)
         if (userRepository != null) {
             Optional<User> existingUserOpt = userRepository.findByEmailIgnoreCase(cleanEmail);
             if (existingUserOpt.isPresent()) {
+                // CASE 1: Email matches an existing student (course student)
                 User existingUser = existingUserOpt.get();
-                Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-                boolean isLoggedInAsUser = auth != null && auth.isAuthenticated()
-                        && !"anonymousUser".equals(auth.getPrincipal())
-                        && (cleanEmail.equalsIgnoreCase(auth.getName())
-                            || auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")));
-
-                if (!isLoggedInAsUser) {
-                    throw new BadRequestException("You already have an account. Please log in to register");
-                }
                 reg.setStudentId(existingUser.getId());
-            } else {
-                // New email: require password (min 8 chars)
-                String pwd = request.getPassword();
-                if (pwd == null || pwd.trim().length() < 8) {
-                    throw new BadRequestException("Password is required and must be at least 8 characters");
+                if (reg.getStudentName() == null || reg.getStudentName().isBlank()) {
+                    reg.setStudentName(existingUser.getName());
                 }
+                if (reg.getStudentPhone() == null || reg.getStudentPhone().isBlank()) {
+                    reg.setStudentPhone(existingUser.getPhone());
+                }
+                if (existingUser.getAdminVisiblePassword() != null) {
+                    reg.setEncryptedPassword(existingUser.getAdminVisiblePassword());
+                }
+                // Do NOT generate a new password and do NOT overwrite the existing one
+            } else {
+                // CASE 2: New competition-only candidate
+                String plainPassword = (request.getPassword() != null && request.getPassword().trim().length() >= 8)
+                        ? request.getPassword().trim()
+                        : generateSecureRandomPassword();
+
+                String encryptedPassword = (adminPasswordCryptoService != null)
+                        ? adminPasswordCryptoService.encrypt(plainPassword)
+                        : plainPassword;
+
                 User newUser = new User();
                 newUser.setId("usr_" + UUID.randomUUID());
                 newUser.setEmail(cleanEmail);
                 newUser.setName(request.getStudentName());
                 newUser.setPhone(sanitizedPhone);
                 if (passwordEncoder != null) {
-                    newUser.setPassword(passwordEncoder.encode(pwd.trim()));
+                    newUser.setPassword(passwordEncoder.encode(plainPassword));
                 } else {
-                    newUser.setPassword(pwd.trim());
+                    newUser.setPassword(plainPassword);
                 }
+                newUser.setAdminVisiblePassword(encryptedPassword);
                 newUser.setRole("STUDENT");
                 newUser.setOrigin("COMPETITION");
                 newUser.setStatus("Active");
@@ -222,6 +296,7 @@ public class RazorpayPaymentService {
                 userRepository.save(newUser);
 
                 reg.setStudentId(newUser.getId());
+                reg.setEncryptedPassword(encryptedPassword);
             }
         } else if (request.getStudentId() != null) {
             reg.setStudentId(request.getStudentId());
@@ -244,6 +319,8 @@ public class RazorpayPaymentService {
                     log.error("Failed to assign student to set for free competition: {}", e.getMessage());
                 }
             }
+
+            notifyRegistrationConfirmed(reg, comp);
 
             return RazorpayOrderResponse.builder()
                     .orderId(null)
@@ -367,6 +444,7 @@ public class RazorpayPaymentService {
                 log.error("Failed to assign student to set in verifyPayment: {}", e.getMessage());
             }
         }
+        notifyRegistrationConfirmed(reg, reg.getCompetition());
         return reg;
     }
 
@@ -415,6 +493,7 @@ public class RazorpayPaymentService {
                                     log.error("Failed to assign student to set in handleWebhook: {}", e.getMessage());
                                 }
                             }
+                            notifyRegistrationConfirmed(reg, reg.getCompetition());
                             log.info("Webhook successfully marked registration {} as PAID", reg.getId());
                         }
                     });

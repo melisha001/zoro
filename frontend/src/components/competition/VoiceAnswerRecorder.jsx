@@ -26,12 +26,36 @@ export default function VoiceAnswerRecorder({
   const audioPlayerRef = useRef(null);
 
   useEffect(() => {
+    // When questionId changes or savedVoiceFileId updates, cleanly reset recorder state
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {}
+    }
+    audioChunksRef.current = [];
+    setIsPlaying(false);
+    setUploadProgress(0);
+    setMicError(null);
+
     if (savedVoiceFileId) {
       setRecordingState('uploaded');
       setUploadedFileId(savedVoiceFileId);
-      if (savedDurationSec) setRecordDuration(savedDurationSec);
+      setRecordDuration(savedDurationSec || 0);
+      setAudioUrl(null);
+    } else {
+      setRecordingState('idle');
+      setUploadedFileId(null);
+      setRecordDuration(0);
+      setAudioUrl(null);
     }
-  }, [savedVoiceFileId, savedDurationSec]);
+  }, [questionId, savedVoiceFileId, savedDurationSec]);
 
   useEffect(() => {
     return () => {

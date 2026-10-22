@@ -98,6 +98,21 @@ public class CompetitionController {
         return ApiResponse.ok(true, "Registration deleted");
     }
 
+    @GetMapping("/registrations/{regId}/credential")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<Map<String, Object>> getRegistrationCredential(@PathVariable String regId) {
+        return ApiResponse.ok(competitionService.getRegistrationCredential(regId));
+    }
+
+    @PutMapping("/registrations/{regId}/reset-password")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<Map<String, Object>> resetRegistrationPassword(
+            @PathVariable String regId,
+            @RequestBody(required = false) Map<String, String> payload) {
+        String newPassword = (payload != null) ? payload.get("password") : null;
+        return ApiResponse.ok(competitionService.resetRegistrationPassword(regId, newPassword), "Password reset successfully");
+    }
+
     // --- Sets & Trainers Management (Phase 5) ---
     @GetMapping("/{id}/sets")
     public ApiResponse<List<Map<String, Object>>> getSets(@PathVariable String id) {
@@ -228,6 +243,12 @@ public class CompetitionController {
     @PostMapping("/assessments/{asmtId}/publish")
     public ApiResponse<CompetitionAssessment> publishAssessment(@PathVariable String asmtId) {
         return ApiResponse.ok(competitionService.publishAssessment(asmtId), "Assessment published successfully");
+    }
+
+    @PostMapping("/assessments/{asmtId}/republish")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<CompetitionAssessment> republishAssessment(@PathVariable String asmtId) {
+        return ApiResponse.ok(competitionService.republishAssessment(asmtId), "Assessment republished successfully");
     }
 
     // --- Questions Builder (Phase 7) ---

@@ -69,6 +69,8 @@ public class FileController {
         if (lower.endsWith(".mp3")) return "audio/mpeg";
         if (lower.endsWith(".wav")) return "audio/wav";
         if (lower.endsWith(".ogg")) return "audio/ogg";
+        if (lower.endsWith(".opus")) return "audio/ogg; codecs=opus";
+        if (lower.endsWith(".m4a")) return "audio/mp4";
         if (lower.endsWith(".txt")) return "text/plain";
         if (lower.endsWith(".csv")) return "text/csv";
         if (lower.endsWith(".json")) return "application/json";
@@ -250,7 +252,18 @@ public class FileController {
         }
 
         // Security check for non-public files
-        if (!Boolean.TRUE.equals(storedFile.getIsPublic())) {
+        String fileCat = storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "";
+        boolean isCategoryPublic = "question-media".equals(fileCat)
+                || "audio-prompt".equals(fileCat)
+                || "public".equals(fileCat)
+                || "public-document".equals(fileCat)
+                || "competition".equals(fileCat)
+                || "avatar".equals(fileCat)
+                || "thumbnail".equals(fileCat)
+                || "banner".equals(fileCat)
+                || "hero".equals(fileCat);
+
+        if (!Boolean.TRUE.equals(storedFile.getIsPublic()) && !isCategoryPublic) {
             boolean hasValidToken = token != null && expires != null && fileStorageService.validateInternalToken(id, token, expires);
 
             if (!hasValidToken) {

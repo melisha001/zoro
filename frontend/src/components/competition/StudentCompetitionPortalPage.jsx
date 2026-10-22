@@ -138,11 +138,6 @@ export default function StudentCompetitionPortalPage() {
             <span className="text-slate-500 block text-[11px]">Registered Email</span>
             <span className="text-slate-800 font-bold">{reg.studentEmail || 'N/A'}</span>
           </div>
-
-          <div>
-            <span className="text-slate-500 block text-[11px]">Registration ID</span>
-            <span className="font-mono text-[11px] text-slate-600 font-bold">{reg.id}</span>
-          </div>
         </div>
       )}
 

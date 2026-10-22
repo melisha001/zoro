@@ -12,7 +12,7 @@ import {
   Play,
   Eye
 } from 'lucide-react';
-import { unifiedUpload } from '../../api/fileApi';
+import { unifiedUpload, resolveFileUrl } from '../../api/fileApi';
 import SafeVideo from './SafeVideo';
 
 /**
@@ -355,11 +355,16 @@ export default function UnifiedUploader({
 
               {/* Inline Audio Player for Audio Uploads */}
               {item.status === 'completed' &&
-                item.result?.url &&
-                (item.result.contentType?.startsWith('audio/') ||
-                  item.name?.match(/\.(mp3|wav|ogg|m4a|aac)$/i)) && (
+                (item.result?.url || item.result?.id) &&
+                (item.result?.contentType?.startsWith('audio/') ||
+                  item.type?.startsWith('audio/') ||
+                  item.name?.match(/\.(mp3|wav|ogg|m4a|opus|aac)$/i)) && (
                   <div className="pt-1">
-                    <audio src={item.result.url} controls className="w-full h-8" />
+                    <audio
+                      src={item.result?.url ? resolveFileUrl(item.result.url) : resolveFileUrl(item.result.id)}
+                      controls
+                      className="w-full h-8"
+                    />
                   </div>
                 )}
             </div>
@@ -369,44 +374,60 @@ export default function UnifiedUploader({
 
       {/* Pre-existing initial value display if provided and no active upload items */}
       {uploadItems.length === 0 && initialValue && (
-        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            {getIconForType(initialValue.contentType, initialValue.name || initialValue.title)}
-            <div className="min-w-0">
-              <p className="font-bold text-slate-800 truncate text-[11px]">
-                {initialValue.name || initialValue.title || 'Uploaded Media'}
-              </p>
-              <p className="text-[10px] text-slate-400">
-                {initialValue.bunnyVideoId
-                  ? `Bunny Stream: ${initialValue.bunnyVideoId}`
-                  : initialValue.id
-                  ? `Storage ID: ${initialValue.id}`
-                  : 'Attached'}
-              </p>
+        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              {getIconForType(initialValue.contentType || (initialValue.isAudio ? 'audio/mpeg' : ''), initialValue.name || initialValue.title)}
+              <div className="min-w-0">
+                <p className="font-bold text-slate-800 truncate text-[11px]">
+                  {initialValue.name || initialValue.title || 'Uploaded Media'}
+                </p>
+                <p className="text-[10px] text-slate-400">
+                  {initialValue.bunnyVideoId
+                    ? `Bunny Stream: ${initialValue.bunnyVideoId}`
+                    : initialValue.id
+                    ? `Storage ID: ${initialValue.id}`
+                    : 'Attached'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {(initialValue.bunnyVideoId || initialValue.embedUrl) && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewItem(initialValue)}
+                  className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Play className="w-3 h-3 fill-indigo-700" />
+                  <span>Preview</span>
+                </button>
+              )}
+              {onClear && (
+                <button
+                  type="button"
+                  onClick={onClear}
+                  className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
+                  title="Remove"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            {(initialValue.bunnyVideoId || initialValue.embedUrl) && (
-              <button
-                type="button"
-                onClick={() => setPreviewItem(initialValue)}
-                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <Play className="w-3 h-3 fill-indigo-700" />
-                <span>Preview</span>
-              </button>
-            )}
-            {onClear && (
-              <button
-                type="button"
-                onClick={onClear}
-                className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
-                title="Remove"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+
+          {/* Inline Audio Player for Pre-existing Audio Media */}
+          {(initialValue.isAudio ||
+            initialValue.contentType?.startsWith('audio/') ||
+            (initialValue.name && initialValue.name.match(/\.(mp3|wav|ogg|m4a|opus|aac)$/i)) ||
+            (initialValue.url && !initialValue.bunnyVideoId)) && (
+            <div className="pt-1">
+              <audio
+                controls
+                src={initialValue.url ? resolveFileUrl(initialValue.url) : resolveFileUrl(initialValue.id)}
+                className="w-full h-8"
+              />
+            </div>
+          )}
         </div>
       )}
 

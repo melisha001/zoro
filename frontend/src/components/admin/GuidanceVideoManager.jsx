@@ -321,25 +321,14 @@ export default function GuidanceVideoManager({ competitionId, competitionTitle =
 
       {/* SECTION 1: DYNAMIC PAIR UPLOADER (Caption + Video File pairs) */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h4 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-1.5">
-              <span>Add Guidance Videos</span>
-              <span className="text-[10px] text-slate-400 font-medium">(Caption + Video File Pairs)</span>
-            </h4>
-            <p className="text-[11px] text-slate-500">
-              Add any number of video entries. Enter a descriptive caption and pick an MP4, WebM, or MOV file for each.
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={isUploading}
-            onClick={handleAddDraftRow}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add More Video</span>
-          </button>
+        <div>
+          <h4 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-1.5">
+            <span>Add Guidance Videos</span>
+            <span className="text-[10px] text-slate-400 font-medium">(Caption + Video File Pairs)</span>
+          </h4>
+          <p className="text-[11px] text-slate-500">
+            Enter a descriptive caption and pick an MP4, WebM, or MOV file for the guidance video.
+          </p>
         </div>
 
         {/* Dynamic Rows */}

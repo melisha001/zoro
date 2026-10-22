@@ -73,6 +73,12 @@ public class CompetitionService {
     @Autowired(required = false)
     private com.zoroacademy.config.BunnyStreamProperties bunnyStreamProperties;
 
+    @Autowired(required = false)
+    private com.zoroacademy.security.AdminPasswordCryptoService adminPasswordCryptoService;
+
+    @Autowired(required = false)
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
     @Autowired
     public CompetitionService(
             CompetitionRepository competitionRepository,
@@ -528,6 +534,93 @@ public class CompetitionService {
         registrationRepository.deleteById(regId);
     }
 
+    @Transactional(readOnly = true)
+    public Map<String, Object> getRegistrationCredential(String regId) {
+        CompetitionRegistration reg = registrationRepository.findById(regId)
+                .orElseThrow(() -> new ResourceNotFoundException("Registration not found: " + regId));
+
+        String enc = reg.getEncryptedPassword();
+        if (enc == null || enc.isBlank()) {
+            if (reg.getStudentId() != null) {
+                Optional<User> uOpt = userRepository.findById(reg.getStudentId());
+                if (uOpt.isPresent() && uOpt.get().getAdminVisiblePassword() != null) {
+                    enc = uOpt.get().getAdminVisiblePassword();
+                }
+            }
+            if ((enc == null || enc.isBlank()) && reg.getStudentEmail() != null) {
+                Optional<User> uOpt = userRepository.findByEmailIgnoreCase(reg.getStudentEmail().trim());
+                if (uOpt.isPresent() && uOpt.get().getAdminVisiblePassword() != null) {
+                    enc = uOpt.get().getAdminVisiblePassword();
+                }
+            }
+        }
+
+        if (enc != null && !enc.isBlank() && adminPasswordCryptoService != null) {
+            try {
+                String plain = adminPasswordCryptoService.decrypt(enc);
+                if (plain != null && !plain.isBlank()) {
+                    Map<String, Object> res = new HashMap<>();
+                    res.put("hasPassword", true);
+                    res.put("password", plain);
+                    res.put("source", "STORED");
+                    return res;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to decrypt password for registration {}: {}", regId, e.getMessage());
+            }
+        }
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("hasPassword", false);
+        res.put("password", "");
+        res.put("source", "LEGACY_HASH");
+        res.put("message", "Set by admin");
+        return res;
+    }
+
+    @Transactional
+    public Map<String, Object> resetRegistrationPassword(String regId, String optionalNewPassword) {
+        CompetitionRegistration reg = registrationRepository.findById(regId)
+                .orElseThrow(() -> new ResourceNotFoundException("Registration not found: " + regId));
+
+        String newPlain = (optionalNewPassword != null && optionalNewPassword.trim().length() >= 8)
+                ? optionalNewPassword.trim()
+                : RazorpayPaymentService.generateSecureRandomPassword();
+
+        String enc = (adminPasswordCryptoService != null)
+                ? adminPasswordCryptoService.encrypt(newPlain)
+                : newPlain;
+
+        reg.setEncryptedPassword(enc);
+        registrationRepository.save(reg);
+
+        // Update User account if found
+        Optional<User> userOpt = Optional.empty();
+        if (reg.getStudentId() != null) {
+            userOpt = userRepository.findById(reg.getStudentId());
+        }
+        if (userOpt.isEmpty() && reg.getStudentEmail() != null) {
+            userOpt = userRepository.findByEmailIgnoreCase(reg.getStudentEmail().trim());
+        }
+
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            if (passwordEncoder != null) {
+                user.setPassword(passwordEncoder.encode(newPlain));
+            } else {
+                user.setPassword(newPlain);
+            }
+            user.setAdminVisiblePassword(enc);
+            userRepository.save(user);
+        }
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("success", true);
+        res.put("password", newPlain);
+        res.put("message", "Password reset successfully");
+        return res;
+    }
+
     // --- Sets & Trainers Management (Phase 5) ---
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getSetsWithDetails(String compId) {
@@ -929,17 +1022,25 @@ public class CompetitionService {
     public List<CompetitionAssessment> getAssessments(String compId) {
         List<CompetitionAssessment> list = assessmentRepository.findByCompetitionIdOrderBySequenceNoAsc(compId);
         for (CompetitionAssessment a : list) {
-            long count = questionRepository.countByAssessmentId(a.getId());
-            a.setQuestionCount(count);
-            a.setTargetQuestions(a.getTotalMarks() != null && a.getTotalMarks() > 0 ? a.getTotalMarks() : 20);
+            List<AssessmentQuestion> qs = questionRepository.findByAssessmentIdOrderBySortOrderAsc(a.getId());
+            a.setQuestionCount((long) qs.size());
+            int sumMarks = qs.stream().mapToInt(q -> q.getMarks() != null ? q.getMarks() : 1).sum();
+            a.setTotalMarks(sumMarks);
+            a.setTargetQuestions(qs.size());
         }
         return list;
     }
 
     @Transactional(readOnly = true)
     public CompetitionAssessment getAssessmentById(String asmtId) {
-        return assessmentRepository.findById(asmtId)
+        CompetitionAssessment asmt = assessmentRepository.findById(asmtId)
                 .orElseThrow(() -> new ResourceNotFoundException("Assessment not found: " + asmtId));
+        List<AssessmentQuestion> qs = questionRepository.findByAssessmentIdOrderBySortOrderAsc(asmt.getId());
+        asmt.setQuestionCount((long) qs.size());
+        int sumMarks = qs.stream().mapToInt(q -> q.getMarks() != null ? q.getMarks() : 1).sum();
+        asmt.setTotalMarks(sumMarks);
+        asmt.setTargetQuestions(qs.size());
+        return asmt;
     }
 
     @Transactional
@@ -1016,7 +1117,49 @@ public class CompetitionService {
         }
 
         asmt.setStatus("PUBLISHED");
-        return assessmentRepository.save(asmt);
+        CompetitionAssessment saved = assessmentRepository.save(asmt);
+        saved.setQuestionCount((long) questions.size());
+        saved.setTargetQuestions(questions.size());
+        return saved;
+    }
+
+    /**
+     * Republishes an assessment with an incremented publishVersion, allowing students
+     * a fresh attempt while preserving previous attempts and scoring history.
+     */
+    @Transactional
+    public CompetitionAssessment republishAssessment(String asmtId) {
+        CompetitionAssessment asmt = getAssessmentById(asmtId);
+        List<AssessmentQuestion> questions = questionRepository.findByAssessmentIdOrderBySortOrderAsc(asmtId);
+        if (questions.isEmpty()) {
+            throw new BadRequestException("Assessment must have at least one question before republishing");
+        }
+
+        int computedTotalMarks = 0;
+        for (AssessmentQuestion q : questions) {
+            computedTotalMarks += (q.getMarks() != null ? q.getMarks() : 1);
+            if ("MCQ_OPTIONS".equalsIgnoreCase(q.getAnswerFormat())) {
+                List<QuestionOption> options = questionOptionRepository.findByQuestionIdOrderBySortOrderAsc(q.getId());
+                if (options.size() < 2) {
+                    throw new BadRequestException("Every MCQ question must have at least 2 options: " + q.getQuestionText());
+                }
+                long correctCount = options.stream().filter(o -> Boolean.TRUE.equals(o.getIsCorrect())).count();
+                if (correctCount != 1) {
+                    throw new BadRequestException("Every MCQ question must have exactly one correct option: " + q.getQuestionText());
+                }
+            }
+        }
+        asmt.setTotalMarks(computedTotalMarks);
+
+        int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
+        asmt.setPublishVersion(currentVer + 1);
+        asmt.setRepublishedAt(OffsetDateTime.now(ZoneId.of("Asia/Kolkata")));
+        asmt.setStatus("PUBLISHED");
+
+        CompetitionAssessment saved = assessmentRepository.save(asmt);
+        saved.setQuestionCount((long) questions.size());
+        saved.setTargetQuestions(questions.size());
+        return saved;
     }
 
     // --- Questions Builder (Phase 7) ---
@@ -1058,17 +1201,21 @@ public class CompetitionService {
         String qId = (String) payload.get("id");
         boolean isNew = (qId == null || qId.isBlank() || !questionRepository.existsById(qId));
 
-        // Check attempt lock: once attempts exist, structural modification is blocked
-        if (assessmentAttemptRepository != null && assessmentAttemptRepository.countByAssessmentId(asmtId) > 0) {
+        // Check attempt lock: once attempts exist for current version, structural modification is blocked
+        int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
+        long attemptCount = (assessmentAttemptRepository != null)
+                ? assessmentAttemptRepository.countByAssessmentIdAndPublishVersion(asmtId, currentVer)
+                : 0;
+        if (attemptCount > 0) {
             if (isNew) {
-                throw new BadRequestException("Cannot add new questions to an assessment that already has student attempts");
+                throw new BadRequestException("Cannot add new questions to an assessment version that already has student attempts. Please republish to create a new version.");
             }
             AssessmentQuestion existing = questionRepository.findById(qId).orElseThrow();
             if (payload.containsKey("marks") && ((Number) payload.get("marks")).intValue() != existing.getMarks()) {
-                throw new BadRequestException("Cannot modify marks of a question once attempts exist");
+                throw new BadRequestException("Cannot modify marks of a question once attempts exist for this version");
             }
             if (payload.containsKey("options")) {
-                throw new BadRequestException("Cannot modify question options once attempts exist");
+                throw new BadRequestException("Cannot modify question options once attempts exist for this version");
             }
         }
 
@@ -1142,6 +1289,12 @@ public class CompetitionService {
             }
         }
 
+        // Auto-update parent assessment totalMarks to sum of question marks
+        List<AssessmentQuestion> allQs = questionRepository.findByAssessmentIdOrderBySortOrderAsc(asmtId);
+        int sumMarks = allQs.stream().mapToInt(item -> item.getMarks() != null ? item.getMarks() : 1).sum();
+        asmt.setTotalMarks(sumMarks);
+        assessmentRepository.save(asmt);
+
         final String finalQId = q.getId();
         return getAssessmentQuestions(asmtId).stream().filter(m -> finalQId.equals(m.get("id"))).findFirst().orElse(null);
     }
@@ -1150,10 +1303,19 @@ public class CompetitionService {
     public void deleteQuestion(String questionId) {
         AssessmentQuestion q = questionRepository.findById(questionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Question not found: " + questionId));
-        if (assessmentAttemptRepository != null && assessmentAttemptRepository.countByAssessmentId(q.getAssessmentId()) > 0) {
-            throw new BadRequestException("Cannot delete question from an assessment that already has student attempts");
+        String asmtId = q.getAssessmentId();
+        CompetitionAssessment asmt = assessmentRepository.findById(asmtId).orElse(null);
+        int currentVer = (asmt != null && asmt.getPublishVersion() != null) ? asmt.getPublishVersion() : 1;
+        if (assessmentAttemptRepository != null && assessmentAttemptRepository.countByAssessmentIdAndPublishVersion(asmtId, currentVer) > 0) {
+            throw new BadRequestException("Cannot delete question from an assessment version that already has student attempts");
         }
         questionRepository.delete(q);
+        if (asmt != null) {
+            List<AssessmentQuestion> allQs = questionRepository.findByAssessmentIdOrderBySortOrderAsc(asmtId);
+            int sumMarks = allQs.stream().mapToInt(item -> item.getMarks() != null ? item.getMarks() : 1).sum();
+            asmt.setTotalMarks(sumMarks);
+            assessmentRepository.save(asmt);
+        }
     }
 
     // --- Student Competition Portal Context ---
@@ -1395,19 +1557,24 @@ public class CompetitionService {
             item.put("type", a.getType());
             item.put("sequenceNo", a.getSequenceNo());
             item.put("title", a.getTitle());
-            item.put("durationMinutes", a.getDurationMinutes());
-            item.put("totalMarks", a.getTotalMarks());
+            item.put("durationMinutes", null); // Test Series has no duration limit
             item.put("status", a.getStatus()); // DRAFT or PUBLISHED
 
+            List<AssessmentQuestion> qs = questionRepository.findByAssessmentIdOrderBySortOrderAsc(a.getId());
+            int dynMarks = qs.stream().mapToInt(q -> q.getMarks() != null ? q.getMarks() : 1).sum();
+            item.put("totalMarks", dynMarks);
+            item.put("questionCount", (long) qs.size());
+            item.put("targetQuestions", qs.size());
+
+            int currentVer = a.getPublishVersion() != null ? a.getPublishVersion() : 1;
+            item.put("publishVersion", currentVer);
+
             boolean isPublished = "PUBLISHED".equalsIgnoreCase(a.getStatus());
-            long questionCount = questionRepository.countByAssessmentId(a.getId());
-            item.put("questionCount", questionCount);
-            item.put("targetQuestions", a.getTotalMarks() != null && a.getTotalMarks() > 0 ? a.getTotalMarks() : 20);
 
             if (!isPublished) {
                 item.put("attemptStatus", "UNPUBLISHED");
             } else if (regId != null && assessmentAttemptRepository != null) {
-                Optional<AssessmentAttempt> attOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationId(a.getId(), regId);
+                Optional<AssessmentAttempt> attOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(a.getId(), regId, currentVer);
                 if (attOpt.isEmpty()) {
                     item.put("attemptStatus", "NOT_STARTED");
                 } else {
@@ -1475,15 +1642,20 @@ public class CompetitionService {
             item.put("sequenceNo", a.getSequenceNo());
             item.put("title", a.getTitle());
             item.put("durationMinutes", a.getDurationMinutes());
-            item.put("totalMarks", a.getTotalMarks());
             item.put("startAt", a.getStartAt());
             item.put("endAt", a.getEndAt());
             item.put("status", a.getStatus()); // DRAFT or PUBLISHED
 
+            List<AssessmentQuestion> qs = questionRepository.findByAssessmentIdOrderBySortOrderAsc(a.getId());
+            int dynMarks = qs.stream().mapToInt(q -> q.getMarks() != null ? q.getMarks() : 1).sum();
+            item.put("totalMarks", dynMarks);
+            item.put("questionCount", (long) qs.size());
+            item.put("targetQuestions", qs.size());
+
+            int currentVer = a.getPublishVersion() != null ? a.getPublishVersion() : 1;
+            item.put("publishVersion", currentVer);
+
             boolean isPublished = "PUBLISHED".equalsIgnoreCase(a.getStatus());
-            long questionCount = questionRepository.countByAssessmentId(a.getId());
-            item.put("questionCount", questionCount);
-            item.put("targetQuestions", a.getTotalMarks() != null && a.getTotalMarks() > 0 ? a.getTotalMarks() : 20);
 
             // Determine Window Status & Attempt Status
             String windowStatus = "UPCOMING";
@@ -1510,7 +1682,7 @@ public class CompetitionService {
             if (!isPublished) {
                 item.put("attemptStatus", "UNPUBLISHED");
             } else if (regId != null && assessmentAttemptRepository != null) {
-                Optional<AssessmentAttempt> attOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationId(a.getId(), regId);
+                Optional<AssessmentAttempt> attOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(a.getId(), regId, currentVer);
                 if (attOpt.isEmpty()) {
                     if ("UPCOMING".equals(windowStatus)) {
                         item.put("attemptStatus", "UPCOMING_LOCKED");
@@ -1618,15 +1790,20 @@ public class CompetitionService {
         item.put("sequenceNo", finalAsmt.getSequenceNo());
         item.put("title", finalAsmt.getTitle());
         item.put("durationMinutes", finalAsmt.getDurationMinutes());
-        item.put("totalMarks", finalAsmt.getTotalMarks());
         item.put("startAt", finalAsmt.getStartAt());
         item.put("endAt", finalAsmt.getEndAt());
         item.put("status", finalAsmt.getStatus());
 
+        List<AssessmentQuestion> qs = questionRepository.findByAssessmentIdOrderBySortOrderAsc(finalAsmt.getId());
+        int dynMarks = qs.stream().mapToInt(q -> q.getMarks() != null ? q.getMarks() : 1).sum();
+        item.put("totalMarks", dynMarks);
+        item.put("questionCount", (long) qs.size());
+        item.put("targetQuestions", qs.size());
+
+        int currentVer = finalAsmt.getPublishVersion() != null ? finalAsmt.getPublishVersion() : 1;
+        item.put("publishVersion", currentVer);
+
         boolean isPublished = "PUBLISHED".equalsIgnoreCase(finalAsmt.getStatus());
-        long questionCount = questionRepository.countByAssessmentId(finalAsmt.getId());
-        item.put("questionCount", questionCount);
-        item.put("targetQuestions", finalAsmt.getTotalMarks() != null && finalAsmt.getTotalMarks() > 0 ? finalAsmt.getTotalMarks() : 20);
 
         // Window status
         String windowStatus = "UPCOMING";
@@ -1654,7 +1831,7 @@ public class CompetitionService {
         if (!isPublished) {
             item.put("attemptStatus", "UNPUBLISHED");
         } else if (regId != null && assessmentAttemptRepository != null) {
-            Optional<AssessmentAttempt> attOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationId(finalAsmt.getId(), regId);
+            Optional<AssessmentAttempt> attOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(finalAsmt.getId(), regId, currentVer);
             if (attOpt.isEmpty()) {
                 if ("UPCOMING".equals(windowStatus)) {
                     item.put("attemptStatus", "UPCOMING_LOCKED");
@@ -1715,9 +1892,10 @@ public class CompetitionService {
         }
 
         String regId = reg != null ? reg.getId() : "reg_admin_" + user.getId();
+        int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
         AssessmentAttempt attempt = null;
         if (assessmentAttemptRepository != null) {
-            Optional<AssessmentAttempt> existingOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationId(asmtId, regId);
+            Optional<AssessmentAttempt> existingOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(asmtId, regId, currentVer);
             if (existingOpt.isPresent()) {
                 attempt = existingOpt.get();
                 if ("COMPLETED".equalsIgnoreCase(attempt.getStatus()) || "EVALUATION_PENDING".equalsIgnoreCase(attempt.getStatus())) {
@@ -1728,6 +1906,7 @@ public class CompetitionService {
                 attempt.setId("att_" + UUID.randomUUID());
                 attempt.setAssessmentId(asmtId);
                 attempt.setRegistrationId(regId);
+                attempt.setPublishVersion(currentVer);
                 if (reg != null) {
                     Optional<CompetitionSetMember> memOpt = setMemberRepository.findByRegistrationId(reg.getId());
                     if (memOpt.isPresent()) {
@@ -1955,8 +2134,10 @@ public class CompetitionService {
         CompetitionAssessment asmt = getAssessmentById(asmtId);
         CompetitionRegistration reg = getStudentPaidRegistration(asmt.getCompetitionId(), user);
         String regId = reg != null ? reg.getId() : "reg_admin_" + user.getId();
+        int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
 
-        AssessmentAttempt attempt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationId(asmtId, regId)
+        AssessmentAttempt attempt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(asmtId, regId, currentVer)
+                .or(() -> assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(asmtId, regId))
                 .orElseThrow(() -> new BadRequestException("No active attempt found for this assessment"));
 
         if (!"IN_PROGRESS".equalsIgnoreCase(attempt.getStatus())) {
@@ -2028,8 +2209,10 @@ public class CompetitionService {
         CompetitionAssessment asmt = getAssessmentById(asmtId);
         CompetitionRegistration reg = getStudentPaidRegistration(asmt.getCompetitionId(), user);
         String regId = reg != null ? reg.getId() : "reg_admin_" + user.getId();
+        int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
 
-        AssessmentAttempt attempt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationId(asmtId, regId)
+        AssessmentAttempt attempt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(asmtId, regId, currentVer)
+                .or(() -> assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(asmtId, regId))
                 .orElseThrow(() -> new BadRequestException("No active attempt found for this assessment"));
 
         if (!"IN_PROGRESS".equalsIgnoreCase(attempt.getStatus())) {
@@ -2123,7 +2306,7 @@ public class CompetitionService {
             if (reg == null) {
                 throw new ForbiddenException("You are not registered for this competition");
             }
-            attempt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationId(asmtId, reg.getId())
+            attempt = assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(asmtId, reg.getId())
                     .orElseThrow(() -> new ResourceNotFoundException("No attempt found for this assessment"));
         } else if ("TRAINER".equals(role)) {
             List<AssessmentAttempt> attempts = assessmentAttemptRepository.findByAssessmentId(asmtId);
@@ -2896,7 +3079,7 @@ public class CompetitionService {
             row.submittedAt = null;
 
             if (finalAsmt != null && assessmentAttemptRepository != null) {
-                Optional<AssessmentAttempt> opt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationId(finalAsmt.getId(), reg.getId());
+                Optional<AssessmentAttempt> opt = assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(finalAsmt.getId(), reg.getId());
                 if (opt.isPresent()) {
                     AssessmentAttempt att = opt.get();
                     if (att.getTotalMarks() != null) {

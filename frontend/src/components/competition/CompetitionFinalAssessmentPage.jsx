@@ -16,6 +16,7 @@ import { resolveFileUrl } from '../../api/fileApi';
 import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import SkeletonCard from '../common/SkeletonCard';
+import SafeVideo from '../common/SafeVideo';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 
 const SET_STYLES = {
@@ -669,21 +670,25 @@ export default function CompetitionFinalAssessmentPage() {
                   </h3>
 
                   {/* Audio question media player */}
-                  {currentQuestion.audioUrl && (
+                  {(currentQuestion.audioUrl || (currentQuestion.questionFormat === 'AUDIO' && currentQuestion.mediaRef)) && (
                     <div className="mt-4 bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-center gap-3">
                       <Volume2 className="w-5 h-5 text-indigo-400 shrink-0" />
                       <div className="flex-1">
                         <p className="text-xs text-slate-400 mb-1 font-semibold">Audio Attachment — Listen carefully:</p>
-                        <audio controls src={resolveFileUrl(currentQuestion.audioUrl)} className="w-full h-8" />
+                        <audio controls src={resolveFileUrl(currentQuestion.audioUrl || currentQuestion.mediaRef)} className="w-full h-8" />
                       </div>
                     </div>
                   )}
 
                   {/* Video question media player */}
-                  {currentQuestion.videoUrl && (
+                  {(currentQuestion.videoUrl || (currentQuestion.questionFormat === 'VIDEO' && currentQuestion.mediaRef)) && (
                     <div className="mt-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
                       <p className="text-xs text-slate-400 mb-2 font-semibold">Video Attachment:</p>
-                      <video controls src={resolveFileUrl(currentQuestion.videoUrl)} className="w-full max-h-72 rounded-lg" />
+                      <SafeVideo
+                        bunnyVideoId={currentQuestion.mediaRef}
+                        src={resolveFileUrl(currentQuestion.videoUrl || currentQuestion.mediaRef)}
+                        className="w-full aspect-video rounded-lg"
+                      />
                     </div>
                   )}
                 </div>
@@ -700,8 +705,11 @@ export default function CompetitionFinalAssessmentPage() {
                         Record your spoken response clearly. You may re-record before submitting your final paper.
                       </p>
                       <VoiceAnswerRecorder
+                        key={currentQuestion.id}
+                        questionId={currentQuestion.id}
                         savedVoiceFileId={currentAnswer?.voiceFileId}
                         savedDurationSec={currentAnswer?.voiceDurationSec}
+                        onUploadComplete={(data) => handleVoiceAnswerComplete(currentQuestion.id, data?.voiceFileId || data?.id, data?.durationSec || data?.duration)}
                         onRecordingComplete={(fileId, dur) => handleVoiceAnswerComplete(currentQuestion.id, fileId, dur)}
                       />
                     </div>
@@ -1113,9 +1121,9 @@ export default function CompetitionFinalAssessmentPage() {
 
           <div className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
             <span>Duration: <strong className="text-slate-800">{assessmentData?.durationMinutes || 60} Minutes</strong></span>
-            <span>Total Marks: <strong className="text-slate-800">{assessmentData?.totalMarks || 100} Marks</strong></span>
+            <span>Total Marks: <strong className="text-slate-800">{assessmentData?.totalMarks ?? 0} Marks</strong></span>
             <span className="text-indigo-700 bg-indigo-50/70 px-2.5 py-1 rounded-xl">
-              Questions: <strong className="font-mono text-indigo-900">{assessmentData?.questionCount ?? 0} / {assessmentData?.targetQuestions ?? assessmentData?.totalMarks ?? 25}</strong>
+              Total Questions: <strong className="font-mono text-indigo-900">{assessmentData?.questionCount ?? 0}</strong>
             </span>
           </div>
         </div>

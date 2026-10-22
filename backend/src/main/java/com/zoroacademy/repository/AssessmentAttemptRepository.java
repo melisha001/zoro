@@ -10,7 +10,11 @@ import java.util.Optional;
 @Repository
 public interface AssessmentAttemptRepository extends JpaRepository<AssessmentAttempt, String> {
     Optional<AssessmentAttempt> findByAssessmentIdAndRegistrationId(String assessmentId, String registrationId);
+    Optional<AssessmentAttempt> findByAssessmentIdAndRegistrationIdAndPublishVersion(String assessmentId, String registrationId, Integer publishVersion);
+    List<AssessmentAttempt> findByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(String assessmentId, String registrationId);
+    Optional<AssessmentAttempt> findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(String assessmentId, String registrationId);
     List<AssessmentAttempt> findByRegistrationId(String registrationId);
     List<AssessmentAttempt> findByAssessmentId(String assessmentId);
     long countByAssessmentId(String assessmentId);
+    long countByAssessmentIdAndPublishVersion(String assessmentId, Integer publishVersion);
 }

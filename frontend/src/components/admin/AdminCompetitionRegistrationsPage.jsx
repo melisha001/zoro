@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Trophy, Search, Filter, Calendar, Users, DollarSign, 
-  CheckCircle2, XCircle, AlertCircle, RefreshCw, Layers, ShieldCheck, Download, Eye, X, Edit 
+  CheckCircle2, XCircle, AlertCircle, RefreshCw, Layers, ShieldCheck, Download, Eye, EyeOff, Copy, Check, Key, X, Edit 
 } from 'lucide-react';
-import { getCompetitionRegistrations, updateRegistrationStatus, updateCompetitionRegistration } from '../../api/competitionRegistrationApi';
+import { 
+  getCompetitionRegistrations, 
+  updateRegistrationStatus, 
+  updateCompetitionRegistration,
+  getRegistrationCredential,
+  resetRegistrationPassword
+} from '../../api/competitionRegistrationApi';
 import { getCompetitions } from '../../api/competitionApi';
 import ConfirmModal from '../common/ConfirmModal';
 
@@ -19,6 +25,12 @@ export default function AdminCompetitionRegistrationsPage() {
   const [viewingReg, setViewingReg] = useState(null);
   const [cancelModalReg, setCancelModalReg] = useState(null);
   const [editingPaymentReg, setEditingPaymentReg] = useState(null);
+  const [revealedPasswords, setRevealedPasswords] = useState({});
+  const [copiedId, setCopiedId] = useState(null);
+  const [resetModalReg, setResetModalReg] = useState(null);
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resettingLoading, setResettingLoading] = useState(false);
+  const [resetSuccessMsg, setResetSuccessMsg] = useState('');
   const [paymentForm, setPaymentForm] = useState({
     razorpayOrderId: '',
     razorpayPaymentId: '',
@@ -79,6 +91,89 @@ export default function AdminCompetitionRegistrationsPage() {
       loadData();
     } catch (err) {
       console.error('Failed to update registration payment details:', err);
+    }
+  };
+
+  const handleTogglePassword = async (regId) => {
+    const existing = revealedPasswords[regId];
+    if (existing && !existing.loading) {
+      setRevealedPasswords(prev => ({
+        ...prev,
+        [regId]: { ...existing, hidden: !existing.hidden }
+      }));
+      return;
+    }
+
+    setRevealedPasswords(prev => ({
+      ...prev,
+      [regId]: { loading: true }
+    }));
+
+    try {
+      const res = await getRegistrationCredential(regId);
+      if (res && res.success && res.data) {
+        setRevealedPasswords(prev => ({
+          ...prev,
+          [regId]: {
+            loading: false,
+            hidden: false,
+            password: res.data.password || '',
+            hasPassword: Boolean(res.data.hasPassword),
+            source: res.data.source || 'STORED',
+            message: res.data.message || ''
+          }
+        }));
+      } else {
+        setRevealedPasswords(prev => ({
+          ...prev,
+          [regId]: { loading: false, error: true, message: 'Failed to fetch' }
+        }));
+      }
+    } catch (e) {
+      setRevealedPasswords(prev => ({
+        ...prev,
+        [regId]: { loading: false, error: true, message: 'Error' }
+      }));
+    }
+  };
+
+  const handleCopyPassword = (regId, pwd) => {
+    if (!pwd) return;
+    navigator.clipboard.writeText(pwd);
+    setCopiedId(regId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleExecuteResetPassword = async (e) => {
+    e.preventDefault();
+    if (!resetModalReg) return;
+    setResettingLoading(true);
+    setResetSuccessMsg('');
+    try {
+      const res = await resetRegistrationPassword(resetModalReg.id, resetNewPassword.trim() || null);
+      if (res && res.success && res.data) {
+        const newPwd = res.data.password;
+        setRevealedPasswords(prev => ({
+          ...prev,
+          [resetModalReg.id]: {
+            loading: false,
+            hidden: false,
+            password: newPwd,
+            hasPassword: true,
+            source: 'STORED'
+          }
+        }));
+        setResetSuccessMsg(`Password successfully set to: ${newPwd}`);
+        setTimeout(() => {
+          setResetModalReg(null);
+          setResetNewPassword('');
+          setResetSuccessMsg('');
+        }, 2500);
+      }
+    } catch (err) {
+      console.error('Failed to reset password:', err);
+    } finally {
+      setResettingLoading(false);
     }
   };
 
@@ -236,6 +331,7 @@ export default function AdminCompetitionRegistrationsPage() {
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
                         <th className="py-3 px-4">Participant Name</th>
                         <th className="py-3 px-4">Email & Phone</th>
+                        <th className="py-3 px-4">Password</th>
                         <th className="py-3 px-4">Age / School / City</th>
                         <th className="py-3 px-4">Reg Date</th>
                         <th className="py-3 px-4">Amount (₹)</th>
@@ -255,6 +351,78 @@ export default function AdminCompetitionRegistrationsPage() {
                           <td className="py-3.5 px-4">
                             <div className="font-bold text-slate-800">{student.studentEmail}</div>
                             <div className="text-[11px] text-slate-400">{student.studentPhone}</div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {(() => {
+                              const rev = revealedPasswords[student.id];
+                              if (!rev || rev.hidden) {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTogglePassword(student.id)}
+                                    disabled={rev?.loading}
+                                    className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-[11px] font-bold cursor-pointer transition"
+                                    title="Click to reveal participant password"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>{rev?.loading ? 'Fetching...' : '••••••••'}</span>
+                                  </button>
+                                );
+                              }
+
+                              if (!rev.hasPassword) {
+                                return (
+                                  <div className="inline-flex items-center space-x-2">
+                                    <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-semibold italic">
+                                      Set by admin
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setResetModalReg(student)}
+                                      className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer"
+                                    >
+                                      Reset
+                                    </button>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div className="inline-flex items-center space-x-1 bg-amber-50 border border-amber-200 rounded-lg px-2 py-0.5">
+                                  <span className="font-mono font-bold text-slate-900 text-xs">
+                                    {rev.password}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyPassword(student.id, rev.password)}
+                                    className="p-1 text-slate-400 hover:text-blue-600 rounded cursor-pointer"
+                                    title="Copy Password"
+                                  >
+                                    {copiedId === student.id ? (
+                                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTogglePassword(student.id)}
+                                    className="p-1 text-slate-400 hover:text-slate-600 rounded cursor-pointer"
+                                    title="Hide Password"
+                                  >
+                                    <EyeOff className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setResetModalReg(student)}
+                                    className="p-1 text-slate-400 hover:text-amber-600 rounded cursor-pointer"
+                                    title="Reset Password"
+                                  >
+                                    <Key className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="py-3.5 px-4 text-[11px]">
                             {student.age || student.school || student.city ? (
@@ -358,6 +526,70 @@ export default function AdminCompetitionRegistrationsPage() {
               <div><strong>Student Name:</strong> {viewingReg.studentName}</div>
               <div><strong>Email:</strong> {viewingReg.studentEmail}</div>
               <div><strong>Phone:</strong> {viewingReg.studentPhone}</div>
+              <div className="flex items-center space-x-2 pt-1 border-t border-slate-200">
+                <strong>Password:</strong>
+                {(() => {
+                  const rev = revealedPasswords[viewingReg.id];
+                  if (!rev || rev.hidden) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePassword(viewingReg.id)}
+                        disabled={rev?.loading}
+                        className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-mono text-[11px] font-bold cursor-pointer"
+                      >
+                        <Eye className="w-3 h-3 text-slate-500" />
+                        <span>{rev?.loading ? 'Fetching...' : 'Show Password'}</span>
+                      </button>
+                    );
+                  }
+                  if (!rev.hasPassword) {
+                    return (
+                      <div className="inline-flex items-center space-x-2">
+                        <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-semibold italic">
+                          Set by admin
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setResetModalReg(viewingReg)}
+                          className="text-[11px] text-blue-600 hover:underline font-bold cursor-pointer"
+                        >
+                          Reset Password
+                        </button>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="inline-flex items-center space-x-1.5 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                      <span className="font-mono font-bold text-slate-900 text-xs">{rev.password}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPassword(viewingReg.id, rev.password)}
+                        className="p-1 text-slate-500 hover:text-blue-600 cursor-pointer"
+                        title="Copy"
+                      >
+                        {copiedId === viewingReg.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePassword(viewingReg.id)}
+                        className="p-1 text-slate-500 hover:text-slate-700 cursor-pointer"
+                        title="Hide"
+                      >
+                        <EyeOff className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setResetModalReg(viewingReg)}
+                        className="p-1 text-slate-500 hover:text-amber-600 cursor-pointer"
+                        title="Reset"
+                      >
+                        <Key className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
               <div><strong>Competition:</strong> {viewingReg.competitionName}</div>
               <div><strong>Batch:</strong> {viewingReg.batchName}</div>
               <div><strong>Registration Date:</strong> {viewingReg.registrationDate}</div>
@@ -467,6 +699,76 @@ export default function AdminCompetitionRegistrationsPage() {
         confirmText="Cancel Registration"
         cancelText="Keep Active"
       />
+
+      {/* RESET REGISTRATION PASSWORD MODAL */}
+      {resetModalReg && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative space-y-4 text-xs animate-in fade-in zoom-in-95">
+            <button
+              onClick={() => {
+                setResetModalReg(null);
+                setResetNewPassword('');
+                setResetSuccessMsg('');
+              }}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center space-x-2 text-amber-600">
+              <Key className="w-5 h-5 text-amber-600" />
+              <h3 className="text-lg font-black text-slate-900">Reset Password</h3>
+            </div>
+
+            <p className="text-slate-600 text-xs">
+              Participant: <strong className="text-slate-900">{resetModalReg.studentName}</strong> ({resetModalReg.studentEmail})
+            </p>
+
+            {resetSuccessMsg ? (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl font-bold flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{resetSuccessMsg}</span>
+              </div>
+            ) : (
+              <form onSubmit={handleExecuteResetPassword} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    New Password (Optional, leave blank to auto-generate 10-char secure password)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Leave blank to auto-generate"
+                    value={resetNewPassword}
+                    onChange={(e) => setResetNewPassword(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetModalReg(null);
+                      setResetNewPassword('');
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={resettingLoading}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-xs cursor-pointer flex items-center space-x-1.5"
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                    <span>{resettingLoading ? 'Resetting...' : 'Set & Encrypt Password'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );

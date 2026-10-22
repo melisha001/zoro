@@ -16,6 +16,7 @@ import { resolveFileUrl } from '../../api/fileApi';
 import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import SkeletonCard from '../common/SkeletonCard';
+import SafeVideo from '../common/SafeVideo';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 
 export default function CompetitionTestSeriesPage() {
@@ -566,6 +567,15 @@ export default function CompetitionTestSeriesPage() {
                     />
                   </div>
                 )}
+                {currentQ.questionFormat === 'VIDEO' && currentQ.mediaRef && (
+                  <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200">
+                    <SafeVideo
+                      bunnyVideoId={currentQ.mediaRef}
+                      src={resolveFileUrl(currentQ.mediaRef)}
+                      className="w-full aspect-video"
+                    />
+                  </div>
+                )}
 
                 {/* Question Statement */}
                 <div className="text-base sm:text-lg font-bold text-slate-900 mb-6 leading-relaxed">
@@ -621,6 +631,7 @@ export default function CompetitionTestSeriesPage() {
                   <div className="mb-6">
                     <span className="text-xs font-bold text-slate-700 block mb-2">Record Spoken Answer:</span>
                     <VoiceAnswerRecorder
+                      key={currentQ.id}
                       questionId={currentQ.id}
                       savedVoiceFileId={studentAnswers[currentQ.id]?.voiceFileId}
                       savedDurationSec={studentAnswers[currentQ.id]?.voiceDurationSec}
@@ -867,15 +878,10 @@ export default function CompetitionTestSeriesPage() {
                   {/* Title & Stats */}
                   <h3 className="text-base font-black text-slate-900 mb-1">{test.title}</h3>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mb-4">
-                    <span className="flex items-center space-x-1">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{test.durationMinutes || 20} mins</span>
-                    </span>
-                    <span>•</span>
-                    <span>{test.totalMarks || 20} Marks</span>
+                    <span className="font-bold text-slate-700">{test.totalMarks ?? 0} Marks</span>
                     <span>•</span>
                     <span className="font-bold text-indigo-600">
-                      Questions: {test.questionCount ?? 0} / {test.targetQuestions ?? test.totalMarks ?? 20}
+                      Total Questions: {test.questionCount ?? 0}
                     </span>
                   </div>
 

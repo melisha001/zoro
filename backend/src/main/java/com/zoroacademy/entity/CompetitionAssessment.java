@@ -43,6 +43,12 @@ public class CompetitionAssessment {
     @Column(name = "total_marks", nullable = false)
     private Integer totalMarks = 0;
 
+    @Column(name = "publish_version", nullable = false)
+    private Integer publishVersion = 1;
+
+    @Column(name = "republished_at")
+    private OffsetDateTime republishedAt;
+
     @Transient
     private Long questionCount = 0L;
 
@@ -88,6 +94,12 @@ public class CompetitionAssessment {
 
     public Integer getTotalMarks() { return totalMarks; }
     public void setTotalMarks(Integer totalMarks) { this.totalMarks = totalMarks; }
+
+    public Integer getPublishVersion() { return publishVersion; }
+    public void setPublishVersion(Integer publishVersion) { this.publishVersion = publishVersion; }
+
+    public OffsetDateTime getRepublishedAt() { return republishedAt; }
+    public void setRepublishedAt(OffsetDateTime republishedAt) { this.republishedAt = republishedAt; }
 
     public Long getQuestionCount() { return questionCount; }
     public void setQuestionCount(Long questionCount) { this.questionCount = questionCount; }

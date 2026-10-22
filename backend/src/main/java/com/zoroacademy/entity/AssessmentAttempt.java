@@ -8,7 +8,7 @@ import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "assessment_attempts", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"assessment_id", "registration_id"})
+    @UniqueConstraint(columnNames = {"assessment_id", "registration_id", "publish_version"})
 })
 public class AssessmentAttempt {
 
@@ -45,6 +45,9 @@ public class AssessmentAttempt {
 
     @Column(name = "total_marks", precision = 8, scale = 2)
     private BigDecimal totalMarks = BigDecimal.ZERO;
+
+    @Column(name = "publish_version", nullable = false)
+    private Integer publishVersion = 1;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -84,6 +87,9 @@ public class AssessmentAttempt {
 
     public BigDecimal getTotalMarks() { return totalMarks; }
     public void setTotalMarks(BigDecimal totalMarks) { this.totalMarks = totalMarks; }
+
+    public Integer getPublishVersion() { return publishVersion; }
+    public void setPublishVersion(Integer publishVersion) { this.publishVersion = publishVersion; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }

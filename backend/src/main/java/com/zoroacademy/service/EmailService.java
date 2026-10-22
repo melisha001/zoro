@@ -107,6 +107,33 @@ public class EmailService {
     }
 
     @Async
+    public void sendCompetitionCredentials(String email, String name, String plainPassword, String competitionTitle) {
+        if (email == null || email.isBlank()) {
+            return;
+        }
+
+        if (!isMailConfigured()) {
+            log.info("AWS SES SMTP not configured; skipping competition credentials email to {}", email);
+            return;
+        }
+
+        try {
+            Context context = new Context();
+            context.setVariable("name", name != null && !name.isBlank() ? name : "Participant");
+            context.setVariable("email", email.trim());
+            context.setVariable("plainPassword", plainPassword);
+            context.setVariable("competitionTitle", competitionTitle != null ? competitionTitle : "Competition");
+            context.setVariable("loginUrl", frontendUrl + "/login");
+
+            String htmlBody = templateEngine.process("email/competition-credentials", context);
+            sendHtmlEmail(email.trim(), "Your Zoro Academy Competition Login Credentials - " + competitionTitle, htmlBody);
+            log.info("Competition credentials email sent to {}", email);
+        } catch (Exception e) {
+            handleMailException(email, "competition credentials email", e);
+        }
+    }
+
+    @Async
     public void sendStudentWelcomeEmail(String email, String name, String plainPassword) {
         if (email == null || email.isBlank()) {
             return;

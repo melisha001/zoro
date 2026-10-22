@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { FileText, Download, FolderOpen, ExternalLink, Sparkles, AlertCircle } from 'lucide-react';
+import { FileText, FolderOpen, Eye, X, AlertCircle } from 'lucide-react';
 import { getCompetitionStudyMaterials } from '../../api/competitionApi';
 import SkeletonCard from '../common/SkeletonCard';
 
@@ -8,6 +8,7 @@ export default function CompetitionStudyMaterialsPage() {
   const { currentCompetition } = useOutletContext();
   const [materials, setMaterials] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [viewingMaterial, setViewingMaterial] = useState(null);
 
   useEffect(() => {
     if (!currentCompetition?.id) return;
@@ -91,32 +92,52 @@ export default function CompetitionStudyMaterialsPage() {
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                 {item.viewUrl ? (
-                  <a
-                    href={item.viewUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer"
+                  <button
+                    type="button"
+                    onClick={() => setViewingMaterial(item)}
+                    className="inline-flex items-center space-x-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 transition cursor-pointer"
                   >
-                    <span>Download</span>
-                    <Download className="w-3.5 h-3.5" />
-                  </a>
+                    <Eye className="w-4 h-4" />
+                    <span>View Material</span>
+                  </button>
                 ) : (
                   <span className="text-[11px] font-semibold text-slate-400">Link pending</span>
-                )}
-                {item.viewUrl && (
-                  <a
-                    href={item.viewUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-slate-400 hover:text-slate-600 p-1"
-                    title="Open in new tab"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
                 )}
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* View-Only Study Material Modal */}
+      {viewingMaterial && viewingMaterial.viewUrl && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-5 h-5 text-emerald-400" />
+                <span className="font-bold text-sm">{viewingMaterial.title} (View-Only)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingMaterial(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-full bg-slate-800 hover:bg-slate-700 cursor-pointer transition"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div
+              className="flex-1 w-full h-full relative bg-slate-100"
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              <iframe
+                src={`${viewingMaterial.viewUrl}#toolbar=0&navpanes=0&scrollbar=1`}
+                className="w-full h-full border-0 select-none"
+                title="Study Material Reader"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

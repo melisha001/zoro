@@ -48,7 +48,8 @@ public class FileStorageService {
     );
 
     private static final Set<String> PUBLIC_CATEGORIES = Set.of(
-            "avatar", "thumbnail", "banner", "profile", "public", "image", "images", "public-document", "hero"
+            "avatar", "thumbnail", "banner", "profile", "public", "image", "images", "public-document", "hero",
+            "question-media", "audio", "audio-prompt", "competition", "syllabus", "guidance"
     );
 
     @Autowired
@@ -473,15 +474,17 @@ public class FileStorageService {
                 }
             }
         } else {
+            boolean isOgg = header.length >= 4 && header[0] == 'O' && header[1] == 'g' && header[2] == 'g' && header[3] == 'S';
             boolean isAudioOrVideo = (header.length >= 3 && header[0] == 'I' && header[1] == 'D' && header[2] == '3')
                     || (header.length >= 2 && (header[0] & 0xFF) == 0xFF && (header[1] & 0xE0) == 0xE0)
                     || (header.length >= 8 && header[4] == 'f' && header[5] == 't' && header[6] == 'y' && header[7] == 'p')
                     || (header.length >= 4 && (header[0] & 0xFF) == 0x1A && (header[1] & 0xFF) == 0x45 && (header[2] & 0xFF) == 0xDF && (header[3] & 0xFF) == 0xA3)
-                    || (header.length >= 12 && header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' && header[8] == 'W' && header[9] == 'A' && header[10] == 'V' && header[11] == 'E');
+                    || (header.length >= 12 && header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' && header[8] == 'W' && header[9] == 'A' && header[10] == 'V' && header[11] == 'E')
+                    || isOgg;
 
             boolean isValidDoc = isPdf || isZipOrOfficeXml || isOle2Office || isJpg || isPng || isWebp || isAudioOrVideo
                     || Set.of("pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "csv", "json",
-                              "mp3", "mp4", "wav", "webm", "m4a", "ogg", "mov", "avi", "mkv").contains(ext);
+                              "mp3", "mp4", "wav", "webm", "m4a", "ogg", "opus", "mov", "avi", "mkv").contains(ext);
             if (!isValidDoc) {
                 throw new BadRequestException("Invalid or unsupported file format: " + ext);
             }

@@ -130,6 +130,24 @@ export const updateCompetitionRegistration = async (id, updateData) => {
   return apiResponse(null, false, res?.message || 'Failed to update registration');
 };
 
+export const getRegistrationCredential = async (regId) => {
+  if (!regId) return apiResponse(null, false, 'Registration ID is required');
+  const res = await apiGet(`/competitions/registrations/${encodeURIComponent(regId)}/credential`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch credentials');
+};
+
+export const resetRegistrationPassword = async (regId, password) => {
+  if (!regId) return apiResponse(null, false, 'Registration ID is required');
+  const res = await apiPut(`/competitions/registrations/${encodeURIComponent(regId)}/reset-password`, { password });
+  if (res && res.success) {
+    return apiResponse(res.data, true, 'Password reset successfully');
+  }
+  return apiResponse(null, false, res?.message || 'Failed to reset password');
+};
+
 // COMPETITION ATTENDANCE API
 export const getCompetitionAttendance = async (_competitionId, _batchName) => {
   return apiResponse([]);

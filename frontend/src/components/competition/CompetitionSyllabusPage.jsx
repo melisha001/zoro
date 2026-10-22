@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { FileText, Download, Play, Video, Sparkles, BookOpen, ExternalLink, AlertCircle } from 'lucide-react';
+import { FileText, Play, Video, Sparkles, BookOpen, AlertCircle, Eye, X } from 'lucide-react';
 import { getCompetitionSyllabus, getCompetitionGuidanceVideos } from '../../api/competitionApi';
 import SafeVideo from '../common/SafeVideo';
 import InlineSpinner from '../common/InlineSpinner';
@@ -12,6 +12,7 @@ export default function CompetitionSyllabusPage() {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedVideo, setSelectedVideo] = useState(null);
+  const [showPdfModal, setShowPdfModal] = useState(false);
 
   useEffect(() => {
     if (!currentCompetition?.id) return;
@@ -96,21 +97,20 @@ export default function CompetitionSyllabusPage() {
                     {syllabus?.title || 'Official Competition Syllabus'}
                   </h2>
                   <p className="text-xs text-slate-500 font-medium">
-                    Download and review the topic breakdown, exam pattern, and marking criteria.
+                    Review the official topic breakdown, exam pattern, and marking criteria.
                   </p>
                 </div>
               </div>
 
               {syllabus?.viewUrl ? (
-                <a
-                  href={syllabus.viewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() => setShowPdfModal(true)}
                   className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-[#0F52BA] hover:bg-blue-700 text-white font-bold text-xs transition shadow-sm cursor-pointer"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>Download Syllabus PDF</span>
-                </a>
+                  <Eye className="w-4 h-4" />
+                  <span>View Syllabus PDF</span>
+                </button>
               ) : (
                 <span className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
                   Syllabus PDF will be published shortly
@@ -121,15 +121,14 @@ export default function CompetitionSyllabusPage() {
             {syllabus?.viewUrl && (
               <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                 <span>File: {syllabus.fileName || 'Syllabus.pdf'}</span>
-                <a
-                  href={syllabus.viewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center space-x-1"
+                <button
+                  type="button"
+                  onClick={() => setShowPdfModal(true)}
+                  className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center space-x-1 cursor-pointer"
                 >
-                  <span>Open in viewer</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>View in Reader</span>
+                </button>
               </div>
             )}
           </div>
@@ -215,6 +214,37 @@ export default function CompetitionSyllabusPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* View-Only Syllabus PDF Modal */}
+      {showPdfModal && syllabus?.viewUrl && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-5 h-5 text-blue-400" />
+                <span className="font-bold text-sm">{syllabus.title || 'Competition Syllabus'} (View-Only)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPdfModal(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-full bg-slate-800 hover:bg-slate-700 cursor-pointer transition"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div
+              className="flex-1 w-full h-full relative bg-slate-100"
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              <iframe
+                src={`${syllabus.viewUrl}#toolbar=0&navpanes=0&scrollbar=1`}
+                className="w-full h-full border-0 select-none"
+                title="Syllabus PDF Reader"
+              />
+            </div>
           </div>
         </div>
       )}

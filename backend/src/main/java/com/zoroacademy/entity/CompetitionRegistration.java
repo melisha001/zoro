@@ -78,6 +78,9 @@ public class CompetitionRegistration {
     @Column(name = "certificate_url", columnDefinition = "TEXT")
     private String certificateUrl;
 
+    @Column(name = "encrypted_password", length = 512)
+    private String encryptedPassword;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -305,6 +308,14 @@ public class CompetitionRegistration {
         return new Builder();
     }
 
+    public String getEncryptedPassword() {
+        return encryptedPassword;
+    }
+
+    public void setEncryptedPassword(String encryptedPassword) {
+        this.encryptedPassword = encryptedPassword;
+    }
+
     public static class Builder {
         private String id;
         private Competition competition;
@@ -327,6 +338,7 @@ public class CompetitionRegistration {
         private BigDecimal score;
         private Integer rank;
         private String certificateUrl;
+        private String encryptedPassword;
         private LocalDateTime createdAt;
 
         public Builder id(String id) {
@@ -413,6 +425,10 @@ public class CompetitionRegistration {
             this.certificateUrl = certificateUrl;
             return this;
         }
+        public Builder encryptedPassword(String encryptedPassword) {
+            this.encryptedPassword = encryptedPassword;
+            return this;
+        }
         public Builder createdAt(LocalDateTime createdAt) {
             this.createdAt = createdAt;
             return this;
@@ -424,6 +440,7 @@ public class CompetitionRegistration {
             reg.setRazorpayPaymentId(razorpayPaymentId);
             reg.setRazorpaySignature(razorpaySignature);
             reg.setPaidAt(paidAt);
+            reg.setEncryptedPassword(encryptedPassword);
             reg.setAmountPaise(amountPaise);
             reg.setAmount(amount);
             if (currency != null) reg.setCurrency(currency);

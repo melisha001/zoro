@@ -4,7 +4,7 @@ import {
   Trophy, Users, BookOpen, Video, FileText, Layers, Plus, 
   Trash2, Edit, CheckCircle2, Clock, 
   Upload, Check, Search, Download, Copy, X,
-  ChevronUp, ChevronDown, Eye, BarChart2, Award
+  ChevronUp, ChevronDown, Eye, BarChart2, Award, Volume2, RefreshCw
 } from 'lucide-react';
 import { 
   getCompetitions,
@@ -16,11 +16,12 @@ import {
   reorderCompetitionGuidanceVideos,
   getCompetitionStudyMaterials, saveCompetitionStudyMaterial, deleteCompetitionStudyMaterial,
   getCompetitionAssessments, updateCompetitionAssessment, publishCompetitionAssessment,
+  republishCompetitionAssessment,
   getAssessmentQuestions, saveAssessmentQuestion, deleteAssessmentQuestion,
   duplicateAssessmentQuestion, reorderAssessmentQuestions
 } from '../../api/competitionApi';
 import { getTrainers } from '../../api/userApi';
-import { uploadFile } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl } from '../../api/fileApi';
 import ButtonSpinner from '../common/ButtonSpinner';
 import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
@@ -30,9 +31,29 @@ import GuidanceVideoManager from './GuidanceVideoManager';
 import { useDialog } from '../../context/DialogContext';
 import { formatDate } from '../../utils/dateFormatter';
 
+const toLocalDatetimeInput = (isoStr) => {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const min = pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+};
+
+const toUtcIsoString = (localDtStr) => {
+  if (!localDtStr) return null;
+  const d = new Date(localDtStr);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+};
+
 export default function AdminCompetitionManagementPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { showSuccess, showError, showWarning } = useDialog();
+  const { showSuccess, showError, showWarning, confirm } = useDialog();
 
   const [competitions, setCompetitions] = useState([]);
   const [selectedCompId, setSelectedCompId] = useState(searchParams.get('comp') || '');
@@ -425,9 +446,9 @@ export default function AdminCompetitionManagementPage() {
     setSlotFormData({
       title: asmt.title || '',
       durationMinutes: asmt.durationMinutes || 20,
-      totalMarks: asmt.totalMarks || 20,
-      startAt: asmt.startAt ? asmt.startAt.slice(0, 16) : '',
-      endAt: asmt.endAt ? asmt.endAt.slice(0, 16) : ''
+      totalMarks: asmt.totalMarks || 0,
+      startAt: toLocalDatetimeInput(asmt.startAt),
+      endAt: toLocalDatetimeInput(asmt.endAt)
     });
   };
 
@@ -438,22 +459,25 @@ export default function AdminCompetitionManagementPage() {
     setSavingSlot(true);
     try {
       const payload = {
-        title: slotFormData.title,
-        durationMinutes: Number(slotFormData.durationMinutes),
-        totalMarks: Number(slotFormData.totalMarks),
-        startAt: slotFormData.startAt ? new Date(slotFormData.startAt).toISOString() : null,
-        endAt: slotFormData.endAt ? new Date(slotFormData.endAt).toISOString() : null
+        title: slotFormData.title?.trim()
       };
+      if (editingSlot.type !== 'TEST_SERIES') {
+        payload.durationMinutes = Number(slotFormData.durationMinutes || 20);
+      }
+      if (editingSlot.type === 'MOCK') {
+        payload.startAt = toUtcIsoString(slotFormData.startAt);
+        payload.endAt = toUtcIsoString(slotFormData.endAt);
+      }
       const res = await updateCompetitionAssessment(editingSlot.id, payload);
       if (res && res.success) {
-        await showSuccess('Assessment slot settings saved.');
+        await showSuccess('Assessment settings saved.');
         setEditingSlot(null);
         loadTabData(activeTab, selectedCompetition.id);
       } else {
-        await showError(res?.message || 'Failed to update slot');
+        await showError(res?.message || 'Failed to update settings');
       }
     } catch (err) {
-      await showError(err.message || 'Failed to update slot');
+      await showError(err.message || 'Failed to update settings');
     } finally {
       setSavingSlot(false);
     }
@@ -470,6 +494,30 @@ export default function AdminCompetitionManagementPage() {
       }
     } catch (err) {
       await showError(err.message || 'Publishing failed', 'Validation Error');
+    }
+  };
+
+  const handleRepublishAssessment = async (asmt) => {
+    const confirmed = await confirm(
+      `Republish "${asmt.title}"? This increments the publish version and allows students to make a fresh attempt while keeping all historical attempts safe.`,
+      'Republish Assessment',
+      'Yes, Republish Test'
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await republishCompetitionAssessment(asmt.id);
+      if (res && res.success) {
+        await showSuccess(
+          `"${asmt.title}" republished successfully! (Version ${res.data?.publishVersion || 'new'} is now open for students)`,
+          'Republished'
+        );
+        loadTabData(activeTab, selectedCompetition.id);
+      } else {
+        await showError(res?.message || 'Failed to republish assessment');
+      }
+    } catch (err) {
+      await showError(err.message || 'Failed to republish assessment');
     }
   };
 
@@ -1159,22 +1207,33 @@ export default function AdminCompetitionManagementPage() {
                         </span>
                         <h4 className="font-black text-xs text-slate-900 mt-1">{asmt.title}</h4>
                       </div>
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                        asmt.status === 'PUBLISHED'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>
-                        {asmt.status}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {asmt.publishVersion && asmt.publishVersion > 1 && (
+                          <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200">
+                            v{asmt.publishVersion}
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          asmt.status === 'PUBLISHED'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>
+                          {asmt.status}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 font-semibold bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
-                      <div>Duration: <span className="font-bold text-slate-900">{asmt.durationMinutes}m</span></div>
-                      <div>Total Marks: <span className="font-bold text-slate-900">{asmt.totalMarks}</span></div>
+                      {asmt.type !== 'TEST_SERIES' && (
+                        <div>Duration: <span className="font-bold text-slate-900">{asmt.durationMinutes}m</span></div>
+                      )}
+                      <div className={asmt.type === 'TEST_SERIES' ? 'col-span-2' : ''}>
+                        Total Marks: <span className="font-bold text-slate-900">{asmt.totalMarks ?? 0}</span>
+                      </div>
                       <div className="col-span-2 flex items-center justify-between text-indigo-700 bg-indigo-50/70 border border-indigo-100/60 rounded-xl px-2.5 py-1">
-                        <span className="font-bold">Questions:</span>
+                        <span className="font-bold">Total Questions:</span>
                         <span className="font-black font-mono">
-                          {asmt.questionCount ?? 0} / {asmt.targetQuestions ?? asmt.totalMarks ?? 20}
+                          {asmt.questionCount ?? 0}
                         </span>
                       </div>
                       {asmt.startAt && (
@@ -1197,13 +1256,22 @@ export default function AdminCompetitionManagementPage() {
                       >
                         Questions
                       </button>
-                      {asmt.status !== 'PUBLISHED' && (
+                      {asmt.status !== 'PUBLISHED' ? (
                         <button
                           onClick={() => handlePublishAssessment(asmt)}
                           className="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-xl cursor-pointer"
                           title="Validate and publish assessment"
                         >
                           Publish
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleRepublishAssessment(asmt)}
+                          className="py-1.5 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded-xl cursor-pointer flex items-center gap-1 shrink-0"
+                          title="Republish to open a fresh attempt cycle for students"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Republish</span>
                         </button>
                       )}
                     </div>
@@ -1306,10 +1374,12 @@ export default function AdminCompetitionManagementPage() {
       {editingSlot && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-xs">
-            <h3 className="text-base font-black text-slate-900">Edit Slot Settings: {editingSlot.title}</h3>
+            <h3 className="text-base font-black text-slate-900">
+              Edit Slot Settings: {editingSlot.title}
+            </h3>
             <form onSubmit={handleSaveSlot} className="space-y-3">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Title</label>
+                <label className="block font-bold text-slate-700 mb-1">Title *</label>
                 <input
                   type="text"
                   required
@@ -1318,33 +1388,39 @@ export default function AdminCompetitionManagementPage() {
                   className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Duration (Mins)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={slotFormData.durationMinutes}
-                    onChange={(e) => setSlotFormData({ ...slotFormData, durationMinutes: e.target.value })}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
-                  />
+
+              {/* For TEST_SERIES: ONLY Title is editable. Duration and Total Marks are removed. */}
+              {editingSlot.type !== 'TEST_SERIES' ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Duration (Mins) *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={slotFormData.durationMinutes}
+                      onChange={(e) => setSlotFormData({ ...slotFormData, durationMinutes: e.target.value })}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Total Marks</label>
+                    <div className="w-full p-2 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-600">
+                      {editingSlot.totalMarks ?? 0} (auto-computed)
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Total Marks</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={slotFormData.totalMarks}
-                    onChange={(e) => setSlotFormData({ ...slotFormData, totalMarks: e.target.value })}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
-                  />
+              ) : (
+                <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 text-[11px] text-indigo-900">
+                  <p><strong>Total Marks:</strong> {editingSlot.totalMarks ?? 0} (computed automatically from questions)</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Duration is not applicable to Test Series.</p>
                 </div>
-              </div>
+              )}
 
               {editingSlot.type === 'MOCK' && (
                 <div className="space-y-2 border-t border-slate-100 pt-2">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Mock Start Time</label>
+                    <label className="block font-bold text-slate-700 mb-1">Mock Start Time (Local)</label>
                     <input
                       type="datetime-local"
                       value={slotFormData.startAt}
@@ -1353,7 +1429,7 @@ export default function AdminCompetitionManagementPage() {
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Mock End Time</label>
+                    <label className="block font-bold text-slate-700 mb-1">Mock End Time (Local)</label>
                     <input
                       type="datetime-local"
                       value={slotFormData.endAt}
@@ -1541,6 +1617,33 @@ export default function AdminCompetitionManagementPage() {
                 <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
                   Student Perspective Preview
                 </span>
+
+                {/* Audio Question Media Player */}
+                {questionFormData.questionFormat === 'AUDIO' && questionFormData.mediaRef && (
+                  <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex items-center gap-2 text-indigo-700 font-bold text-xs">
+                      <Volume2 className="w-4 h-4" />
+                      <span>Audio Question Prompt:</span>
+                    </div>
+                    <audio
+                      controls
+                      src={resolveFileUrl(questionFormData.mediaRef)}
+                      className="w-full h-8"
+                    />
+                  </div>
+                )}
+
+                {/* Video Question Media Player */}
+                {questionFormData.questionFormat === 'VIDEO' && questionFormData.mediaRef && (
+                  <div className="p-2 bg-white rounded-xl border border-slate-200">
+                    <SafeVideo
+                      bunnyVideoId={questionFormData.mediaRef}
+                      src={resolveFileUrl(questionFormData.mediaRef)}
+                      className="w-full aspect-video rounded-lg"
+                    />
+                  </div>
+                )}
+
                 <p className="text-sm font-bold text-slate-900">{questionFormData.questionText}</p>
                 {questionFormData.guidanceText && (
                   <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-900">
@@ -1600,10 +1703,10 @@ export default function AdminCompetitionManagementPage() {
                 {questionFormData.questionFormat !== 'MCQ' && (
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">
-                      Question Media Prompt (Video or Audio Upload)
+                      Question Media Prompt ({questionFormData.questionFormat === 'AUDIO' ? 'Audio Upload' : 'Video Upload'})
                     </label>
                     <UnifiedUploader
-                      accept="video/*,audio/*"
+                      accept={questionFormData.questionFormat === 'AUDIO' ? 'audio/*' : 'video/*'}
                       multiple={false}
                       category="question-media"
                       maxSizeMB={200}
@@ -1611,8 +1714,12 @@ export default function AdminCompetitionManagementPage() {
                         questionFormData.mediaRef
                           ? {
                               id: questionFormData.mediaRef,
-                              bunnyVideoId: questionFormData.mediaRef,
-                              name: `Media Attached (${questionFormData.mediaRef.substring(0, 8)}...)`
+                              isAudio: questionFormData.questionFormat === 'AUDIO',
+                              bunnyVideoId: questionFormData.questionFormat === 'VIDEO' ? questionFormData.mediaRef : null,
+                              url: resolveFileUrl(questionFormData.mediaRef),
+                              name: questionFormData.questionFormat === 'AUDIO'
+                                ? `Audio Prompt (${questionFormData.mediaRef.substring(0, 8)}...)`
+                                : `Video Prompt (${questionFormData.mediaRef.substring(0, 8)}...)`
                             }
                           : null
                       }
@@ -1621,7 +1728,11 @@ export default function AdminCompetitionManagementPage() {
                         setQuestionFormData((prev) => ({ ...prev, mediaRef: refId }));
                       }}
                       onClear={() => setQuestionFormData((prev) => ({ ...prev, mediaRef: '' }))}
-                      helperText="Upload audio or video question prompt. Videos stream via Bunny Stream, audio via Bunny Storage."
+                      helperText={
+                        questionFormData.questionFormat === 'AUDIO'
+                          ? 'Upload audio question prompt (.mp3, .wav, .ogg, .m4a). Stored via Bunny Storage.'
+                          : 'Upload video question prompt (.mp4, .webm, .mov). Streamed via Bunny Stream.'
+                      }
                     />
                   </div>
                 )}

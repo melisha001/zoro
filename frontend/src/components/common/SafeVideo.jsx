@@ -8,7 +8,7 @@ export default function SafeVideo({
   libraryId = '784226',
   poster,
   title = 'Video Player',
-  className = 'w-full aspect-video rounded-xl',
+  className = '',
   containerClassName = '',
   isIframe = false,
   autoPlay = false,
@@ -24,7 +24,7 @@ export default function SafeVideo({
   const effectiveSrc = embedUrl || (bunnyVideoId ? (bunnyVideoId.includes('http') ? bunnyVideoId : `https://iframe.mediadelivery.net/embed/${libraryId}/${bunnyVideoId}`) : resolvedSrc);
 
   return (
-    <div className={`relative overflow-hidden bg-slate-900 rounded-xl ${containerClassName}`}>
+    <div className={`relative w-full aspect-video overflow-hidden bg-slate-900 rounded-xl ${containerClassName}`}>
       {!isLoaded && (
         <div
           role="status"
@@ -40,9 +40,9 @@ export default function SafeVideo({
         <iframe
           src={effectiveSrc}
           title={title}
-          className={`${className} transition-opacity duration-300 ${
+          className={`absolute inset-0 w-full h-full border-0 object-contain transition-opacity duration-300 ${
             isLoaded ? 'opacity-100' : 'opacity-0'
-          }`}
+          } ${className}`}
           loading="lazy"
           allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
           allowFullScreen
@@ -56,9 +56,9 @@ export default function SafeVideo({
           controls={controls}
           autoPlay={autoPlay}
           muted={muted}
-          className={`${className} transition-opacity duration-300 ${
+          className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 ${
             isLoaded ? 'opacity-100' : 'opacity-0'
-          }`}
+          } ${className}`}
           onLoadedData={() => setIsLoaded(true)}
           {...rest}
         />
