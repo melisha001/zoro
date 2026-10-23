@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -78,6 +79,9 @@ public class CompetitionService {
 
     @Autowired(required = false)
     private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+    @Autowired(required = false)
+    private ExamProctorEventRepository examProctorEventRepository;
 
     @Autowired
     public CompetitionService(
@@ -225,15 +229,37 @@ public class CompetitionService {
         if (comp.getEndAt() != null) {
             LocalTime pubTime = LocalTime.of(18, 0);
             if (comp.getLeaderboardPublishTime() != null && !comp.getLeaderboardPublishTime().isBlank()) {
-                try {
-                    pubTime = parseTime(comp.getLeaderboardPublishTime().trim());
-                } catch (Exception ignored) {}
+                String lpt = comp.getLeaderboardPublishTime().trim();
+                if (lpt.contains("T")) {
+                    try {
+                        if (lpt.endsWith("Z") || lpt.contains("+")) {
+                            comp.setLeaderboardPublishedAt(OffsetDateTime.parse(lpt));
+                        } else {
+                            LocalDateTime ldt = LocalDateTime.parse(lpt);
+                            comp.setLeaderboardPublishedAt(ldt.atZone(ist).toOffsetDateTime());
+                        }
+                    } catch (Exception e) {
+                        try {
+                            pubTime = parseTime(lpt);
+                            ZonedDateTime endZoned = comp.getEndAt().atZoneSameInstant(ist);
+                            ZonedDateTime pubZoned = endZoned.plusDays(5).with(pubTime);
+                            comp.setLeaderboardPublishedAt(pubZoned.toOffsetDateTime());
+                        } catch (Exception ignored) {}
+                    }
+                } else {
+                    try {
+                        pubTime = parseTime(lpt);
+                    } catch (Exception ignored) {}
+                    ZonedDateTime endZoned = comp.getEndAt().atZoneSameInstant(ist);
+                    ZonedDateTime pubZoned = endZoned.plusDays(5).with(pubTime);
+                    comp.setLeaderboardPublishedAt(pubZoned.toOffsetDateTime());
+                }
             } else {
                 comp.setLeaderboardPublishTime("18:00");
+                ZonedDateTime endZoned = comp.getEndAt().atZoneSameInstant(ist);
+                ZonedDateTime pubZoned = endZoned.plusDays(5).with(pubTime);
+                comp.setLeaderboardPublishedAt(pubZoned.toOffsetDateTime());
             }
-            ZonedDateTime endZoned = comp.getEndAt().atZoneSameInstant(ist);
-            ZonedDateTime pubZoned = endZoned.plusDays(5).with(pubTime);
-            comp.setLeaderboardPublishedAt(pubZoned.toOffsetDateTime());
         }
     }
 
@@ -271,6 +297,30 @@ public class CompetitionService {
                 LocalDate d = LocalDate.parse(competition.getRegEndDate().trim());
                 competition.setRegEndAt(ZonedDateTime.of(d, LocalTime.of(23, 59, 59), zone).toOffsetDateTime());
             } catch (Exception ignored) {}
+        }
+
+        // Sync string dates from OffsetDateTime only if missing
+        if (competition.getStartAt() != null) {
+            if (competition.getStartDate() == null || competition.getStartDate().isBlank()) {
+                competition.setStartDate(competition.getStartAt().atZoneSameInstant(zone).toLocalDate().toString());
+            }
+            if (competition.getStartTime() == null || competition.getStartTime().isBlank()) {
+                competition.setStartTime(String.format("%02d:%02d", competition.getStartAt().atZoneSameInstant(zone).getHour(), competition.getStartAt().atZoneSameInstant(zone).getMinute()));
+            }
+        }
+        if (competition.getEndAt() != null) {
+            if (competition.getEndDate() == null || competition.getEndDate().isBlank()) {
+                competition.setEndDate(competition.getEndAt().atZoneSameInstant(zone).toLocalDate().toString());
+            }
+            if (competition.getEndTime() == null || competition.getEndTime().isBlank()) {
+                competition.setEndTime(String.format("%02d:%02d", competition.getEndAt().atZoneSameInstant(zone).getHour(), competition.getEndAt().atZoneSameInstant(zone).getMinute()));
+            }
+        }
+        if (competition.getRegStartAt() != null && (competition.getRegStartDate() == null || competition.getRegStartDate().isBlank())) {
+            competition.setRegStartDate(competition.getRegStartAt().atZoneSameInstant(zone).toLocalDate().toString());
+        }
+        if (competition.getRegEndAt() != null && (competition.getRegEndDate() == null || competition.getRegEndDate().isBlank())) {
+            competition.setRegEndDate(competition.getRegEndAt().atZoneSameInstant(zone).toLocalDate().toString());
         }
 
         validateCompetitionTimings(competition);
@@ -460,6 +510,30 @@ public class CompetitionService {
         if (updated.getLeaderboardStatus() != null) comp.setLeaderboardStatus(updated.getLeaderboardStatus());
         if (updated.getLeaderboardPublishedAt() != null) comp.setLeaderboardPublishedAt(updated.getLeaderboardPublishedAt());
         if (updated.getAnswerReviewEnabled() != null) comp.setAnswerReviewEnabled(updated.getAnswerReviewEnabled());
+
+        ZoneId zone = ZoneId.of("Asia/Kolkata");
+        if (comp.getStartAt() != null) {
+            if (comp.getStartDate() == null || comp.getStartDate().isBlank()) {
+                comp.setStartDate(comp.getStartAt().atZoneSameInstant(zone).toLocalDate().toString());
+            }
+            if (comp.getStartTime() == null || comp.getStartTime().isBlank()) {
+                comp.setStartTime(String.format("%02d:%02d", comp.getStartAt().atZoneSameInstant(zone).getHour(), comp.getStartAt().atZoneSameInstant(zone).getMinute()));
+            }
+        }
+        if (comp.getEndAt() != null) {
+            if (comp.getEndDate() == null || comp.getEndDate().isBlank()) {
+                comp.setEndDate(comp.getEndAt().atZoneSameInstant(zone).toLocalDate().toString());
+            }
+            if (comp.getEndTime() == null || comp.getEndTime().isBlank()) {
+                comp.setEndTime(String.format("%02d:%02d", comp.getEndAt().atZoneSameInstant(zone).getHour(), comp.getEndAt().atZoneSameInstant(zone).getMinute()));
+            }
+        }
+        if (comp.getRegStartAt() != null && (comp.getRegStartDate() == null || comp.getRegStartDate().isBlank())) {
+            comp.setRegStartDate(comp.getRegStartAt().atZoneSameInstant(zone).toLocalDate().toString());
+        }
+        if (comp.getRegEndAt() != null && (comp.getRegEndDate() == null || comp.getRegEndDate().isBlank())) {
+            comp.setRegEndDate(comp.getRegEndAt().atZoneSameInstant(zone).toLocalDate().toString());
+        }
 
         validateCompetitionTimings(comp);
 
@@ -2035,6 +2109,9 @@ public class CompetitionService {
 
         Map<String, Object> result = new HashMap<>();
         result.put("attempt", attempt);
+        result.put("attemptId", attempt != null ? attempt.getId() : null);
+        result.put("proctorViolationCount", attempt != null && attempt.getProctorViolationCount() != null ? attempt.getProctorViolationCount() : 0);
+        result.put("autoSubmitted", attempt != null && Boolean.TRUE.equals(attempt.getAutoSubmitted()));
         result.put("assessment", asmt);
         result.put("assignedSet", assignedSetMap);
         result.put("questions", sanitizedQuestions);
@@ -2219,6 +2296,25 @@ public class CompetitionService {
             throw new BadRequestException("Attempt is not in progress (status: " + attempt.getStatus() + ")");
         }
 
+        evaluateAndFinalizeAttempt(attempt);
+        AssessmentAttempt savedAttempt = assessmentAttemptRepository.save(attempt);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("attemptId", savedAttempt.getId());
+        result.put("status", savedAttempt.getStatus());
+        result.put("mcqMarks", savedAttempt.getMcqMarks());
+        result.put("totalMarks", savedAttempt.getTotalMarks());
+        result.put("submittedAt", savedAttempt.getSubmittedAt());
+        result.put("autoSubmitted", Boolean.TRUE.equals(savedAttempt.getAutoSubmitted()));
+        result.put("proctorViolationCount", savedAttempt.getProctorViolationCount() != null ? savedAttempt.getProctorViolationCount() : 0);
+        result.put("hasVoiceQuestions", "EVALUATION_PENDING".equalsIgnoreCase(savedAttempt.getStatus()));
+        result.put("serverNow", OffsetDateTime.now(ZoneId.of("Asia/Kolkata")));
+        return result;
+    }
+
+    @Transactional
+    public void evaluateAndFinalizeAttempt(AssessmentAttempt attempt) {
+        String asmtId = attempt.getAssessmentId();
         List<AssessmentQuestion> questions = questionRepository.findByAssessmentIdOrderBySortOrderAsc(asmtId);
         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(attempt.getId());
         Map<String, AttemptAnswer> answerMap = answers.stream()
@@ -2281,18 +2377,79 @@ public class CompetitionService {
         } else {
             attempt.setStatus("COMPLETED");
         }
+    }
 
-        AssessmentAttempt savedAttempt = assessmentAttemptRepository.save(attempt);
+    @Transactional
+    public Map<String, Object> recordProctorEvent(String attemptId, Map<String, Object> payload, User user) {
+        AssessmentAttempt attempt = assessmentAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt not found: " + attemptId));
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("attemptId", savedAttempt.getId());
-        result.put("status", savedAttempt.getStatus());
-        result.put("mcqMarks", savedAttempt.getMcqMarks());
-        result.put("totalMarks", savedAttempt.getTotalMarks());
-        result.put("submittedAt", savedAttempt.getSubmittedAt());
-        result.put("hasVoiceQuestions", hasVoiceQuestionsWithUpload);
-        result.put("serverNow", now);
-        return result;
+        int maxWarnings = 3;
+
+        if (!"IN_PROGRESS".equalsIgnoreCase(attempt.getStatus())) {
+            Map<String, Object> res = new HashMap<>();
+            res.put("autoSubmitted", true);
+            res.put("status", attempt.getStatus());
+            res.put("warningCount", attempt.getProctorViolationCount());
+            res.put("maxWarnings", maxWarnings);
+            return res;
+        }
+
+        String eventType = (String) payload.getOrDefault("eventType", "PROCTOR_VIOLATION");
+        String details = (String) payload.getOrDefault("details", "");
+
+        if (examProctorEventRepository != null) {
+            ExamProctorEvent event = new ExamProctorEvent(
+                    "pe_" + UUID.randomUUID(),
+                    attemptId,
+                    attempt.getRegistrationId(),
+                    eventType,
+                    1,
+                    details
+            );
+            examProctorEventRepository.save(event);
+        }
+
+        int currentCount = (attempt.getProctorViolationCount() != null ? attempt.getProctorViolationCount() : 0) + 1;
+        attempt.setProctorViolationCount(currentCount);
+
+        boolean shouldAutoSubmit = currentCount >= maxWarnings;
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("warningCount", currentCount);
+        res.put("maxWarnings", maxWarnings);
+
+        if (shouldAutoSubmit) {
+            attempt.setAutoSubmitted(true);
+            evaluateAndFinalizeAttempt(attempt);
+            assessmentAttemptRepository.save(attempt);
+
+            res.put("autoSubmitted", true);
+            res.put("status", attempt.getStatus());
+            res.put("message", "Exam auto-submitted due to exceeding maximum allowed proctoring violations (" + maxWarnings + ").");
+        } else {
+            assessmentAttemptRepository.save(attempt);
+            res.put("autoSubmitted", false);
+            res.put("remainingWarnings", Math.max(0, maxWarnings - currentCount));
+        }
+
+        return res;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getProctorEvents(String attemptId, User user) {
+        AssessmentAttempt attempt = assessmentAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt not found: " + attemptId));
+        List<ExamProctorEvent> events = (examProctorEventRepository != null)
+                ? examProctorEventRepository.findByAttemptIdOrderByCreatedAtAsc(attemptId)
+                : Collections.emptyList();
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("attemptId", attemptId);
+        res.put("violationCount", attempt.getProctorViolationCount() != null ? attempt.getProctorViolationCount() : events.size());
+        res.put("autoSubmitted", Boolean.TRUE.equals(attempt.getAutoSubmitted()));
+        res.put("events", events);
+        return res;
     }
 
     @Transactional(readOnly = true)
@@ -2418,6 +2575,8 @@ public class CompetitionService {
         summary.put("incorrectCount", incorrectCount);
         summary.put("voiceCount", voiceCount);
         summary.put("voiceEvaluatedCount", voiceEvaluatedCount);
+        summary.put("autoSubmitted", Boolean.TRUE.equals(attempt.getAutoSubmitted()));
+        summary.put("proctorViolationCount", attempt.getProctorViolationCount() != null ? attempt.getProctorViolationCount() : 0);
 
         Map<String, Object> result = new HashMap<>();
         result.put("assessment", asmt);
@@ -2700,6 +2859,8 @@ public class CompetitionService {
         attemptSummary.put("setId", setId);
         attemptSummary.put("setCode", set != null ? set.getCode() : "");
         attemptSummary.put("setName", set != null ? "Set " + set.getCode() : "");
+        attemptSummary.put("proctorViolationsCount", att.getProctorViolationCount() != null ? att.getProctorViolationCount() : 0);
+        attemptSummary.put("autoSubmitted", Boolean.TRUE.equals(att.getAutoSubmitted()));
 
         Map<String, Object> response = new HashMap<>();
         response.put("attempt", attemptSummary);
@@ -3027,6 +3188,348 @@ public class CompetitionService {
 
             return true;
         }).collect(Collectors.toList());
+    }
+
+    // =========================================================================
+    // N8: TRAINER PORTAL SUBMISSIONS HIERARCHY (3 LEVELS)
+    // =========================================================================
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getTrainerAssignedStudents(
+            String competitionId,
+            String setCode,
+            String search,
+            int page,
+            int size,
+            User user) {
+
+        if (user == null) {
+            throw new org.springframework.security.access.AccessDeniedException("Authentication required");
+        }
+        String role = (user.getRole() != null ? user.getRole() : "").toUpperCase();
+        if (!"TRAINER".equals(role) && !"ADMIN".equals(role) && !"SUPER_ADMIN".equals(role)) {
+            throw new ForbiddenException("Only trainers and admins can view assigned submissions");
+        }
+
+        // 1. Get sets assigned to this trainer (or all sets for admin)
+        List<CompetitionSet> targetSets;
+        if ("TRAINER".equals(role)) {
+            targetSets = setRepository.findAll().stream()
+                    .filter(s -> user.getId().equals(s.getTrainerId()))
+                    .collect(Collectors.toList());
+        } else {
+            targetSets = setRepository.findAll();
+        }
+
+        if (competitionId != null && !competitionId.isBlank() && !"ALL".equalsIgnoreCase(competitionId)) {
+            targetSets = targetSets.stream()
+                    .filter(s -> competitionId.equals(s.getCompetitionId()))
+                    .collect(Collectors.toList());
+        }
+        if (setCode != null && !setCode.isBlank() && !"ALL".equalsIgnoreCase(setCode)) {
+            targetSets = targetSets.stream()
+                    .filter(s -> setCode.equalsIgnoreCase(s.getCode()))
+                    .collect(Collectors.toList());
+        }
+
+        if (targetSets.isEmpty()) {
+            Map<String, Object> emptyResp = new HashMap<>();
+            emptyResp.put("students", Collections.emptyList());
+            emptyResp.put("totalElements", 0);
+            emptyResp.put("totalPages", 0);
+            emptyResp.put("page", page);
+            emptyResp.put("size", size);
+            emptyResp.put("stats", Map.of(
+                    "assignedCompetitions", 0,
+                    "totalSubmissions", 0,
+                    "pendingReview", 0,
+                    "gradedSubmissions", 0
+            ));
+            return emptyResp;
+        }
+
+        Set<String> setIds = targetSets.stream().map(CompetitionSet::getId).collect(Collectors.toSet());
+        Map<String, CompetitionSet> setMap = targetSets.stream().collect(Collectors.toMap(CompetitionSet::getId, s -> s, (a, b) -> a));
+
+        List<CompetitionSetMember> allMembers = setMemberRepository.findAll().stream()
+                .filter(m -> setIds.contains(m.getSetId()))
+                .collect(Collectors.toList());
+
+        Map<String, List<CompetitionSetMember>> membersByRegId = allMembers.stream()
+                .collect(Collectors.groupingBy(CompetitionSetMember::getRegistrationId));
+
+        long overallTotalSubmissions = 0;
+        long overallPendingReview = 0;
+        long overallGradedSubmissions = 0;
+        Set<String> distinctCompIds = targetSets.stream().map(CompetitionSet::getCompetitionId).collect(Collectors.toSet());
+
+        List<Map<String, Object>> studentCards = new ArrayList<>();
+
+        for (Map.Entry<String, List<CompetitionSetMember>> entry : membersByRegId.entrySet()) {
+            String regId = entry.getKey();
+            CompetitionRegistration reg = registrationRepository.findById(regId).orElse(null);
+            if (reg == null) continue;
+
+            CompetitionSetMember member = entry.getValue().get(0);
+            CompetitionSet set = setMap.get(member.getSetId());
+            Competition comp = (set != null && set.getCompetitionId() != null)
+                    ? competitionRepository.findById(set.getCompetitionId()).orElse(null) : null;
+
+            List<AssessmentAttempt> attempts = assessmentAttemptRepository.findByRegistrationId(regId);
+            List<AssessmentAttempt> submittedAttempts = attempts.stream()
+                    .filter(a -> !"NOT_STARTED".equalsIgnoreCase(a.getStatus()) && !"IN_PROGRESS".equalsIgnoreCase(a.getStatus()))
+                    .collect(Collectors.toList());
+
+            long totalSubs = submittedAttempts.size();
+            long pendingSubs = submittedAttempts.stream()
+                    .filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus()))
+                    .count();
+            long gradedSubs = totalSubs - pendingSubs;
+
+            overallTotalSubmissions += totalSubs;
+            overallPendingReview += pendingSubs;
+            overallGradedSubmissions += gradedSubs;
+
+            if (search != null && !search.isBlank()) {
+                String q = search.trim().toLowerCase();
+                String name = reg.getStudentName() != null ? reg.getStudentName().toLowerCase() : "";
+                String email = reg.getStudentEmail() != null ? reg.getStudentEmail().toLowerCase() : "";
+                if (!name.contains(q) && !email.contains(q)) {
+                    continue;
+                }
+            }
+
+            Map<String, Object> card = new HashMap<>();
+            String latestPendingAttemptId = submittedAttempts.stream()
+                    .filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus()))
+                    .map(AssessmentAttempt::getId)
+                    .findFirst()
+                    .orElse(submittedAttempts.isEmpty() ? null : submittedAttempts.get(0).getId());
+            card.put("latestAttemptId", latestPendingAttemptId);
+            card.put("registrationId", regId);
+            card.put("studentName", reg.getStudentName());
+            card.put("studentEmail", reg.getStudentEmail());
+            card.put("studentPhone", reg.getStudentPhone());
+            card.put("competitionId", comp != null ? comp.getId() : (set != null ? set.getCompetitionId() : ""));
+            card.put("competitionTitle", comp != null ? comp.getTitle() : "Competition");
+            card.put("setCode", set != null ? set.getCode() : "");
+            card.put("setName", set != null ? "Set " + set.getCode() : "");
+            card.put("totalSubmissions", totalSubs);
+            card.put("pendingCount", pendingSubs);
+            card.put("correctedCount", gradedSubs);
+            card.put("overallStatus", pendingSubs > 0 ? "PENDING" : "CORRECTED");
+            card.put("statusText", pendingSubs > 0 ? (pendingSubs + " pending") : "All corrected");
+
+            studentCards.add(card);
+        }
+
+        studentCards.sort((a, b) -> {
+            int pA = ((Number) a.get("pendingCount")).intValue();
+            int pB = ((Number) b.get("pendingCount")).intValue();
+            if (pA > 0 && pB == 0) return -1;
+            if (pA == 0 && pB > 0) return 1;
+            String nA = (String) a.getOrDefault("studentName", "");
+            String nB = (String) b.getOrDefault("studentName", "");
+            return nA.compareToIgnoreCase(nB);
+        });
+
+        int totalElements = studentCards.size();
+        int safeSize = size > 0 ? size : 10;
+        int totalPages = (int) Math.ceil((double) totalElements / safeSize);
+        int fromIndex = Math.min(page * safeSize, totalElements);
+        int toIndex = Math.min(fromIndex + safeSize, totalElements);
+        List<Map<String, Object>> paginated = (fromIndex < totalElements) ? studentCards.subList(fromIndex, toIndex) : Collections.emptyList();
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("students", paginated);
+        resp.put("totalElements", totalElements);
+        resp.put("totalPages", totalPages);
+        resp.put("page", page);
+        resp.put("size", safeSize);
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("assignedCompetitions", distinctCompIds.size());
+        stats.put("totalSubmissions", overallTotalSubmissions);
+        stats.put("pendingReview", overallPendingReview);
+        stats.put("gradedSubmissions", overallGradedSubmissions);
+        resp.put("stats", stats);
+
+        return resp;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getTrainerStudentFolders(String registrationId, User user) {
+        validateTrainerAccessToStudent(registrationId, user);
+
+        CompetitionRegistration reg = registrationRepository.findById(registrationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Registration not found: " + registrationId));
+
+        Competition comp = reg.getCompetition();
+        String compTitle = comp != null ? comp.getTitle() : "Competition";
+
+        Optional<CompetitionSetMember> memOpt = setMemberRepository.findByRegistrationId(registrationId);
+        String setCode = "";
+        if (memOpt.isPresent()) {
+            CompetitionSet cs = setRepository.findById(memOpt.get().getSetId()).orElse(null);
+            if (cs != null) setCode = cs.getCode();
+        }
+
+        List<AssessmentAttempt> attempts = assessmentAttemptRepository.findByRegistrationId(registrationId).stream()
+                .filter(a -> !"NOT_STARTED".equalsIgnoreCase(a.getStatus()) && !"IN_PROGRESS".equalsIgnoreCase(a.getStatus()))
+                .collect(Collectors.toList());
+
+        Map<String, List<AssessmentAttempt>> byFolderType = new HashMap<>();
+        byFolderType.put("TEST_SERIES", new ArrayList<>());
+        byFolderType.put("MOCK_TEST", new ArrayList<>());
+        byFolderType.put("FINAL_ASSESSMENT", new ArrayList<>());
+
+        for (AssessmentAttempt att : attempts) {
+            CompetitionAssessment asmt = assessmentRepository.findById(att.getAssessmentId()).orElse(null);
+            if (asmt != null && asmt.getType() != null) {
+                String typeUpper = asmt.getType().toUpperCase();
+                if (byFolderType.containsKey(typeUpper)) {
+                    byFolderType.get(typeUpper).add(att);
+                }
+            }
+        }
+
+        List<Map<String, Object>> folders = new ArrayList<>();
+
+        // 1. Test Series
+        List<AssessmentAttempt> tsAttempts = byFolderType.get("TEST_SERIES");
+        long tsPending = tsAttempts.stream().filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus())).count();
+        long tsTotal = tsAttempts.size();
+        Map<String, Object> tsFolder = new HashMap<>();
+        tsFolder.put("folderKey", "TEST_SERIES");
+        tsFolder.put("title", "Test Series");
+        tsFolder.put("totalSubmissions", tsTotal);
+        tsFolder.put("pendingCount", tsPending);
+        tsFolder.put("correctedCount", tsTotal - tsPending);
+        tsFolder.put("statusText", tsTotal == 0 ? "No submissions yet"
+                : tsPending > 0 ? ("Correction pending (" + tsPending + ")")
+                : "All test series are corrected");
+        folders.add(tsFolder);
+
+        // 2. Mock Tests
+        List<AssessmentAttempt> mtAttempts = byFolderType.get("MOCK_TEST");
+        long mtPending = mtAttempts.stream().filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus())).count();
+        long mtTotal = mtAttempts.size();
+        Map<String, Object> mtFolder = new HashMap<>();
+        mtFolder.put("folderKey", "MOCK_TEST");
+        mtFolder.put("title", "Mock Tests");
+        mtFolder.put("totalSubmissions", mtTotal);
+        mtFolder.put("pendingCount", mtPending);
+        mtFolder.put("correctedCount", mtTotal - mtPending);
+        mtFolder.put("statusText", mtTotal == 0 ? "No submissions yet"
+                : mtPending > 0 ? ("Correction pending (" + mtPending + ")")
+                : "All mock tests are corrected");
+        folders.add(mtFolder);
+
+        // 3. Final Assessment
+        List<AssessmentAttempt> faAttempts = byFolderType.get("FINAL_ASSESSMENT");
+        long faPending = faAttempts.stream().filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus())).count();
+        long faTotal = faAttempts.size();
+        Map<String, Object> faFolder = new HashMap<>();
+        faFolder.put("folderKey", "FINAL_ASSESSMENT");
+        faFolder.put("title", "Final Assessment");
+        faFolder.put("totalSubmissions", faTotal);
+        faFolder.put("pendingCount", faPending);
+        faFolder.put("correctedCount", faTotal - faPending);
+        faFolder.put("statusText", faTotal == 0 ? "No submissions yet"
+                : faPending > 0 ? ("Correction pending (" + faPending + ")")
+                : "Final assessment is corrected");
+        folders.add(faFolder);
+
+        Map<String, Object> studentInfo = new HashMap<>();
+        studentInfo.put("registrationId", registrationId);
+        studentInfo.put("studentName", reg.getStudentName());
+        studentInfo.put("studentEmail", reg.getStudentEmail());
+        studentInfo.put("competitionTitle", compTitle);
+        studentInfo.put("setCode", setCode);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("student", studentInfo);
+        result.put("folders", folders);
+        return result;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getTrainerStudentSubmissions(String registrationId, String folderType, User user) {
+        validateTrainerAccessToStudent(registrationId, user);
+
+        CompetitionRegistration reg = registrationRepository.findById(registrationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Registration not found: " + registrationId));
+
+        Optional<CompetitionSetMember> memOpt = setMemberRepository.findByRegistrationId(registrationId);
+        String setCode = "";
+        if (memOpt.isPresent()) {
+            CompetitionSet cs = setRepository.findById(memOpt.get().getSetId()).orElse(null);
+            if (cs != null) setCode = cs.getCode();
+        }
+
+        List<AssessmentAttempt> attempts = assessmentAttemptRepository.findByRegistrationId(registrationId).stream()
+                .filter(a -> !"NOT_STARTED".equalsIgnoreCase(a.getStatus()) && !"IN_PROGRESS".equalsIgnoreCase(a.getStatus()))
+                .collect(Collectors.toList());
+
+        List<Map<String, Object>> submissions = new ArrayList<>();
+
+        for (AssessmentAttempt att : attempts) {
+            CompetitionAssessment asmt = assessmentRepository.findById(att.getAssessmentId()).orElse(null);
+            if (asmt == null || asmt.getType() == null) continue;
+            if (folderType != null && !folderType.isBlank() && !"ALL".equalsIgnoreCase(folderType)) {
+                if (!asmt.getType().equalsIgnoreCase(folderType)) continue;
+            }
+
+            List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(att.getId());
+            long voiceCount = answers.stream().filter(a -> a.getVoiceFileId() != null && !a.getVoiceFileId().isBlank()).count();
+            long voiceEvaluatedCount = answers.stream().filter(a -> "EVALUATED".equalsIgnoreCase(a.getEvaluationStatus()) && a.getVoiceFileId() != null && !a.getVoiceFileId().isBlank()).count();
+            long voicePendingCount = answers.stream().filter(a -> "PENDING_TRAINER".equalsIgnoreCase(a.getEvaluationStatus()) && a.getVoiceFileId() != null && !a.getVoiceFileId().isBlank()).count();
+
+            Map<String, Object> sub = new HashMap<>();
+            sub.put("attemptId", att.getId());
+            sub.put("assessmentId", asmt.getId());
+            sub.put("assessmentTitle", asmt.getTitle());
+            sub.put("assessmentType", asmt.getType());
+            sub.put("sequenceNo", asmt.getSequenceNo());
+            sub.put("setCode", setCode);
+            sub.put("submittedAt", att.getSubmittedAt());
+            sub.put("status", att.getStatus());
+            sub.put("mcqMarks", att.getMcqMarks());
+            sub.put("voiceMarks", att.getVoiceMarks());
+            sub.put("totalMarks", att.getTotalMarks());
+            sub.put("maxMarks", asmt.getTotalMarks());
+            sub.put("voiceQuestionsCount", voiceCount);
+            sub.put("voiceEvaluatedCount", voiceEvaluatedCount);
+            sub.put("voicePendingCount", voicePendingCount);
+            sub.put("proctorViolationsCount", att.getProctorViolationCount());
+            sub.put("autoSubmitted", Boolean.TRUE.equals(att.getAutoSubmitted()));
+
+            submissions.add(sub);
+        }
+
+        submissions.sort(Comparator.comparing(s -> (Integer) s.getOrDefault("sequenceNo", 0)));
+        return submissions;
+    }
+
+    private void validateTrainerAccessToStudent(String registrationId, User user) {
+        if (user == null) {
+            throw new org.springframework.security.access.AccessDeniedException("Authentication required");
+        }
+        String role = (user.getRole() != null ? user.getRole() : "").toUpperCase();
+        if ("ADMIN".equals(role) || "SUPER_ADMIN".equals(role)) {
+            return;
+        }
+        if (!"TRAINER".equals(role)) {
+            throw new ForbiddenException("Only trainers and admins can view evaluation submissions");
+        }
+        Optional<CompetitionSetMember> memOpt = setMemberRepository.findByRegistrationId(registrationId);
+        if (memOpt.isEmpty()) {
+            throw new ForbiddenException("Student is not assigned to any competition set");
+        }
+        CompetitionSet cs = setRepository.findById(memOpt.get().getSetId()).orElse(null);
+        if (cs == null || !user.getId().equals(cs.getTrainerId())) {
+            throw new ForbiddenException("You are not assigned to evaluate this student's set");
+        }
     }
 
     // =========================================================================

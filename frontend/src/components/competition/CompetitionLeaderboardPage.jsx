@@ -173,7 +173,7 @@ export default function CompetitionLeaderboardPage() {
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            {currentCompetition?.title || 'National English Olympiad'} Merit List
+            {currentCompetition?.title || 'Competition'} Merit List
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 max-w-2xl font-medium">
             Authoritative rankings computed across objective examination sections and speech recordings.
@@ -283,7 +283,7 @@ export default function CompetitionLeaderboardPage() {
           )}
 
           <div className="text-xs text-slate-400">
-            Total Enrolled Candidates in this Olympiad: <strong className="text-white">{leaderboardData?.totalParticipants || 0}</strong>
+            Total Enrolled Candidates in this Competition: <strong className="text-white">{leaderboardData?.totalParticipants || 0}</strong>
           </div>
         </div>
       )}

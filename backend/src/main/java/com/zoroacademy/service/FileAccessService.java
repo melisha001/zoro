@@ -29,6 +29,13 @@ public class FileAccessService {
     private final UserRepository userRepository;
     private final CourseService courseService;
     private final ScheduleService scheduleService;
+    private final CompetitionStudyMaterialRepository competitionStudyMaterialRepository;
+    private final AssessmentQuestionRepository assessmentQuestionRepository;
+    private final AttemptAnswerRepository attemptAnswerRepository;
+    private final CompetitionRegistrationRepository competitionRegistrationRepository;
+    private final CompetitionAssessmentRepository competitionAssessmentRepository;
+    private final AssessmentAttemptRepository assessmentAttemptRepository;
+    private final CompetitionSetRepository competitionSetRepository;
 
     @Autowired
     public FileAccessService(
@@ -46,7 +53,14 @@ public class FileAccessService {
             TrainerCourseRequestRepository trainerCourseRequestRepository,
             UserRepository userRepository,
             CourseService courseService,
-            ScheduleService scheduleService
+            ScheduleService scheduleService,
+            CompetitionStudyMaterialRepository competitionStudyMaterialRepository,
+            AssessmentQuestionRepository assessmentQuestionRepository,
+            AttemptAnswerRepository attemptAnswerRepository,
+            CompetitionRegistrationRepository competitionRegistrationRepository,
+            CompetitionAssessmentRepository competitionAssessmentRepository,
+            AssessmentAttemptRepository assessmentAttemptRepository,
+            CompetitionSetRepository competitionSetRepository
     ) {
         this.storedFileRepository = storedFileRepository;
         this.courseModuleRepository = courseModuleRepository;
@@ -63,6 +77,13 @@ public class FileAccessService {
         this.userRepository = userRepository;
         this.courseService = courseService;
         this.scheduleService = scheduleService;
+        this.competitionStudyMaterialRepository = competitionStudyMaterialRepository;
+        this.assessmentQuestionRepository = assessmentQuestionRepository;
+        this.attemptAnswerRepository = attemptAnswerRepository;
+        this.competitionRegistrationRepository = competitionRegistrationRepository;
+        this.competitionAssessmentRepository = competitionAssessmentRepository;
+        this.assessmentAttemptRepository = assessmentAttemptRepository;
+        this.competitionSetRepository = competitionSetRepository;
     }
 
     @Transactional(readOnly = true)
@@ -71,12 +92,20 @@ public class FileAccessService {
             return FileAccessResult.notFound("File not found");
         }
 
-        // Public files are accessible to everyone
-        if (Boolean.TRUE.equals(file.getIsPublic())) {
+        String fileId = file.getId();
+        List<CompetitionStudyMaterial> studyMaterials = competitionStudyMaterialRepository.findByStoredFileId(fileId);
+        List<AssessmentQuestion> questions = assessmentQuestionRepository.findByMediaRefContaining(fileId);
+        List<AttemptAnswer> attemptAnswers = attemptAnswerRepository.findByVoiceFileIdOrAudioFileId(fileId, fileId);
+
+        boolean isRestrictedExamResource = !studyMaterials.isEmpty() || !questions.isEmpty() || !attemptAnswers.isEmpty();
+
+        // Generic public files are accessible to everyone, but competition study materials,
+        // questions, and attempt answers are strictly restricted to registered candidates/assigned trainers.
+        if (Boolean.TRUE.equals(file.getIsPublic()) && !isRestrictedExamResource) {
             return FileAccessResult.allowed();
         }
 
-        // Private file requires authentication
+        // Private / restricted file requires authentication
         if (currentUser == null) {
             return FileAccessResult.authRequired("Authentication required to access private file");
         }
@@ -95,8 +124,6 @@ public class FileAccessService {
             return FileAccessResult.allowed();
         }
 
-        String fileId = file.getId();
-
         // Find all records that reference this file
         List<CourseModule> modules = courseModuleRepository.findByAnyFileUrlContaining(fileId);
         List<Schedule> schedules = scheduleRepository.findByAnyFileUrlContaining(fileId);
@@ -106,16 +133,67 @@ public class FileAccessService {
         List<Competition> competitions = competitionRepository.findByRulesPdfUrlContaining(fileId);
 
         boolean hasReferences = !modules.isEmpty() || !schedules.isEmpty() || !assignments.isEmpty()
-                || !submissions.isEmpty() || !courseResources.isEmpty() || !competitions.isEmpty();
+                || !submissions.isEmpty() || !courseResources.isEmpty() || !competitions.isEmpty()
+                || !studyMaterials.isEmpty() || !questions.isEmpty() || !attemptAnswers.isEmpty();
 
         // A private file referenced nowhere is denied with a clear reason
         if (!hasReferences) {
             return FileAccessResult.forbidden("Access denied: Private file is not referenced by any course, schedule, or assignment");
         }
 
-        // Competitions: if referenced in a competition, access is allowed
+        // Competition Study Materials authorization (strictly registered candidates/admin)
+        if (!studyMaterials.isEmpty()) {
+            for (CompetitionStudyMaterial sm : studyMaterials) {
+                if (isUserRegisteredForCompetition(currentUser, sm.getCompetitionId())) {
+                    return FileAccessResult.allowed();
+                }
+            }
+            return FileAccessResult.forbidden("Access denied: You must be registered for this competition to view study materials");
+        }
+
+        // Competitions: if referenced in a competition rules PDF, access is allowed
         if (!competitions.isEmpty()) {
             return FileAccessResult.allowed();
+        }
+
+        // Assessment Questions (audio prompts, image/video prompts) authorization
+        if (!questions.isEmpty()) {
+            for (AssessmentQuestion q : questions) {
+                CompetitionAssessment asmt = competitionAssessmentRepository.findById(q.getAssessmentId()).orElse(null);
+                if (asmt != null) {
+                    if (isUserRegisteredForCompetition(currentUser, asmt.getCompetitionId())) {
+                        return FileAccessResult.allowed();
+                    }
+                    if ("TRAINER".equals(roleUpper) && isTrainerAssignedToCompetition(userId, asmt.getCompetitionId())) {
+                        return FileAccessResult.allowed();
+                    }
+                }
+            }
+            return FileAccessResult.forbidden("Access denied: You are not authorized to access question media for this competition");
+        }
+
+        // Attempt Answers (candidate voice answers) authorization
+        if (!attemptAnswers.isEmpty()) {
+            for (AttemptAnswer ans : attemptAnswers) {
+                AssessmentAttempt att = assessmentAttemptRepository.findById(ans.getAttemptId()).orElse(null);
+                if (att != null) {
+                    CompetitionRegistration reg = competitionRegistrationRepository.findById(att.getRegistrationId()).orElse(null);
+                    if (reg != null && ((userId != null && userId.equals(reg.getStudentId()))
+                            || (userEmail != null && !userEmail.isBlank() && userEmail.equalsIgnoreCase(reg.getStudentEmail())))) {
+                        return FileAccessResult.allowed();
+                    }
+                    if ("TRAINER".equals(roleUpper)) {
+                        String setId = att.getSetId();
+                        if (setId != null) {
+                            CompetitionSet cs = competitionSetRepository.findById(setId).orElse(null);
+                            if (cs != null && userId != null && userId.equals(cs.getTrainerId())) {
+                                return FileAccessResult.allowed();
+                            }
+                        }
+                    }
+                }
+            }
+            return FileAccessResult.forbidden("Access denied: You are not authorized to access this voice answer");
         }
 
         // STUDENT access authorization
@@ -490,5 +568,27 @@ public class FileAccessService {
         }
 
         return false;
+    }
+
+    private boolean isUserRegisteredForCompetition(UserPrincipal user, String competitionId) {
+        if (user == null || competitionId == null) return false;
+        String userId = user.getId();
+        String email = user.getEmail() != null ? user.getEmail().trim().toLowerCase() : "";
+        List<CompetitionRegistration> regs = competitionRegistrationRepository.findByCompetitionId(competitionId);
+        return regs.stream().anyMatch(r -> {
+            boolean statusOk = "Confirmed".equalsIgnoreCase(r.getPaymentStatus()) || "Paid".equalsIgnoreCase(r.getPaymentStatus())
+                    || "CONFIRMED".equalsIgnoreCase(r.getPaymentStatus()) || "PAID".equalsIgnoreCase(r.getPaymentStatus())
+                    || "FREE_CONFIRMED".equalsIgnoreCase(r.getPaymentStatus()) || "Free".equalsIgnoreCase(r.getPaymentStatus());
+            if (!statusOk) return false;
+            boolean userMatch = (userId != null && userId.equals(r.getStudentId()))
+                    || (email != null && !email.isBlank() && email.equalsIgnoreCase(r.getStudentEmail()));
+            return userMatch;
+        });
+    }
+
+    private boolean isTrainerAssignedToCompetition(String trainerId, String competitionId) {
+        if (trainerId == null || competitionId == null) return false;
+        List<CompetitionSet> sets = competitionSetRepository.findByCompetitionIdOrderByCodeAsc(competitionId);
+        return sets.stream().anyMatch(s -> trainerId.equals(s.getTrainerId()));
     }
 }

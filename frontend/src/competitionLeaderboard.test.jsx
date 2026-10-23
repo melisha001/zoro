@@ -111,7 +111,7 @@ describe('CompetitionLeaderboardPage (Phase 5)', () => {
 
     expect(await screen.findByText(/Official Leaderboard Pending Release/i)).toBeTruthy();
     expect(screen.getByText(/Our evaluation committee is completing speech evaluations/i)).toBeTruthy();
-    expect(screen.getByText(/Total Enrolled Candidates in this Olympiad:/i)).toBeTruthy();
+    expect(screen.getByText(/Total Enrolled Candidates in this Competition:/i)).toBeTruthy();
     expect(screen.getByText('14')).toBeTruthy();
   });
 

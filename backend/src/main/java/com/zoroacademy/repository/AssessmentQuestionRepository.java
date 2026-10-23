@@ -9,5 +9,6 @@ import java.util.List;
 @Repository
 public interface AssessmentQuestionRepository extends JpaRepository<AssessmentQuestion, String> {
     List<AssessmentQuestion> findByAssessmentIdOrderBySortOrderAsc(String assessmentId);
+    List<AssessmentQuestion> findByMediaRefContaining(String mediaRef);
     long countByAssessmentId(String assessmentId);
 }

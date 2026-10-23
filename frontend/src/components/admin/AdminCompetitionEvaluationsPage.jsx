@@ -19,7 +19,9 @@ import {
   ExternalLink,
   ChevronRight,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  ShieldAlert,
+  ShieldCheck
 } from 'lucide-react';
 import {
   getCompetitions,
@@ -28,6 +30,7 @@ import {
   evaluateVoiceAnswer
 } from '../../api/competitionApi';
 import { resolveFileUrl } from '../../api/fileApi';
+import AudioPromptPlayer from '../common/AudioPromptPlayer';
 import InlineSpinner from '../common/InlineSpinner';
 import ButtonSpinner from '../common/ButtonSpinner';
 import { useDialog } from '../../context/DialogContext';
@@ -507,6 +510,17 @@ export default function AdminCompetitionEvaluationsPage() {
                             <span>Evaluated</span>
                           </span>
                         )}
+                        {sub.proctorViolationsCount > 0 ? (
+                          <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            <ShieldAlert className="w-3 h-3 text-rose-600" />
+                            <span>{sub.proctorViolationsCount} Violations {sub.autoSubmitted ? '(Auto-submitted)' : ''}</span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                            <span>Proctored: 0</span>
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -605,6 +619,20 @@ export default function AdminCompetitionEvaluationsPage() {
                           ? formatDate(attemptDetail.attempt.submittedAt)
                           : 'In Progress'}
                       </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Proctoring</span>
+                      {attemptDetail.attempt.proctorViolationsCount > 0 ? (
+                        <p className="font-bold text-rose-700 text-xs mt-0.5 flex items-center gap-1">
+                          <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                          <span>{attemptDetail.attempt.proctorViolationsCount} Infractions {attemptDetail.attempt.autoSubmitted ? '(Auto-submitted)' : ''}</span>
+                        </p>
+                      ) : (
+                        <p className="font-bold text-emerald-700 text-xs mt-0.5 flex items-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Clean (0 Infractions)</span>
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -710,26 +738,12 @@ export default function AdminCompetitionEvaluationsPage() {
                                     )}
                                   </div>
 
-                                  {ans.audioUrl ? (
-                                    <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3">
-                                      <button
-                                        type="button"
-                                        onClick={() => togglePlayAudio(ans.id)}
-                                        className="w-9 h-9 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shrink-0 shadow-xs cursor-pointer"
-                                      >
-                                        {playingAnswerId === ans.id ? (
-                                          <Pause className="w-4 h-4 fill-white" />
-                                        ) : (
-                                          <Play className="w-4 h-4 fill-white ml-0.5" />
-                                        )}
-                                      </button>
-
-                                      <audio
-                                        ref={(el) => (audioRefs.current[ans.id] = el)}
-                                        src={ans.audioUrl}
-                                        onEnded={() => setPlayingAnswerId(null)}
-                                        controls
-                                        className="w-full h-8"
+                                  {(ans.audioUrl || ans.voiceFileId) ? (
+                                    <div className="mt-2">
+                                      <AudioPromptPlayer 
+                                        src={ans.audioUrl || ans.voiceFileId} 
+                                        fileId={ans.voiceFileId} 
+                                        label="Candidate Voice Answer" 
                                       />
                                     </div>
                                   ) : (

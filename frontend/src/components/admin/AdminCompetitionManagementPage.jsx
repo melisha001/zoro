@@ -27,6 +27,7 @@ import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import UnifiedUploader from '../common/UnifiedUploader';
 import SafeVideo from '../common/SafeVideo';
+import AudioPromptPlayer from '../common/AudioPromptPlayer';
 import GuidanceVideoManager from './GuidanceVideoManager';
 import { useDialog } from '../../context/DialogContext';
 import { formatDate } from '../../utils/dateFormatter';
@@ -1620,16 +1621,8 @@ export default function AdminCompetitionManagementPage() {
 
                 {/* Audio Question Media Player */}
                 {questionFormData.questionFormat === 'AUDIO' && questionFormData.mediaRef && (
-                  <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2">
-                    <div className="flex items-center gap-2 text-indigo-700 font-bold text-xs">
-                      <Volume2 className="w-4 h-4" />
-                      <span>Audio Question Prompt:</span>
-                    </div>
-                    <audio
-                      controls
-                      src={resolveFileUrl(questionFormData.mediaRef)}
-                      className="w-full h-8"
-                    />
+                  <div className="p-2">
+                    <AudioPromptPlayer src={questionFormData.mediaRef} title="Audio Question Prompt" />
                   </div>
                 )}
 

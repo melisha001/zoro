@@ -17,7 +17,11 @@ import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import SkeletonCard from '../common/SkeletonCard';
 import SafeVideo from '../common/SafeVideo';
+import AudioPromptPlayer from '../common/AudioPromptPlayer';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
+import SecureExamConsentModal from './SecureExamConsentModal';
+import ProctorViolationWarningModal from './ProctorViolationWarningModal';
+import { useSecureExamProctor } from './useSecureExamProctor';
 
 const SET_STYLES = {
   A: {
@@ -69,6 +73,9 @@ export default function CompetitionFinalAssessmentPage() {
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
+  // Proctor & Consent state
+  const [consentModalOpen, setConsentModalOpen] = useState(false);
+
   // Remaining Seconds countdown during test
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const timerRef = useRef(null);
@@ -83,6 +90,44 @@ export default function CompetitionFinalAssessmentPage() {
     const ticker = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(ticker);
   }, []);
+
+  const handleProctorAutoSubmit = useCallback(async (reason) => {
+    if (isSubmitting || !assessmentData?.id) return;
+    setIsSubmitting(true);
+    try {
+      await proctor.exitFullscreen();
+      const res = await submitFinalAssessmentAttempt(assessmentData.id);
+      if (res && res.success && res.data) {
+        setAttemptData(null);
+        setIsTestActive(false);
+        const fullResults = await getFinalAssessmentResults(assessmentData.id);
+        setResultsData(fullResults?.data || res.data);
+        loadFinalAssessment();
+      }
+    } catch (err) {
+      console.error('Proctor auto submit error:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isSubmitting, assessmentData]);
+
+  const proctor = useSecureExamProctor({
+    attemptId: attemptData?.attemptId || attemptData?.attempt?.id || attemptData?.id,
+    isActive: Boolean(isTestActive && !resultsData),
+    initialViolationCount: attemptData?.proctorViolationCount || attemptData?.attempt?.proctorViolationCount || 0,
+    maxViolations: 3,
+    onAutoSubmit: handleProctorAutoSubmit
+  });
+
+  const requestExamStart = () => {
+    setConsentModalOpen(true);
+  };
+
+  const handleConfirmConsent = async () => {
+    setConsentModalOpen(false);
+    await proctor.enterFullscreen();
+    await handleStartOrResume();
+  };
 
   useEffect(() => {
     if (!currentCompetition?.id) return;
@@ -183,6 +228,7 @@ export default function CompetitionFinalAssessmentPage() {
     if (isSubmitting || !assessmentData?.id) return;
     setIsSubmitting(true);
     try {
+      await proctor.exitFullscreen();
       const res = await submitFinalAssessmentAttempt(assessmentData.id);
       if (res && res.success && res.data) {
         setAttemptData(null);
@@ -254,6 +300,7 @@ export default function CompetitionFinalAssessmentPage() {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
+      await proctor.exitFullscreen();
       const res = await submitFinalAssessmentAttempt(assessmentData.id);
       if (res && res.success && res.data) {
         setShowConfirmSubmit(false);
@@ -350,6 +397,19 @@ export default function CompetitionFinalAssessmentPage() {
             </span>
           </div>
         </div>
+
+        {/* Proctoring Violation Alert if auto-submitted */}
+        {(resultsData.attempt?.autoSubmitted || resultsData?.autoSubmitted) && (
+          <div className="p-4 bg-rose-50 border-2 border-rose-400 rounded-2xl flex items-center gap-3 text-rose-900 shadow-sm">
+            <AlertCircle className="w-6 h-6 text-rose-600 shrink-0" />
+            <div>
+              <p className="font-bold text-sm">Exam Terminated: Excessive Proctoring Violations</p>
+              <p className="text-xs text-rose-700">
+                This assessment was automatically submitted because the proctoring integrity threshold was reached ({resultsData.attempt?.proctorViolationCount || resultsData?.proctorViolationCount || 3} infractions detected).
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Scorecard Hero Banner */}
         <div className="bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 rounded-2xl p-6 md:p-8 relative overflow-hidden shadow-xl text-white">
@@ -472,10 +532,9 @@ export default function CompetitionFinalAssessmentPage() {
                       <div className="flex items-center gap-2 text-xs font-bold text-purple-900 uppercase tracking-wider mb-2">
                         <Mic className="w-4 h-4 text-purple-700" /> Your Recorded Submission
                       </div>
-                      <audio 
-                        controls 
-                        src={resolveFileUrl(`/api/files/${studentAnswer.voiceFileId}`)} 
-                        className="w-full h-9" 
+                      <AudioPromptPlayer 
+                        src={studentAnswer.voiceFileId} 
+                        label="Your Recorded Submission" 
                       />
                       {studentAnswer.feedback && (
                         <div className="mt-3 text-xs bg-white p-3 rounded-lg border border-purple-200 text-slate-700">
@@ -568,6 +627,14 @@ export default function CompetitionFinalAssessmentPage() {
 
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col -m-6 md:-m-8">
+        <ProctorViolationWarningModal
+          isOpen={proctor.warningModalOpen}
+          violationCount={proctor.violationCount}
+          maxViolations={3}
+          reason={proctor.currentViolationReason}
+          onResume={proctor.enterFullscreen}
+        />
+
         {/* Test Taker Header */}
         <header className="sticky top-0 z-30 bg-slate-900/95 border-b border-slate-800 backdrop-blur-md px-4 md:px-8 py-3.5">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
@@ -589,6 +656,11 @@ export default function CompetitionFinalAssessmentPage() {
 
             {/* Timer and Autosave Status */}
             <div className="flex items-center gap-4">
+              {/* Proctoring Status Pill */}
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 text-white text-xs font-semibold border border-slate-700 shadow-xs">
+                <span className={`w-2 h-2 rounded-full ${proctor.violationCount > 0 ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`} />
+                <span>Proctored ({proctor.violationCount}/3)</span>
+              </span>
               <div className="hidden sm:flex items-center gap-2 text-xs">
                 {saveStatus === 'saving' && (
                   <span className="text-amber-400 flex items-center gap-1 font-medium">
@@ -671,12 +743,11 @@ export default function CompetitionFinalAssessmentPage() {
 
                   {/* Audio question media player */}
                   {(currentQuestion.audioUrl || (currentQuestion.questionFormat === 'AUDIO' && currentQuestion.mediaRef)) && (
-                    <div className="mt-4 bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-center gap-3">
-                      <Volume2 className="w-5 h-5 text-indigo-400 shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-xs text-slate-400 mb-1 font-semibold">Audio Attachment — Listen carefully:</p>
-                        <audio controls src={resolveFileUrl(currentQuestion.audioUrl || currentQuestion.mediaRef)} className="w-full h-8" />
-                      </div>
+                    <div className="mt-4">
+                      <AudioPromptPlayer 
+                        src={currentQuestion.audioUrl || currentQuestion.mediaRef} 
+                        title="Question Audio Attachment" 
+                      />
                     </div>
                   )}
 
@@ -1026,7 +1097,7 @@ export default function CompetitionFinalAssessmentPage() {
               </button>
             ) : isLive ? (
               <button
-                onClick={handleStartOrResume}
+                onClick={requestExamStart}
                 className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 animate-bounce hover:animate-none"
               >
                 <Play className="w-4 h-4 fill-white" />
@@ -1128,6 +1199,13 @@ export default function CompetitionFinalAssessmentPage() {
           </div>
         </div>
       </div>
+
+      <SecureExamConsentModal
+        isOpen={consentModalOpen}
+        title={assessmentData?.title || 'Final Assessment'}
+        onConfirm={handleConfirmConsent}
+        onCancel={() => setConsentModalOpen(false)}
+      />
     </div>
   );
 }

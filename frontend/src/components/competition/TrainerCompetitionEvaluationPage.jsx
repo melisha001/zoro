@@ -3,7 +3,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { 
   CheckSquare, Mic, Volume2, Award, Clock, CheckCircle2, 
   AlertCircle, Search, User, Filter, ArrowLeft, RefreshCw, 
-  Sparkles, ChevronRight, Save, Headphones, Layers, ShieldCheck
+  Sparkles, ChevronRight, Save, Headphones, Layers, ShieldCheck, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { 
@@ -13,6 +13,7 @@ import {
 } from '../../api/competitionApi';
 import { formatDate } from '../../utils/dateFormatter';
 import SkeletonCard from '../common/SkeletonCard';
+import AudioPromptPlayer from '../common/AudioPromptPlayer';
 
 const SET_STYLES = {
   A: {
@@ -361,6 +362,17 @@ export default function TrainerCompetitionEvaluationPage() {
                             <span>Completed</span>
                           </span>
                         )}
+                        {sub.proctorViolationsCount > 0 ? (
+                          <div className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            <ShieldAlert className="w-3 h-3 text-rose-600" />
+                            <span>{sub.proctorViolationsCount} Violations {sub.autoSubmitted ? '(Auto-submitted)' : ''}</span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                            <span>Proctored: 0</span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="flex items-center space-x-1.5 text-[11px]">
@@ -473,6 +485,22 @@ export default function TrainerCompetitionEvaluationPage() {
                     </span>
                   )}
                 </div>
+
+                <div className="h-6 w-px bg-slate-200 hidden sm:block" />
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold mb-0.5">Proctoring</span>
+                  {attemptDetail.attempt.proctorViolationsCount > 0 ? (
+                    <span className="inline-flex items-center space-x-1 text-rose-700 font-bold bg-rose-100 px-2.5 py-0.5 rounded-full text-xs">
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>{attemptDetail.attempt.proctorViolationsCount} Infractions {attemptDetail.attempt.autoSubmitted ? '(Auto-submitted)' : ''}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center space-x-1 text-slate-700 font-bold bg-slate-100 px-2.5 py-0.5 rounded-full text-xs">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Clean (0 Infractions)</span>
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -562,23 +590,15 @@ export default function TrainerCompetitionEvaluationPage() {
                               )}
                             </div>
 
-                            {ans?.audioUrl ? (
+                            {(ans?.audioUrl || ans?.voiceFileId) ? (
                               <div className="space-y-2">
-                                <audio 
-                                  controls 
-                                  src={ans.audioUrl} 
-                                  className="w-full h-10 rounded-lg outline-hidden"
+                                <AudioPromptPlayer 
+                                  src={ans.audioUrl || ans.voiceFileId} 
+                                  fileId={ans.voiceFileId} 
+                                  label="Student Voice Recording" 
                                 />
                                 <div className="text-[11px] text-slate-400 flex items-center justify-between">
                                   <span>Authoritative recording stored securely in Bunny Storage</span>
-                                  <a 
-                                    href={ans.audioUrl} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="text-amber-400 hover:underline font-bold"
-                                  >
-                                    Direct audio link ↗
-                                  </a>
                                 </div>
                               </div>
                             ) : (

@@ -17,7 +17,11 @@ import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import SkeletonCard from '../common/SkeletonCard';
 import SafeVideo from '../common/SafeVideo';
+import AudioPromptPlayer from '../common/AudioPromptPlayer';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
+import SecureExamConsentModal from './SecureExamConsentModal';
+import ProctorViolationWarningModal from './ProctorViolationWarningModal';
+import { useSecureExamProctor } from './useSecureExamProctor';
 
 export default function CompetitionMockTestsPage() {
   const { currentCompetition } = useOutletContext();
@@ -37,6 +41,10 @@ export default function CompetitionMockTestsPage() {
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
+  // Proctor & Consent state
+  const [consentModalOpen, setConsentModalOpen] = useState(false);
+  const [pendingTestForConsent, setPendingTestForConsent] = useState(null);
+
   // Remaining Seconds countdown during test
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const timerRef = useRef(null);
@@ -51,6 +59,51 @@ export default function CompetitionMockTestsPage() {
     const ticker = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(ticker);
   }, []);
+
+  const handleProctorAutoSubmit = useCallback(async (reason) => {
+    if (!activeTest || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await submitMockTestAttempt(activeTest.id);
+      if (res && res.success) {
+        const resultsRes = await getMockAssessmentResults(activeTest.id);
+        if (resultsRes && resultsRes.success) {
+          setResultsData(resultsRes.data);
+        } else {
+          loadMockTests();
+          setActiveTest(null);
+        }
+      }
+    } catch (err) {
+      console.error('Proctor auto-submit error:', err);
+      loadMockTests();
+      setActiveTest(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [activeTest, isSubmitting]);
+
+  const proctor = useSecureExamProctor({
+    attemptId: attemptData?.attemptId || attemptData?.attempt?.id || attemptData?.id,
+    isActive: Boolean(activeTest && !resultsData),
+    initialViolationCount: attemptData?.proctorViolationCount || attemptData?.attempt?.proctorViolationCount || 0,
+    maxViolations: 3,
+    onAutoSubmit: handleProctorAutoSubmit
+  });
+
+  const requestExamStart = (test) => {
+    setPendingTestForConsent(test);
+    setConsentModalOpen(true);
+  };
+
+  const handleConfirmConsent = async () => {
+    const test = pendingTestForConsent;
+    setConsentModalOpen(false);
+    setPendingTestForConsent(null);
+    if (!test) return;
+    await proctor.enterFullscreen();
+    await handleStartOrResume(test);
+  };
 
   useEffect(() => {
     if (!currentCompetition?.id) return;
@@ -149,6 +202,7 @@ export default function CompetitionMockTestsPage() {
     if (!activeTest || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      await proctor.exitFullscreen();
       const res = await submitMockTestAttempt(activeTest.id);
       if (res && res.success) {
         const resultsRes = await getMockAssessmentResults(activeTest.id);
@@ -166,7 +220,7 @@ export default function CompetitionMockTestsPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [activeTest, isSubmitting]);
+  }, [activeTest, isSubmitting, proctor]);
 
   // Autosave option for MCQ
   const handleSelectOption = async (questionId, optionId) => {
@@ -233,6 +287,7 @@ export default function CompetitionMockTestsPage() {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
+      await proctor.exitFullscreen();
       const res = await submitMockTestAttempt(activeTest.id);
       if (res && res.success) {
         setShowConfirmSubmit(false);
@@ -321,6 +376,19 @@ export default function CompetitionMockTestsPage() {
             Mock Test #{assessment?.sequenceNo} Review
           </span>
         </div>
+
+        {/* Proctoring Violation Alert if auto-submitted */}
+        {(attempt?.autoSubmitted || resultsData?.autoSubmitted) && (
+          <div className="p-4 bg-rose-50 border-2 border-rose-400 rounded-2xl flex items-center gap-3 text-rose-900 shadow-sm">
+            <AlertCircle className="w-6 h-6 text-rose-600 shrink-0" />
+            <div>
+              <p className="font-bold text-sm">Exam Terminated: Excessive Proctoring Violations</p>
+              <p className="text-xs text-rose-700">
+                This assessment was automatically submitted because the proctoring integrity threshold was reached ({attempt?.proctorViolationCount || resultsData?.proctorViolationCount || 3} infractions detected).
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Scorecard Hero Banner */}
         <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-900 rounded-2xl p-6 sm:p-8 text-white shadow-xl">
@@ -499,11 +567,7 @@ export default function CompetitionMockTestsPage() {
                   <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
                     <div className="text-xs font-medium text-slate-500 mb-2">Student Recorded Voice:</div>
                     {ans?.voiceFileId ? (
-                      <audio controls className="w-full">
-                        <source src={resolveFileUrl(ans.voiceFileId)} type="audio/webm" />
-                        <source src={resolveFileUrl(ans.voiceFileId)} type="audio/mp4" />
-                        Your browser does not support the audio element.
-                      </audio>
+                      <AudioPromptPlayer src={ans.voiceFileId} label="Student Recorded Voice" />
                     ) : (
                       <p className="text-sm text-slate-500 italic">No audio recorded for this question.</p>
                     )}
@@ -540,6 +604,14 @@ export default function CompetitionMockTestsPage() {
 
     return (
       <div className="max-w-5xl mx-auto space-y-6">
+        <ProctorViolationWarningModal
+          isOpen={proctor.warningModalOpen}
+          violationCount={proctor.violationCount}
+          maxViolations={3}
+          reason={proctor.currentViolationReason}
+          onResume={proctor.enterFullscreen}
+        />
+
         {/* Test Taker Header */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 sticky top-4 z-20">
           <div>
@@ -558,6 +630,12 @@ export default function CompetitionMockTestsPage() {
 
           {/* Right Header Status: Timer & Submit */}
           <div className="flex items-center gap-4">
+            {/* Proctoring Status Pill */}
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold shadow-xs">
+              <span className={`w-2 h-2 rounded-full ${proctor.violationCount > 0 ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`} />
+              <span>Proctored ({proctor.violationCount}/3)</span>
+            </span>
+
             {/* Live Countdown Timer */}
             <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-mono text-sm font-bold border transition-colors ${
               remainingSeconds !== null && remainingSeconds < 300 
@@ -663,9 +741,8 @@ export default function CompetitionMockTestsPage() {
 
             {/* Question Media Prompt (Audio or Video) */}
             {currentQ.questionFormat === 'AUDIO' && currentQ.mediaRef && (
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center space-x-3">
-                <Volume2 className="w-5 h-5 text-indigo-600 shrink-0" />
-                <audio controls src={resolveFileUrl(currentQ.mediaRef)} className="w-full" />
+              <div className="mb-4">
+                <AudioPromptPlayer src={currentQ.mediaRef} title="Question Audio Prompt" />
               </div>
             )}
             {currentQ.questionFormat === 'VIDEO' && currentQ.mediaRef && (
@@ -849,7 +926,7 @@ export default function CompetitionMockTestsPage() {
           Mock Tests (4 Scheduled Windows)
         </h1>
         <p className="text-sm sm:text-base text-slate-600 mt-1 max-w-2xl">
-          Complete high-stakes full-length mock exams within strict scheduled time windows to experience authentic Olympiad test conditions.
+          Complete high-stakes full-length mock exams within strict scheduled time windows to experience authentic competition test conditions.
         </p>
       </div>
 
@@ -888,7 +965,7 @@ export default function CompetitionMockTestsPage() {
                 </div>
               </div>
               <button
-                onClick={() => handleStartOrResume(liveMock)}
+                onClick={() => requestExamStart(liveMock)}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-white text-emerald-800 font-bold rounded-2xl shadow-lg hover:bg-emerald-50 transition-transform active:scale-95 text-sm"
               >
                 <Play className="w-4 h-4 fill-emerald-800" />
@@ -1046,7 +1123,7 @@ export default function CompetitionMockTestsPage() {
                     </button>
                   ) : isLive ? (
                     <button
-                      onClick={() => handleStartOrResume(test)}
+                      onClick={() => requestExamStart(test)}
                       className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-2xl shadow transition-colors"
                     >
                       <Play className="w-4 h-4 fill-white" />
@@ -1075,6 +1152,16 @@ export default function CompetitionMockTestsPage() {
           })}
         </div>
       )}
+
+      <SecureExamConsentModal
+        isOpen={consentModalOpen}
+        title={pendingTestForConsent?.title || 'Mock Test'}
+        onConfirm={handleConfirmConsent}
+        onCancel={() => {
+          setConsentModalOpen(false);
+          setPendingTestForConsent(null);
+        }}
+      />
     </div>
   );
 }

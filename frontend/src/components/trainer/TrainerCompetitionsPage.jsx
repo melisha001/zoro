@@ -21,14 +21,24 @@ import {
   RefreshCw,
   AlertCircle,
   Award,
-  Sparkles
+  Sparkles,
+  Folder,
+  FolderOpen,
+  ArrowLeft,
+  ShieldAlert,
+  ShieldCheck,
+  Mic
 } from 'lucide-react';
 import {
   getTrainerAssignedCompetitions,
   getTrainerFilteredSubmissions,
   getTrainerAttemptDetail,
-  evaluateVoiceAnswer
+  evaluateVoiceAnswer,
+  getTrainerStudents,
+  getTrainerStudentFolders,
+  getTrainerStudentSubmissions
 } from '../../api/competitionApi';
+import AudioPromptPlayer from '../common/AudioPromptPlayer';
 import { resolveFileUrl } from '../../api/fileApi';
 import SafeVideo from '../common/SafeVideo';
 import InlineSpinner from '../common/InlineSpinner';
@@ -60,6 +70,25 @@ export default function TrainerCompetitionsPage() {
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // 3-Level Folder Hierarchy State (N8)
+  const [activeStudent, setActiveStudent] = useState(null);
+  const [activeFolder, setActiveFolder] = useState(null);
+
+  // Level 1: Students list
+  const [students, setStudents] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsPage, setStudentsPage] = useState(0);
+  const [studentsTotalPages, setStudentsTotalPages] = useState(0);
+  const [studentsTotalElements, setStudentsTotalElements] = useState(0);
+
+  // Level 2: Folders
+  const [folders, setFolders] = useState([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
+
+  // Level 3: Submissions inside folder
+  const [folderSubmissions, setFolderSubmissions] = useState([]);
+  const [folderSubmissionsLoading, setFolderSubmissionsLoading] = useState(false);
+
   // Evaluation Modal / Drawer State
   const [selectedAttemptId, setSelectedAttemptId] = useState(null);
   const [attemptDetail, setAttemptDetail] = useState(null);
@@ -82,12 +111,74 @@ export default function TrainerCompetitionsPage() {
       if (compRes && compRes.success && Array.isArray(compRes.data)) {
         setAssignedCompetitions(compRes.data);
       }
-      await loadSubmissionsList();
+      await Promise.all([loadSubmissionsList(), loadStudents()]);
     } catch (err) {
       console.error('Failed to load trainer competitions data:', err);
       showError('Failed to load assigned competitions');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadStudents = async () => {
+    setStudentsLoading(true);
+    try {
+      const res = await getTrainerStudents({
+        competitionId: selectedCompId,
+        setCode: selectedSetCode,
+        search: searchQuery,
+        page: studentsPage,
+        size: 10
+      });
+      if (res && res.success && res.data) {
+        setStudents(res.data.students || []);
+        setStudentsTotalPages(res.data.totalPages || 0);
+        setStudentsTotalElements(res.data.totalElements || 0);
+      } else {
+        setStudents([]);
+      }
+    } catch (err) {
+      console.error('Failed to load students:', err);
+      setStudents([]);
+    } finally {
+      setStudentsLoading(false);
+    }
+  };
+
+  const loadStudentFolders = async (student) => {
+    setActiveStudent(student);
+    setActiveFolder(null);
+    setFoldersLoading(true);
+    try {
+      const res = await getTrainerStudentFolders(student.registrationId);
+      if (res && res.success && res.data) {
+        setFolders(res.data.folders || []);
+      } else {
+        setFolders([]);
+      }
+    } catch (err) {
+      console.error('Failed to load student folders:', err);
+      setFolders([]);
+    } finally {
+      setFoldersLoading(false);
+    }
+  };
+
+  const loadFolderSubmissions = async (student, folder) => {
+    setActiveFolder(folder);
+    setFolderSubmissionsLoading(true);
+    try {
+      const res = await getTrainerStudentSubmissions(student.registrationId, folder.folderKey);
+      if (res && res.success && res.data) {
+        setFolderSubmissions(Array.isArray(res.data) ? res.data : (res.data.submissions || []));
+      } else {
+        setFolderSubmissions([]);
+      }
+    } catch (err) {
+      console.error('Failed to load folder submissions:', err);
+      setFolderSubmissions([]);
+    } finally {
+      setFolderSubmissionsLoading(false);
     }
   };
 
@@ -114,8 +205,9 @@ export default function TrainerCompetitionsPage() {
   useEffect(() => {
     if (!loading) {
       loadSubmissionsList();
+      loadStudents();
     }
-  }, [selectedCompId, selectedExamType, selectedSetCode, selectedStatus, searchQuery]);
+  }, [selectedCompId, selectedExamType, selectedSetCode, selectedStatus, searchQuery, studentsPage]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -125,6 +217,13 @@ export default function TrainerCompetitionsPage() {
         setAssignedCompetitions(compRes.data);
       }
       await loadSubmissionsList();
+      if (activeStudent && activeFolder) {
+        await loadFolderSubmissions(activeStudent, activeFolder);
+      } else if (activeStudent) {
+        await loadStudentFolders(activeStudent);
+      } else {
+        await loadStudents();
+      }
       showSuccess('Submissions refreshed');
     } catch (e) {
       showError('Refresh failed');
@@ -253,6 +352,14 @@ export default function TrainerCompetitionsPage() {
         if (refreshed?.success && refreshed.data) {
           setAttemptDetail(refreshed.data);
         }
+        if (activeStudent && activeFolder) {
+          const subRes = await getTrainerStudentSubmissions(activeStudent.registrationId, activeFolder.folderKey);
+          if (subRes?.data) setFolderSubmissions(Array.isArray(subRes.data) ? subRes.data : (subRes.data.submissions || []));
+          const foldRes = await getTrainerStudentFolders(activeStudent.registrationId);
+          if (foldRes?.data?.folders) setFolders(foldRes.data.folders);
+        }
+        loadStudents();
+        loadSubmissionsList();
       } else {
         setEvaluatingMap((prev) => ({
           ...prev,
@@ -500,160 +607,535 @@ export default function TrainerCompetitionsPage() {
         </div>
       </div>
 
-      {/* SUBMISSIONS TABLE */}
+      {/* 3-LEVEL ASSIGNED SUBMISSIONS HIERARCHY (N8) */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-sm text-slate-900">Assigned Submissions</span>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-indigo-50 text-indigo-700">
-              {submissions.length}
-            </span>
-          </div>
+        {/* Breadcrumb Header */}
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
+          <nav className="flex items-center space-x-2 text-xs font-semibold text-slate-500">
+            <button
+              onClick={() => {
+                setActiveStudent(null);
+                setActiveFolder(null);
+                loadStudents();
+              }}
+              className={`hover:text-indigo-600 transition cursor-pointer flex items-center gap-1 ${
+                !activeStudent ? 'text-indigo-600 font-bold' : ''
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Assigned Submissions</span>
+            </button>
+
+            {activeStudent && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                <button
+                  onClick={() => {
+                    setActiveFolder(null);
+                    loadStudentFolders(activeStudent);
+                  }}
+                  className={`hover:text-indigo-600 transition cursor-pointer flex items-center gap-1 ${
+                    !activeFolder ? 'text-indigo-600 font-bold' : ''
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>{activeStudent.studentName}</span>
+                </button>
+              </>
+            )}
+
+            {activeFolder && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-slate-900 font-bold flex items-center gap-1">
+                  <FolderOpen className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{activeFolder.title}</span>
+                </span>
+              </>
+            )}
+          </nav>
+
+          {/* Quick back button */}
+          {(activeStudent || activeFolder) && (
+            <button
+              onClick={() => {
+                if (activeFolder) {
+                  setActiveFolder(null);
+                  loadStudentFolders(activeStudent);
+                } else {
+                  setActiveStudent(null);
+                  loadStudents();
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold transition shadow-2xs cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to {activeFolder ? 'Folders' : 'Students'}</span>
+            </button>
+          )}
         </div>
 
-        {submissions.length === 0 ? (
-          <div className="p-16 text-center">
-            <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
-              <Award className="w-8 h-8" />
+        {/* ======================================================== */}
+        {/* LEVEL 1: STUDENTS LIST                                  */}
+        {/* ======================================================== */}
+        {!activeStudent && (
+          <div>
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-slate-900">Assigned Students</span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-indigo-50 text-indigo-700">
+                  {studentsTotalElements}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 hidden sm:block">
+                Click a student to view assessment folders and submissions
+              </p>
             </div>
-            <h4 className="text-base font-bold text-slate-800">No submissions found</h4>
-            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              {assignedCompetitions.length === 0
-                ? 'You have not been assigned to any competition sets yet. The administrator will allocate sets to you for grading.'
-                : 'No student submissions match your current filter settings. Try adjusting the competition, exam, set, or status filters.'}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
-                <tr>
-                  <th className="py-3.5 px-5">Student</th>
-                  <th className="py-3.5 px-4">Competition</th>
-                  <th className="py-3.5 px-4">Exam</th>
-                  <th className="py-3.5 px-4 text-center">Set</th>
-                  <th className="py-3.5 px-4">Submitted At</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
-                  <th className="py-3.5 px-4 text-center">Marks</th>
-                  <th className="py-3.5 px-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {submissions.map((sub) => {
-                  const setStyle = SET_STYLES[sub.setCode] || {
-                    badge: 'bg-slate-100 text-slate-800 border-slate-200',
-                    dot: 'bg-slate-400'
-                  };
-                  const isPending = sub.status === 'EVALUATION_PENDING';
 
-                  return (
-                    <tr
-                      key={sub.attemptId}
-                      className="hover:bg-slate-50/80 transition-colors group"
+            {studentsLoading ? (
+              <div className="p-16 text-center">
+                <InlineSpinner className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-500">Loading assigned students...</p>
+              </div>
+            ) : students.length === 0 ? (
+              <div className="p-16 text-center">
+                <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-8 h-8" />
+                </div>
+                <h4 className="text-base font-bold text-slate-800">No students found</h4>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  {assignedCompetitions.length === 0
+                    ? 'You have not been assigned to any competition sets yet.'
+                    : 'No student matches your current filter criteria.'}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
+                      <tr>
+                        <th className="py-3.5 px-5">Student</th>
+                        <th className="py-3.5 px-4">Competition & Set</th>
+                        <th className="py-3.5 px-4 text-center">Submissions</th>
+                        <th className="py-3.5 px-4 text-center">Graded</th>
+                        <th className="py-3.5 px-4 text-center">Pending</th>
+                        <th className="py-3.5 px-4 text-center">Evaluation Status</th>
+                        <th className="py-3.5 px-5 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {students.map((std) => {
+                        const setStyle = SET_STYLES[std.setCode] || {
+                          badge: 'bg-slate-100 text-slate-800 border-slate-200',
+                          dot: 'bg-slate-400'
+                        };
+                        const hasPending = std.pendingCount > 0;
+
+                        return (
+                          <tr
+                            key={std.registrationId}
+                            className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
+                            onClick={() => loadStudentFolders(std)}
+                          >
+                            <td className="py-3.5 px-5">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                  {(std.studentName || 'S').charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                                    {std.studentName}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 font-mono">
+                                    {std.studentEmail}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <div className="font-semibold text-slate-800 truncate max-w-xs">
+                                {std.competitionTitle}
+                              </div>
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border mt-0.5 ${setStyle.badge}`}
+                              >
+                                <span className={`w-1 h-1 rounded-full ${setStyle.dot}`} />
+                                Set {std.setCode || 'A'}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-center font-bold text-slate-800">
+                              {std.totalSubmissions}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-center font-bold text-emerald-600">
+                              {std.correctedCount}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-center font-bold text-amber-600">
+                              {std.pendingCount}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-center">
+                              {hasPending ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                                  <span>Correction pending ({std.pendingCount})</span>
+                                </span>
+                              ) : std.totalSubmissions > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  <span>All tests are corrected</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">
+                                  No submissions yet
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-5 text-right">
+                              <div className="inline-flex items-center gap-1.5 justify-end">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    loadStudentFolders(std);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                                >
+                                  <Folder className="w-3.5 h-3.5" />
+                                  <span>Folders</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (std.latestAttemptId) {
+                                      handleOpenEvaluation(std.latestAttemptId);
+                                    } else {
+                                      loadStudentFolders(std);
+                                    }
+                                  }}
+                                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer ${
+                                    hasPending
+                                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
+                                      : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                                  }`}
+                                >
+                                  <FileCheck className="w-3.5 h-3.5" />
+                                  <span>Evaluate</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination footer */}
+                <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>
+                    Showing {studentsPage * 10 + 1} to{' '}
+                    {Math.min((studentsPage + 1) * 10, studentsTotalElements)} of{' '}
+                    {studentsTotalElements} students
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setStudentsPage((p) => Math.max(0, p - 1))}
+                      disabled={studentsPage === 0}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-bold"
                     >
-                      {/* Student info */}
-                      <td className="py-3.5 px-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
-                            {(sub.studentName || 'S').charAt(0).toUpperCase()}
+                      Previous
+                    </button>
+                    <span className="font-bold text-slate-700">
+                      Page {studentsPage + 1} of {Math.max(1, studentsTotalPages)}
+                    </span>
+                    <button
+                      onClick={() => setStudentsPage((p) => Math.min(studentsTotalPages - 1, p + 1))}
+                      disabled={studentsPage >= studentsTotalPages - 1}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-bold"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* LEVEL 2: 3 FOLDERS VIEW                                 */}
+        {/* ======================================================== */}
+        {activeStudent && !activeFolder && (
+          <div className="p-6 space-y-6">
+            {/* Student Banner */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg shrink-0">
+                  {(activeStudent.studentName || 'S').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">{activeStudent.studentName}</h3>
+                  <p className="text-xs text-slate-500 font-mono">
+                    {activeStudent.studentEmail} • {activeStudent.studentPhone || 'No phone'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800">
+                  {activeStudent.competitionTitle}
+                </span>
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-200 text-slate-800">
+                  Set {activeStudent.setCode}
+                </span>
+              </div>
+            </div>
+
+            {/* Folders Grid */}
+            <div>
+              <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-4">
+                Assessment Categories (3 Folders)
+              </h4>
+
+              {foldersLoading ? (
+                <div className="py-12 text-center">
+                  <InlineSpinner className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-slate-500">Loading student folders...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  {(folders.length > 0
+                    ? folders
+                    : [
+                        { folderKey: 'TEST_SERIES', title: 'Test Series', totalSubmissions: 0, pendingCount: 0, correctedCount: 0, statusText: 'No submissions yet' },
+                        { folderKey: 'MOCK_TEST', title: 'Mock Tests', totalSubmissions: 0, pendingCount: 0, correctedCount: 0, statusText: 'No submissions yet' },
+                        { folderKey: 'FINAL_ASSESSMENT', title: 'Final Assessment', totalSubmissions: 0, pendingCount: 0, correctedCount: 0, statusText: 'No submissions yet' }
+                      ]
+                  ).map((folder) => {
+                    const isTS = folder.folderKey === 'TEST_SERIES';
+                    const isMock = folder.folderKey === 'MOCK_TEST';
+                    const isFinal = folder.folderKey === 'FINAL_ASSESSMENT';
+
+                    const colorTheme = isTS
+                      ? { bg: 'bg-purple-50/40 border-purple-200 hover:border-purple-300', iconBg: 'bg-purple-100 text-purple-700', btn: 'bg-purple-600 hover:bg-purple-700' }
+                      : isMock
+                      ? { bg: 'bg-amber-50/40 border-amber-200 hover:border-amber-300', iconBg: 'bg-amber-100 text-amber-700', btn: 'bg-amber-600 hover:bg-amber-700' }
+                      : { bg: 'bg-emerald-50/40 border-emerald-200 hover:border-emerald-300', iconBg: 'bg-emerald-100 text-emerald-700', btn: 'bg-emerald-600 hover:bg-emerald-700' };
+
+                    const hasPending = folder.pendingCount > 0;
+
+                    return (
+                      <div
+                        key={folder.folderKey}
+                        className={`p-6 rounded-3xl border transition-all shadow-2xs hover:shadow-md flex flex-col justify-between ${colorTheme.bg}`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${colorTheme.iconBg}`}>
+                              {isTS ? <Layers className="w-6 h-6" /> : isMock ? <Trophy className="w-6 h-6" /> : <Award className="w-6 h-6" />}
+                            </div>
+                            {hasPending ? (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                                <span>Correction pending ({folder.pendingCount})</span>
+                              </span>
+                            ) : folder.totalSubmissions > 0 ? (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>{folder.statusText || 'All corrected'}</span>
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">
+                                No submissions yet
+                              </span>
+                            )}
                           </div>
-                          <div>
-                            <div className="font-bold text-slate-900">{sub.studentName}</div>
-                            <div className="text-[11px] text-slate-400 font-mono">
-                              {sub.studentEmail}
+
+                          <h3 className="text-lg font-black text-slate-900">{folder.title}</h3>
+                          <p className="text-xs text-slate-500 mt-1 font-medium">
+                            {isTS
+                              ? 'Practice assessments and modular test papers'
+                              : isMock
+                              ? 'Full-length timed simulation exams'
+                              : 'Official championship final test paper'}
+                          </p>
+
+                          <div className="mt-4 pt-4 border-t border-slate-200/60 grid grid-cols-3 text-center text-xs">
+                            <div>
+                              <span className="text-slate-400 block text-[10px] uppercase font-bold">Total</span>
+                              <span className="font-black text-slate-800 text-sm">{folder.totalSubmissions}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[10px] uppercase font-bold">Graded</span>
+                              <span className="font-black text-emerald-600 text-sm">{folder.correctedCount}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[10px] uppercase font-bold">Pending</span>
+                              <span className="font-black text-amber-600 text-sm">{folder.pendingCount}</span>
                             </div>
                           </div>
                         </div>
-                      </td>
 
-                      {/* Competition Title */}
-                      <td className="py-3.5 px-4 font-semibold text-slate-700">
-                        {sub.competitionTitle || 'Competition'}
-                      </td>
+                        <div className="mt-6">
+                          <button
+                            type="button"
+                            onClick={() => loadFolderSubmissions(activeStudent, folder)}
+                            className={`w-full py-2.5 rounded-2xl text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer ${colorTheme.btn}`}
+                          >
+                            <FolderOpen className="w-4 h-4" />
+                            <span>Open {folder.title}</span>
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
-                      {/* Exam Title & Type */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{sub.assessmentTitle}</div>
-                        <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-100 text-slate-600 mt-0.5">
-                          {sub.assessmentType === 'TEST_SERIES'
-                            ? `Test #${sub.sequenceNo || ''}`
-                            : sub.assessmentType === 'MOCK_TEST'
-                            ? `Mock Test #${sub.sequenceNo || ''}`
-                            : 'Final Assessment'}
-                        </span>
-                      </td>
+        {/* ======================================================== */}
+        {/* LEVEL 3: SUBMISSIONS INSIDE FOLDER                      */}
+        {/* ======================================================== */}
+        {activeStudent && activeFolder && (
+          <div>
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  {activeStudent.studentName} — {activeFolder.title}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                  Select a submission below to play voice answers and evaluate student responses.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700">
+                {folderSubmissions.length} Submissions
+              </span>
+            </div>
 
-                      {/* Set Code */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black border ${setStyle.badge}`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${setStyle.dot}`} />
-                          Set {sub.setCode || 'A'}
-                        </span>
-                      </td>
-
-                      {/* Submitted At */}
-                      <td className="py-3.5 px-4 text-slate-500 text-[11px]">
-                        {formatDate(sub.submittedAt, 'MMM dd, yyyy HH:mm')}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                            isPending
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          }`}
-                        >
-                          {isPending ? (
-                            <>
-                              <Clock className="w-3 h-3" />
-                              Pending Review
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="w-3 h-3" />
-                              Graded
-                            </>
-                          )}
-                        </span>
-                      </td>
-
-                      {/* Marks */}
-                      <td className="py-3.5 px-4 text-center font-bold">
-                        {sub.totalMarks != null ? (
-                          <span className="text-slate-900">
-                            {sub.totalMarks}{' '}
-                            <span className="text-slate-400 font-normal">
-                              / {sub.maxMarks || 20}
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </td>
-
-                      {/* Action */}
-                      <td className="py-3.5 px-5 text-right">
-                        <button
-                          onClick={() => handleOpenEvaluation(sub.attemptId)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                            isPending
-                              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          <FileCheck className="w-3.5 h-3.5" />
-                          {isPending ? 'Evaluate' : 'Review Marks'}
-                        </button>
-                      </td>
+            {folderSubmissionsLoading ? (
+              <div className="p-16 text-center">
+                <InlineSpinner className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-500">Loading submissions in {activeFolder.title}...</p>
+              </div>
+            ) : folderSubmissions.length === 0 ? (
+              <div className="p-16 text-center">
+                <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
+                  <Award className="w-8 h-8" />
+                </div>
+                <h4 className="text-base font-bold text-slate-800">No submissions found</h4>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  This student has not yet submitted any tests under {activeFolder.title}.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
+                    <tr>
+                      <th className="py-3.5 px-5">Assessment</th>
+                      <th className="py-3.5 px-4">Submitted At</th>
+                      <th className="py-3.5 px-4 text-center">Voice Progress</th>
+                      <th className="py-3.5 px-4 text-center">Marks</th>
+                      <th className="py-3.5 px-4 text-center">Proctoring</th>
+                      <th className="py-3.5 px-4 text-center">Status</th>
+                      <th className="py-3.5 px-5 text-right">Action</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {folderSubmissions.map((sub) => {
+                      const isPending = sub.status === 'EVALUATION_PENDING' || sub.voicePendingCount > 0;
+
+                      return (
+                        <tr key={sub.attemptId} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-5">
+                            <div className="font-bold text-slate-900">{sub.assessmentTitle}</div>
+                            <span className="text-[10px] text-slate-400 font-semibold">
+                              #{sub.sequenceNo} • Set {sub.setCode || 'A'}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-slate-500 text-[11px]">
+                            {sub.submittedAt ? formatDate(sub.submittedAt, 'MMM dd, yyyy HH:mm') : 'In Progress'}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-center">
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                              <Mic className="w-3.5 h-3.5 text-purple-600" />
+                              <span>{sub.voiceEvaluatedCount} / {sub.voiceQuestionsCount} graded</span>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-center font-bold">
+                            <span className="text-slate-900">{sub.totalMarks ?? 0}</span>
+                            <span className="text-slate-400 font-normal"> / {sub.maxMarks || 20}</span>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-center">
+                            {sub.proctorViolationsCount > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                                <span>{sub.proctorViolationsCount} Violations {sub.autoSubmitted ? '(Auto-submitted)' : ''}</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Clean (0)</span>
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-center">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                                isPending
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}
+                            >
+                              {isPending ? (
+                                <>
+                                  <Clock className="w-3 h-3" />
+                                  Pending Review
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Graded
+                                </>
+                              )}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-5 text-right">
+                            <button
+                              onClick={() => handleOpenEvaluation(sub.attemptId)}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer ${
+                                isPending
+                                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                              }`}
+                            >
+                              <FileCheck className="w-3.5 h-3.5" />
+                              {isPending ? 'Evaluate' : 'Review Marks'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -857,41 +1339,15 @@ export default function TrainerCompetitionsPage() {
                                       <Volume2 className="w-3.5 h-3.5 text-purple-600" />
                                       Voice Recording
                                     </span>
-                                    {ans.audioUrl && (
-                                      <a
-                                        href={resolveFileUrl(ans.audioUrl)}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-                                      >
-                                        <ExternalLink className="w-3 h-3" />
-                                        Direct File Link
-                                      </a>
-                                    )}
                                   </div>
 
-                                  {ans.audioUrl ? (
-                                    <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-                                      <button
-                                        type="button"
-                                        onClick={() => togglePlayAudio(ans.id)}
-                                        className="w-9 h-9 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center shrink-0 shadow-xs cursor-pointer"
-                                      >
-                                        {playingAnswerId === ans.id ? (
-                                          <Pause className="w-4 h-4" />
-                                        ) : (
-                                          <Play className="w-4 h-4 ml-0.5" />
-                                        )}
-                                      </button>
-                                      <div className="flex-1">
-                                        <audio
-                                          ref={(el) => (audioRefs.current[ans.id] = el)}
-                                          src={resolveFileUrl(ans.audioUrl)}
-                                          onEnded={() => setPlayingAnswerId(null)}
-                                          controls
-                                          className="w-full h-8"
-                                        />
-                                      </div>
+                                  {(ans.voiceFileId || ans.audioUrl) ? (
+                                    <div className="mt-2">
+                                      <AudioPromptPlayer
+                                        src={ans.audioUrl || ans.voiceFileId}
+                                        fileId={ans.voiceFileId}
+                                        label="Student Voice Recording"
+                                      />
                                     </div>
                                   ) : (
                                     <p className="text-xs text-amber-700 italic">

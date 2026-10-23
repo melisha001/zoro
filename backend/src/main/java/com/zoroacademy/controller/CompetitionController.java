@@ -465,6 +465,50 @@ public class CompetitionController {
         return ApiResponse.ok(competitionService.getTrainerEvaluationsWithFilters(competitionId, examType, setCode, status, search, user));
     }
 
+    @GetMapping("/trainer/students")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<Map<String, Object>> getTrainerAssignedStudents(
+            @RequestParam(required = false, defaultValue = "ALL") String competitionId,
+            @RequestParam(required = false, defaultValue = "ALL") String setCode,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "10") int size) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getTrainerAssignedStudents(competitionId, setCode, search, page, size, user));
+    }
+
+    @GetMapping("/trainer/students/{registrationId}/folders")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<Map<String, Object>> getTrainerStudentFolders(
+            @PathVariable String registrationId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getTrainerStudentFolders(registrationId, user));
+    }
+
+    @GetMapping("/trainer/students/{registrationId}/submissions")
+    @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<List<Map<String, Object>>> getTrainerStudentSubmissions(
+            @PathVariable String registrationId,
+            @RequestParam(required = false, defaultValue = "ALL") String folderType) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getTrainerStudentSubmissions(registrationId, folderType, user));
+    }
+
+    @PostMapping("/assessments/attempts/{attemptId}/proctor-event")
+    public ApiResponse<Map<String, Object>> recordProctorEvent(
+            @PathVariable String attemptId,
+            @RequestBody Map<String, Object> payload) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.recordProctorEvent(attemptId, payload, user));
+    }
+
+    @GetMapping("/assessments/attempts/{attemptId}/proctor-events")
+    public ApiResponse<Map<String, Object>> getProctorEvents(
+            @PathVariable String attemptId) {
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.getProctorEvents(attemptId, user));
+    }
+
     // =========================================================================
     // PHASE 5: LEADERBOARD ENDPOINTS
     // =========================================================================

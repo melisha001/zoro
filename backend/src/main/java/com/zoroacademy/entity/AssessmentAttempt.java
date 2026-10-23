@@ -49,6 +49,12 @@ public class AssessmentAttempt {
     @Column(name = "publish_version", nullable = false)
     private Integer publishVersion = 1;
 
+    @Column(name = "proctor_violation_count")
+    private Integer proctorViolationCount = 0;
+
+    @Column(name = "auto_submitted")
+    private Boolean autoSubmitted = false;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
@@ -90,6 +96,12 @@ public class AssessmentAttempt {
 
     public Integer getPublishVersion() { return publishVersion; }
     public void setPublishVersion(Integer publishVersion) { this.publishVersion = publishVersion; }
+
+    public Integer getProctorViolationCount() { return proctorViolationCount != null ? proctorViolationCount : 0; }
+    public void setProctorViolationCount(Integer proctorViolationCount) { this.proctorViolationCount = proctorViolationCount; }
+
+    public Boolean getAutoSubmitted() { return autoSubmitted != null ? autoSubmitted : false; }
+    public void setAutoSubmitted(Boolean autoSubmitted) { this.autoSubmitted = autoSubmitted; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }

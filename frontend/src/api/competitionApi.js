@@ -638,6 +638,61 @@ export const getTrainerFilteredSubmissions = async (filters = {}) => {
   return apiResponse([], false, res?.message || 'Failed to fetch trainer submissions');
 };
 
+// --- PROCTORING API (N2) ---
+export const recordProctorEvent = async (attemptId, eventType, metadata = {}) => {
+  const res = await apiPost(`/competitions/assessments/attempts/${encodeURIComponent(attemptId)}/proctor-event`, {
+    eventType,
+    metadata
+  });
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to record proctor event');
+};
+
+export const getProctorEvents = async (attemptId) => {
+  const res = await apiGet(`/competitions/assessments/attempts/${encodeURIComponent(attemptId)}/proctor-events`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch proctor events');
+};
+
+// --- TRAINER 3-LEVEL HIERARCHY API (N8) ---
+export const getTrainerStudents = async (params = {}) => {
+  const qs = new URLSearchParams();
+  if (params.page !== undefined) qs.append('page', params.page);
+  if (params.size !== undefined) qs.append('size', params.size);
+  if (params.competitionId && params.competitionId !== 'ALL') qs.append('competitionId', params.competitionId);
+  if (params.setCode && params.setCode !== 'ALL') qs.append('setCode', params.setCode);
+  if (params.search) qs.append('search', params.search);
+
+  const query = qs.toString() ? `?${qs.toString()}` : '';
+  const res = await apiGet(`/competitions/trainer/students${query}`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 20 }, false, res?.message || 'Failed to fetch students');
+};
+
+export const getTrainerStudentFolders = async (registrationId) => {
+  const res = await apiGet(`/competitions/trainer/students/${encodeURIComponent(registrationId)}/folders`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch student folders');
+};
+
+export const getTrainerStudentSubmissions = async (registrationId, folder) => {
+  const query = folder ? `?folder=${encodeURIComponent(folder)}` : '';
+  const res = await apiGet(`/competitions/trainer/students/${encodeURIComponent(registrationId)}/submissions${query}`);
+  if (res && res.success) {
+    return apiResponse(res.data);
+  }
+  return apiResponse({ submissions: [] }, false, res?.message || 'Failed to fetch student submissions');
+};
+
+
 
 
 

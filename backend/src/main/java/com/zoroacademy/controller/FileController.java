@@ -9,6 +9,7 @@ import com.zoroacademy.service.FileStorageService;
 import com.zoroacademy.repository.CompetitionRepository;
 import com.zoroacademy.entity.Competition;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -32,6 +33,9 @@ public class FileController {
     private final FileStorageService fileStorageService;
     private final FileAccessService fileAccessService;
     private final CompetitionRepository competitionRepository;
+    private final com.zoroacademy.repository.CompetitionStudyMaterialRepository competitionStudyMaterialRepository;
+    private final com.zoroacademy.repository.AttemptAnswerRepository attemptAnswerRepository;
+    private final com.zoroacademy.repository.AssessmentQuestionRepository assessmentQuestionRepository;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.zoroacademy.service.BunnyStreamService bunnyStreamService;
@@ -41,13 +45,22 @@ public class FileController {
 
     public FileController(FileStorageService fileStorageService,
                           FileAccessService fileAccessService,
-                          CompetitionRepository competitionRepository) {
+                          CompetitionRepository competitionRepository,
+                          com.zoroacademy.repository.CompetitionStudyMaterialRepository competitionStudyMaterialRepository,
+                          com.zoroacademy.repository.AttemptAnswerRepository attemptAnswerRepository,
+                          com.zoroacademy.repository.AssessmentQuestionRepository assessmentQuestionRepository) {
         this.fileStorageService = fileStorageService;
         this.fileAccessService = fileAccessService;
         this.competitionRepository = competitionRepository;
+        this.competitionStudyMaterialRepository = competitionStudyMaterialRepository;
+        this.attemptAnswerRepository = attemptAnswerRepository;
+        this.assessmentQuestionRepository = assessmentQuestionRepository;
     }
 
     public static String resolveMimeType(String originalName, String defaultType) {
+        if (defaultType != null && defaultType.startsWith("audio/")) {
+            return defaultType;
+        }
         if (originalName == null) {
             return (defaultType != null && !defaultType.isBlank()) ? defaultType : MediaType.APPLICATION_OCTET_STREAM_VALUE;
         }
@@ -64,13 +77,13 @@ public class FileController {
         if (lower.endsWith(".webp")) return "image/webp";
         if (lower.endsWith(".gif")) return "image/gif";
         if (lower.endsWith(".svg")) return "image/svg+xml";
-        if (lower.endsWith(".mp4")) return "video/mp4";
-        if (lower.endsWith(".webm")) return "video/webm";
         if (lower.endsWith(".mp3")) return "audio/mpeg";
         if (lower.endsWith(".wav")) return "audio/wav";
         if (lower.endsWith(".ogg")) return "audio/ogg";
         if (lower.endsWith(".opus")) return "audio/ogg; codecs=opus";
         if (lower.endsWith(".m4a")) return "audio/mp4";
+        if (lower.endsWith(".mp4")) return (defaultType != null && defaultType.startsWith("audio/")) ? defaultType : "video/mp4";
+        if (lower.endsWith(".webm")) return (defaultType != null && defaultType.startsWith("audio/")) ? defaultType : "video/webm";
         if (lower.endsWith(".txt")) return "text/plain";
         if (lower.endsWith(".csv")) return "text/csv";
         if (lower.endsWith(".json")) return "application/json";
@@ -242,28 +255,38 @@ public class FileController {
                     .body(ApiResponse.error("NOT_FOUND", "File not found"));
         }
 
+        boolean isStudyMaterial = !competitionStudyMaterialRepository.findByStoredFileId(id).isEmpty();
+        boolean isAttemptAnswer = !attemptAnswerRepository.findByVoiceFileIdOrAudioFileId(id, id).isEmpty();
+        boolean isQuestionMedia = !assessmentQuestionRepository.findByMediaRefContaining(id).isEmpty();
+        boolean isRestrictedExamResource = isStudyMaterial || isAttemptAnswer || isQuestionMedia;
+
         if (download) {
             String cat = storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "";
-            if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("schedule")) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .header("X-Error-Code", "DOWNLOAD_FORBIDDEN")
-                        .body(ApiResponse.error("DOWNLOAD_FORBIDDEN", "Download is disabled for view-only resources"));
+            boolean isViewOnly = isRestrictedExamResource
+                    || cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("schedule")
+                    || cat.contains("study") || cat.contains("material") || cat.contains("question") || cat.contains("voice")
+                    || cat.contains("answer");
+
+            if (isViewOnly) {
+                boolean isAdmin = currentUser != null && ("ADMIN".equals(currentUser.getRole()) || "SUPER_ADMIN".equals(currentUser.getRole()));
+                if (!isAdmin) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .header("X-Error-Code", "DOWNLOAD_FORBIDDEN")
+                            .body(ApiResponse.error("DOWNLOAD_FORBIDDEN", "Download is disabled for view-only resources"));
+                }
             }
         }
 
-        // Security check for non-public files
+        // Security check for non-public or exam-restricted files
         String fileCat = storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "";
-        boolean isCategoryPublic = "question-media".equals(fileCat)
-                || "audio-prompt".equals(fileCat)
-                || "public".equals(fileCat)
-                || "public-document".equals(fileCat)
+        boolean isCategoryPublic = "public".equals(fileCat)
                 || "competition".equals(fileCat)
                 || "avatar".equals(fileCat)
                 || "thumbnail".equals(fileCat)
                 || "banner".equals(fileCat)
                 || "hero".equals(fileCat);
 
-        if (!Boolean.TRUE.equals(storedFile.getIsPublic()) && !isCategoryPublic) {
+        if (isRestrictedExamResource || (!Boolean.TRUE.equals(storedFile.getIsPublic()) && !isCategoryPublic)) {
             boolean hasValidToken = token != null && expires != null && fileStorageService.validateInternalToken(id, token, expires);
 
             if (!hasValidToken) {
@@ -281,7 +304,9 @@ public class FileController {
         }
 
         Resource resource = fileStorageService.loadFileAsResource(storedFile);
-        String mediaType = resolveMimeType(storedFile.getOriginalName(), storedFile.getContentType());
+        String defaultType = ("voice-answer".equalsIgnoreCase(storedFile.getCategory()) && (storedFile.getContentType() == null || storedFile.getContentType().isBlank()))
+                ? "audio/webm" : storedFile.getContentType();
+        String mediaType = resolveMimeType(storedFile.getOriginalName(), defaultType);
 
         ContentDisposition contentDisposition = ContentDisposition.builder(download ? "attachment" : "inline")
                 .filename(storedFile.getOriginalName(), StandardCharsets.UTF_8)
@@ -298,13 +323,32 @@ public class FileController {
                 long start = range.getRangeStart(contentLength);
                 long end = range.getRangeEnd(contentLength);
                 long rangeLength = Math.min(1024 * 1024 * 2, end - start + 1);
-                org.springframework.core.io.support.ResourceRegion region = new org.springframework.core.io.support.ResourceRegion(resource, start, rangeLength);
+                long actualEnd = start + rangeLength - 1;
+
+                byte[] buffer = new byte[(int) rangeLength];
+                try (java.io.InputStream is = resource.getInputStream()) {
+                    long skipped = is.skip(start);
+                    int totalRead = 0;
+                    while (totalRead < rangeLength) {
+                        int read = is.read(buffer, totalRead, (int) rangeLength - totalRead);
+                        if (read == -1) break;
+                        totalRead += read;
+                    }
+                    if (totalRead < rangeLength) {
+                        buffer = java.util.Arrays.copyOf(buffer, totalRead);
+                        actualEnd = start + totalRead - 1;
+                    }
+                }
+
+                ByteArrayResource rangeResource = new ByteArrayResource(buffer);
                 return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                         .header(HttpHeaders.CONTENT_TYPE, mediaType)
                         .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + actualEnd + "/" + contentLength)
+                        .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(buffer.length))
                         .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
                         .header("Content-Security-Policy", "frame-ancestors 'self' " + allowedOriginsCsp)
-                        .body(region);
+                        .body(rangeResource);
             } catch (Exception e) {
                 // Fallback to full resource if range parsing fails
             }
@@ -327,11 +371,18 @@ public class FileController {
         if (storedFile == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
-        if (!Boolean.TRUE.equals(storedFile.getIsPublic())) {
+        boolean isStudyMaterial = !competitionStudyMaterialRepository.findByStoredFileId(id).isEmpty();
+        boolean isAttemptAnswer = !attemptAnswerRepository.findByVoiceFileIdOrAudioFileId(id, id).isEmpty();
+        boolean isQuestionMedia = !assessmentQuestionRepository.findByMediaRefContaining(id).isEmpty();
+        boolean isRestrictedExamResource = isStudyMaterial || isAttemptAnswer || isQuestionMedia;
+
+        if (!Boolean.TRUE.equals(storedFile.getIsPublic()) || isRestrictedExamResource) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         String cat = storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "";
-        if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("schedule")) {
+        if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("schedule")
+                || cat.contains("study") || cat.contains("material") || cat.contains("question") || cat.contains("voice")
+                || cat.contains("answer")) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 

@@ -11,6 +11,7 @@ import java.util.Optional;
 public interface AttemptAnswerRepository extends JpaRepository<AttemptAnswer, String> {
     List<AttemptAnswer> findByAttemptId(String attemptId);
     Optional<AttemptAnswer> findByAttemptIdAndQuestionId(String attemptId, String questionId);
+    List<AttemptAnswer> findByVoiceFileIdOrAudioFileId(String voiceFileId, String audioFileId);
     void deleteByAttemptId(String attemptId);
     long countByAttemptId(String attemptId);
 }

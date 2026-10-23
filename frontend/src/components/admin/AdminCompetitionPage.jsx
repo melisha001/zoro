@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Trophy, Plus, Search, Calendar, Clock, MapPin, 
@@ -22,15 +22,37 @@ const toIsoOrNull = (val) => {
   }
 };
 
-const toLocalInput = (isoStr) => {
-  if (!isoStr) return '';
-  try {
-    const d = new Date(isoStr);
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  } catch {
-    return '';
+const toLocalInput = (isoStr, fallbackDate, fallbackTime) => {
+  if (isoStr) {
+    try {
+      const d = new Date(isoStr);
+      if (!isNaN(d.getTime())) {
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+    } catch {}
   }
+  if (fallbackDate) {
+    const t = fallbackTime || '00:00';
+    const cleanT = t.includes(':') ? t.slice(0, 5) : '00:00';
+    return `${fallbackDate}T${cleanT}`;
+  }
+  return '';
+};
+
+const getDefaultPublishAt = (endAtStr, timeStr = '18:00') => {
+  if (!endAtStr) return '';
+  try {
+    const d = new Date(endAtStr);
+    if (!isNaN(d.getTime())) {
+      d.setDate(d.getDate() + 5);
+      const [h, m] = (timeStr && timeStr.includes(':')) ? timeStr.split(':') : [18, 0];
+      d.setHours(parseInt(h, 10) || 18, parseInt(m, 10) || 0, 0, 0);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+  } catch {}
+  return '';
 };
 
 export default function AdminCompetitionPage() {
@@ -121,28 +143,49 @@ export default function AdminCompetitionPage() {
     }
   };
 
-  const validateTimings = () => {
+  const timingErrors = useMemo(() => {
+    const errs = {};
     if (formData.startAt && formData.endAt) {
       if (new Date(formData.endAt) <= new Date(formData.startAt)) {
-        showWarning('Competition end date/time must be strictly after start date/time', 'Timing Validation');
-        return false;
+        errs.endAt = 'Competition end date/time must be strictly after start date/time';
       }
     }
     if (formData.regEndAt && formData.startAt) {
       if (new Date(formData.regEndAt) > new Date(formData.startAt)) {
-        showWarning('Registration closes before or when the competition starts', 'Timing Validation');
-        return false;
+        errs.regEndAt = 'Registration closes before or when the competition starts';
       }
     }
     if (formData.finalUnlockAt) {
       if (formData.startAt && new Date(formData.finalUnlockAt) < new Date(formData.startAt)) {
-        showWarning('Final Assessment unlock time must be inside the competition window', 'Timing Validation');
-        return false;
+        errs.finalUnlockAt = 'Final Assessment unlock time must be inside the competition window';
       }
       if (formData.endAt && new Date(formData.finalUnlockAt) > new Date(formData.endAt)) {
-        showWarning('Final Assessment unlock time must be inside the competition window', 'Timing Validation');
-        return false;
+        errs.finalUnlockAt = 'Final Assessment unlock time must be inside the competition window';
       }
+    }
+    if (formData.leaderboardPublishTime && formData.endAt) {
+      if (new Date(formData.leaderboardPublishTime) < new Date(formData.endAt)) {
+        errs.leaderboardPublishTime = 'Leaderboard publish cannot be before competition end';
+      }
+    }
+    return errs;
+  }, [formData.startAt, formData.endAt, formData.regEndAt, formData.finalUnlockAt, formData.leaderboardPublishTime]);
+
+  const hasTimingErrors = Object.keys(timingErrors).length > 0;
+
+  const handleEndAtChange = (newEndAt) => {
+    const updated = { ...formData, endAt: newEndAt };
+    if (!formData.leaderboardPublishTime || formData.leaderboardPublishTime === getDefaultPublishAt(formData.endAt)) {
+      updated.leaderboardPublishTime = getDefaultPublishAt(newEndAt);
+    }
+    setFormData(updated);
+  };
+
+  const validateTimings = () => {
+    if (hasTimingErrors) {
+      const firstError = Object.values(timingErrors)[0];
+      showWarning(firstError, 'Timing Validation');
+      return false;
     }
     return true;
   };
@@ -301,6 +344,15 @@ export default function AdminCompetitionPage() {
 
   const openEdit = (comp) => {
     setEditingComp(comp);
+    const startAtVal = toLocalInput(comp.startAt, comp.startDate, comp.startTime);
+    const endAtVal = toLocalInput(comp.endAt, comp.endDate, comp.endTime);
+    const regStartAtVal = toLocalInput(comp.regStartAt, comp.regStartDate, null);
+    const regEndAtVal = toLocalInput(comp.regEndAt, comp.regEndDate, null);
+    const finalUnlockAtVal = toLocalInput(comp.finalUnlockAt);
+    const publishVal = toLocalInput(comp.leaderboardPublishedAt)
+      || (comp.leaderboardPublishTime?.includes('T') ? toLocalInput(comp.leaderboardPublishTime) : '')
+      || getDefaultPublishAt(endAtVal, comp.leaderboardPublishTime || '18:00');
+
     setFormData({
       title: comp.title || comp.name || '',
       description: comp.description || '',
@@ -311,10 +363,10 @@ export default function AdminCompetitionPage() {
       endTime: comp.endTime || '',
       regStartDate: comp.regStartDate || '',
       regEndDate: comp.regEndDate || comp.deadline || '',
-      regStartAt: toLocalInput(comp.regStartAt),
-      regEndAt: toLocalInput(comp.regEndAt),
-      startAt: toLocalInput(comp.startAt),
-      endAt: toLocalInput(comp.endAt),
+      regStartAt: regStartAtVal,
+      regEndAt: regEndAtVal,
+      startAt: startAtVal,
+      endAt: endAtVal,
       venue: comp.venue || '',
       status: comp.status === 'Registration Open' ? 'Active' : (comp.status || 'Active'),
       registrationFee: comp.registrationFee !== null && comp.registrationFee !== undefined ? String(comp.registrationFee) : '',
@@ -323,8 +375,8 @@ export default function AdminCompetitionPage() {
       contactDetails: comp.contactDetails || '',
       bannerUrl: comp.bannerUrl || comp.banner || '',
       rulesPdfUrl: comp.rulesPdfUrl || comp.rulesPdf?.url || '',
-      finalUnlockAt: toLocalInput(comp.finalUnlockAt),
-      leaderboardPublishTime: comp.leaderboardPublishTime || '18:00',
+      finalUnlockAt: finalUnlockAtVal,
+      leaderboardPublishTime: publishVal,
       answerReviewEnabled: Boolean(comp.answerReviewEnabled)
     });
     setBannerPreview(comp.bannerUrl || comp.banner || '');
@@ -666,91 +718,24 @@ export default function AdminCompetitionPage() {
                     type="datetime-local"
                     value={formData.regEndAt}
                     onChange={(e) => setFormData({ ...formData, regEndAt: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
+                    className={`w-full px-3 py-2 bg-slate-50 border rounded-xl font-semibold text-xs ${timingErrors.regEndAt ? 'border-red-400 bg-red-50/50' : 'border-slate-200'}`}
                   />
+                  {timingErrors.regEndAt && (
+                    <p className="text-[11px] text-red-600 font-bold mt-1">{timingErrors.regEndAt}</p>
+                  )}
                 </div>
               </div>
 
-              {/* Competition Window (datetime-local in IST) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Competition Starts (IST)</label>
-                  <input
-                    type="datetime-local"
-                    value={formData.startAt}
-                    onChange={(e) => setFormData({ ...formData, startAt: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Competition Ends (IST)</label>
-                  <input
-                    type="datetime-local"
-                    value={formData.endAt}
-                    onChange={(e) => setFormData({ ...formData, endAt: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
-                  />
-                </div>
-              </div>
-
-              {/* Final Assessment Unlock & Leaderboard Publish Time */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-amber-50/60 rounded-xl border border-amber-200">
-                <div>
-                  <label className="block font-bold text-amber-900 mb-1">Final Assessment Unlock (IST)</label>
-                  <input
-                    type="datetime-local"
-                    value={formData.finalUnlockAt}
-                    onChange={(e) => setFormData({ ...formData, finalUnlockAt: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl font-semibold text-xs"
-                  />
-                  <p className="text-[11px] text-amber-700 mt-1">Must be inside the competition window</p>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-amber-900 mb-1">Leaderboard Publish Time (IST)</label>
-                  <input
-                    type="time"
-                    value={formData.leaderboardPublishTime || '18:00'}
-                    onChange={(e) => setFormData({ ...formData, leaderboardPublishTime: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl font-semibold text-xs"
-                  />
-                  <p className="text-[11px] text-amber-700 mt-1">
-                    Auto-scheduled 5 days after competition end at {formData.leaderboardPublishTime || '18:00'} IST
-                    {formData.endAt ? ` (approx. ${(() => {
-                      const d = new Date(formData.endAt);
-                      d.setDate(d.getDate() + 5);
-                      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-                    })()})` : ''}
-                  </p>
-                </div>
-              </div>
-
-              {/* Answer Review & Venue */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Venue / Platform</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Online (Competition Portal)"
-                    value={formData.venue}
-                    onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
-                  />
-                </div>
-
-                <div className="flex items-center space-x-2 pt-5">
-                  <input
-                    type="checkbox"
-                    id="answerReviewEnabled"
-                    checked={Boolean(formData.answerReviewEnabled)}
-                    onChange={(e) => setFormData({ ...formData, answerReviewEnabled: e.target.checked })}
-                    className="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary cursor-pointer"
-                  />
-                  <label htmlFor="answerReviewEnabled" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
-                    Enable Student Answer Review After Assessment
-                  </label>
-                </div>
+              {/* Venue / Platform */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Venue / Platform</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Online (Competition Portal)"
+                  value={formData.venue}
+                  onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-xs"
+                />
               </div>
 
               {/* Contact Details */}
@@ -789,34 +774,72 @@ export default function AdminCompetitionPage() {
               </div>
 
               {/* Competition Portal Timings & Review Settings */}
-              <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
+              <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-4">
                 <div className="font-bold text-indigo-950 text-xs flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                  <Clock className="w-4 h-4 text-indigo-600" />
                   <span>Competition Portal Timings & Answer Review</span>
                 </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Final Assessment Unlock Time</label>
+                    <label className="block font-bold text-slate-700 mb-1">Competition Starts At (IST)</label>
+                    <input
+                      type="datetime-local"
+                      value={formData.startAt}
+                      onChange={(e) => setFormData({ ...formData, startAt: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Competition Ends At (IST)</label>
+                    <input
+                      type="datetime-local"
+                      value={formData.endAt}
+                      onChange={(e) => handleEndAtChange(e.target.value)}
+                      className={`w-full px-3 py-2 bg-white border rounded-xl font-semibold text-xs ${timingErrors.endAt ? 'border-red-400 bg-red-50/50' : 'border-slate-200'}`}
+                    />
+                    {timingErrors.endAt && (
+                      <p className="text-[11px] text-red-600 font-bold mt-1">{timingErrors.endAt}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Final Assessment Unlocks At (IST)</label>
                     <input
                       type="datetime-local"
                       value={formData.finalUnlockAt}
                       onChange={(e) => setFormData({ ...formData, finalUnlockAt: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold text-xs"
+                      className={`w-full px-3 py-2 bg-white border rounded-xl font-semibold text-xs ${timingErrors.finalUnlockAt ? 'border-red-400 bg-red-50/50' : 'border-slate-200'}`}
                     />
-                    <span className="text-[10px] text-slate-500 font-medium">When students can start the 30-min final assessment</span>
+                    {timingErrors.finalUnlockAt ? (
+                      <p className="text-[11px] text-red-600 font-bold mt-1">{timingErrors.finalUnlockAt}</p>
+                    ) : (
+                      <span className="text-[10px] text-slate-500 font-medium">Must be within the competition window</span>
+                    )}
                   </div>
+
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Leaderboard Publish Time</label>
+                    <label className="block font-bold text-slate-700 mb-1">Leaderboard & Answers Publish At (IST)</label>
                     <input
                       type="datetime-local"
                       value={formData.leaderboardPublishTime}
                       onChange={(e) => setFormData({ ...formData, leaderboardPublishTime: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold text-xs"
+                      className={`w-full px-3 py-2 bg-white border rounded-xl font-semibold text-xs ${timingErrors.leaderboardPublishTime ? 'border-red-400 bg-red-50/50' : 'border-slate-200'}`}
                     />
-                    <span className="text-[10px] text-slate-500 font-medium">When top 10 rankings become visible to students</span>
+                    {timingErrors.leaderboardPublishTime ? (
+                      <p className="text-[11px] text-red-600 font-bold mt-1">{timingErrors.leaderboardPublishTime}</p>
+                    ) : (
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Defaults to 5 days after competition end at 18:00 IST
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 pt-1">
+
+                <div className="flex items-center gap-2 pt-1 border-t border-indigo-100/60">
                   <input
                     type="checkbox"
                     id="answerReviewEnabled"
@@ -920,7 +943,8 @@ export default function AdminCompetitionPage() {
 
               <button
                 type="submit"
-                className="w-full bg-[#0F52BA] hover:bg-blue-700 text-white font-black py-3 rounded-xl shadow-md text-xs mt-2 cursor-pointer transition-colors"
+                disabled={hasTimingErrors}
+                className="w-full bg-[#0F52BA] hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-3 rounded-xl shadow-md text-xs mt-2 cursor-pointer transition-colors"
               >
                 {editingComp ? 'Update Competition' : 'Publish Competition'}
               </button>

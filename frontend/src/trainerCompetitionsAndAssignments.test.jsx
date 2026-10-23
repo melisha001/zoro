@@ -101,6 +101,64 @@ vi.mock('./api/competitionApi', () => ({
       }
     ]
   }),
+  getTrainerStudents: vi.fn().mockResolvedValue({
+    success: true,
+    data: {
+      students: [
+        {
+          registrationId: 'reg_1',
+          studentName: 'Alice Student',
+          studentEmail: 'alice@student.com',
+          competitionTitle: 'Abacus National Cup',
+          setCode: 'A',
+          totalSubmissions: 1,
+          correctedCount: 0,
+          pendingCount: 1,
+          statusText: '1 pending',
+          latestAttemptId: 'att_1'
+        }
+      ],
+      totalElements: 1,
+      totalPages: 1
+    }
+  }),
+  getTrainerStudentFolders: vi.fn().mockResolvedValue({
+    success: true,
+    data: {
+      folders: [
+        {
+          folderKey: 'TEST_SERIES',
+          title: 'Test Series',
+          totalSubmissions: 1,
+          pendingCount: 1,
+          correctedCount: 0,
+          statusText: 'Correction pending (1)'
+        }
+      ]
+    }
+  }),
+  getTrainerStudentSubmissions: vi.fn().mockResolvedValue({
+    success: true,
+    data: {
+      submissions: [
+        {
+          attemptId: 'att_1',
+          assessmentTitle: 'Speed Test 1',
+          sequenceNo: 1,
+          setCode: 'A',
+          submittedAt: '2026-10-21T10:00:00Z',
+          status: 'EVALUATION_PENDING',
+          mcqMarks: 0,
+          maxMarks: 20,
+          voiceQuestionsCount: 1,
+          voiceEvaluatedCount: 0,
+          voicePendingCount: 1,
+          proctorViolationsCount: 0,
+          autoSubmitted: false
+        }
+      ]
+    }
+  }),
   getTrainerAttemptDetail: vi.fn().mockResolvedValue({
     success: true,
     data: {

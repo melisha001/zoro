@@ -17,6 +17,7 @@ import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import SkeletonCard from '../common/SkeletonCard';
 import SafeVideo from '../common/SafeVideo';
+import AudioPromptPlayer from '../common/AudioPromptPlayer';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 
 export default function CompetitionTestSeriesPage() {
@@ -558,13 +559,8 @@ export default function CompetitionTestSeriesPage() {
 
                 {/* Media (if video or audio question) */}
                 {currentQ.questionFormat === 'AUDIO' && currentQ.mediaRef && (
-                  <div className="mb-5 p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center space-x-3">
-                    <Volume2 className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                    <audio 
-                      controls 
-                      src={resolveFileUrl(currentQ.mediaRef)} 
-                      className="w-full"
-                    />
+                  <div className="mb-5">
+                    <AudioPromptPlayer src={currentQ.mediaRef} title="Question Audio Prompt" />
                   </div>
                 )}
                 {currentQ.questionFormat === 'VIDEO' && currentQ.mediaRef && (
