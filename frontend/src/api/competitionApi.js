@@ -170,8 +170,18 @@ export const getCompetitionSyllabus = async (competitionId) => {
   return apiResponse(null, false, res?.message || 'Failed to fetch syllabus');
 };
 
-export const saveCompetitionSyllabus = async (competitionId, { title, storedFileId, fileType }) => {
-  const res = await apiPost(`/competitions/${encodeURIComponent(competitionId)}/syllabus`, { title, storedFileId, fileType });
+export const saveCompetitionSyllabus = async (competitionId, payloadOrTitle, maybeStoredId, maybeFileType) => {
+  let body = {};
+  if (typeof payloadOrTitle === 'object' && payloadOrTitle !== null) {
+    body = payloadOrTitle;
+  } else {
+    body = {
+      title: payloadOrTitle,
+      storedFileId: maybeStoredId,
+      fileType: maybeFileType
+    };
+  }
+  const res = await apiPost(`/competitions/${encodeURIComponent(competitionId)}/syllabus`, body);
   if (res && res.success) {
     return apiResponse(res.data);
   }

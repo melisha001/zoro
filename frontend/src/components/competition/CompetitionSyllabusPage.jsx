@@ -114,7 +114,7 @@ export default function CompetitionSyllabusPage() {
                 </button>
               ) : (
                 <span className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
-                  Syllabus PDF will be published shortly
+                  Syllabus will be published shortly
                 </span>
               )}
             </div>

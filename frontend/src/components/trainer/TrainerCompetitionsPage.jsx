@@ -252,9 +252,11 @@ export default function TrainerCompetitionsPage() {
   // Stats Counters
   const stats = useMemo(() => {
     const total = submissions.length;
-    const pending = submissions.filter((s) => s.status === 'EVALUATION_PENDING').length;
+    const pending = submissions.filter(
+      (s) => (s.status === 'EVALUATION_PENDING' || s.evaluationMode === 'MANUAL_PENDING') && s.evaluationMode !== 'AUTO_EVALUATED'
+    ).length;
     const evaluated = submissions.filter(
-      (s) => s.status === 'EVALUATED' || s.status === 'COMPLETED'
+      (s) => s.status === 'EVALUATED' || s.status === 'COMPLETED' || s.evaluationMode === 'AUTO_EVALUATED'
     ).length;
     return { total, pending, evaluated };
   }, [submissions]);
@@ -1053,7 +1055,9 @@ export default function TrainerCompetitionsPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {folderSubmissions.map((sub) => {
-                      const isPending = sub.status === 'EVALUATION_PENDING' || sub.voicePendingCount > 0;
+                      const isCase2 = sub.evaluationMode === 'AUTO_EVALUATED';
+                      const isManualPending = !isCase2 && (sub.status === 'EVALUATION_PENDING' || sub.evaluationMode === 'MANUAL_PENDING' || sub.voicePendingCount > 0);
+                      const isEvaluated = !isManualPending && !isCase2;
 
                       return (
                         <tr key={sub.attemptId} className="hover:bg-slate-50/80 transition-colors">
@@ -1069,10 +1073,16 @@ export default function TrainerCompetitionsPage() {
                           </td>
 
                           <td className="py-3.5 px-4 text-center">
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                              <Mic className="w-3.5 h-3.5 text-purple-600" />
-                              <span>{sub.voiceEvaluatedCount} / {sub.voiceQuestionsCount} graded</span>
-                            </div>
+                            {isCase2 ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                <span>No voice answers</span>
+                              </span>
+                            ) : (
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                <Mic className="w-3.5 h-3.5 text-purple-600" />
+                                <span>{sub.voiceEvaluatedCount} / {sub.voiceQuestionsCount} graded</span>
+                              </div>
+                            )}
                           </td>
 
                           <td className="py-3.5 px-4 text-center font-bold">
@@ -1095,38 +1105,35 @@ export default function TrainerCompetitionsPage() {
                           </td>
 
                           <td className="py-3.5 px-4 text-center">
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                                isPending
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              }`}
-                            >
-                              {isPending ? (
-                                <>
-                                  <Clock className="w-3 h-3" />
-                                  Pending Review
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  Graded
-                                </>
-                              )}
-                            </span>
+                            {isCase2 ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                <CheckCircle2 className="w-3 h-3 text-blue-600" />
+                                System Evaluated
+                              </span>
+                            ) : isManualPending ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                <Clock className="w-3 h-3" />
+                                Pending Review
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Evaluated
+                              </span>
+                            )}
                           </td>
 
                           <td className="py-3.5 px-5 text-right">
                             <button
                               onClick={() => handleOpenEvaluation(sub.attemptId)}
                               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer ${
-                                isPending
+                                isManualPending
                                   ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
                                   : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                               }`}
                             >
                               <FileCheck className="w-3.5 h-3.5" />
-                              {isPending ? 'Evaluate' : 'Review Marks'}
+                              {isManualPending ? 'Evaluate' : 'View'}
                             </button>
                           </td>
                         </tr>
@@ -1186,9 +1193,13 @@ export default function TrainerCompetitionsPage() {
                     Loading student answers & media...
                   </p>
                 </div>
-              ) : attemptDetail ? (
-                <>
-                  {/* Summary Card */}
+              ) : attemptDetail ? (() => {
+                const isCase2 = attemptDetail.attempt?.evaluationMode === 'AUTO_EVALUATED';
+                const isAttemptEvaluated = attemptDetail.attempt?.status === 'EVALUATED' || attemptDetail.attempt?.status === 'COMPLETED' || attemptDetail.attempt?.evaluationMode === 'EVALUATED';
+                const isReadOnly = isCase2 || isAttemptEvaluated;
+                return (
+                  <>
+                    {/* Summary Card */}
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-4">
                     <div>
                       <div className="text-[10px] font-bold text-slate-400 uppercase">
@@ -1351,7 +1362,7 @@ export default function TrainerCompetitionsPage() {
                                     </div>
                                   ) : (
                                     <p className="text-xs text-amber-700 italic">
-                                      No voice audio uploaded for this question.
+                                      Voice question not answered (0 marks)
                                     </p>
                                   )}
                                 </div>
@@ -1386,16 +1397,19 @@ export default function TrainerCompetitionsPage() {
 
                               {/* MCQ Option Info */}
                               {!isVoice && !isVideo && (
-                                <div className="text-xs text-slate-700">
+                                <div className="text-xs text-slate-700 flex flex-wrap items-center gap-2">
                                   <span className="font-bold">Selected Option:</span>{' '}
                                   <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-200 font-bold text-indigo-700">
                                     {ans.selectedOption || 'None'}
                                   </span>
                                   {q.correctOption && (
-                                    <span className="ml-3 text-[11px] text-slate-500">
+                                    <span className="text-[11px] text-slate-500">
                                       (Correct: {q.correctOption})
                                     </span>
                                   )}
+                                  <span className="ml-2 font-bold text-emerald-600">
+                                    Marks: {ans.marksAwarded ?? (ans.isCorrect ? (q.marks || 1) : 0)} / {q.marks || 1}
+                                  </span>
                                 </div>
                               )}
 
@@ -1418,8 +1432,8 @@ export default function TrainerCompetitionsPage() {
                             <p className="text-xs text-slate-400 italic">No answer submitted.</p>
                           )}
 
-                          {/* Trainer Evaluation Controls (only for answers submitted) */}
-                          {ans && (
+                          {/* Trainer Evaluation Controls (only for answers submitted and when not read-only) */}
+                          {ans && !isReadOnly && (
                             <div className="pt-3 border-t border-slate-100 space-y-3">
                               <div className="flex items-center justify-between">
                                 <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
@@ -1547,12 +1561,22 @@ export default function TrainerCompetitionsPage() {
                               </div>
                             </div>
                           )}
+
+                          {ans && isReadOnly && (
+                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                              <span className="font-bold text-slate-600">Marks Awarded:</span>
+                              <span className="font-black text-indigo-700">
+                                {ans.marksAwarded ?? (isCase2 ? 0 : (ans.isCorrect ? (q.marks || 1) : 0))} / {q.marks || 1}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                   </div>
                 </>
-              ) : null}
+              );
+            })() : null}
             </div>
 
             {/* Drawer Footer */}

@@ -748,7 +748,7 @@ public class CompetitionService {
         return setRepository.save(set);
     }
 
-    // --- Syllabus (Phase 6) ---
+    // --- Syllabus (Phase 6 & Tasks M6/M7) ---
     @Transactional(readOnly = true)
     public Map<String, Object> getSyllabus(String compId) {
         Optional<CompetitionSyllabus> syllabusOpt = syllabusRepository.findByCompetitionId(compId);
@@ -756,22 +756,36 @@ public class CompetitionService {
             return null;
         }
         CompetitionSyllabus syllabus = syllabusOpt.get();
+        if (syllabus.getStoredFileId() == null || syllabus.getStoredFileId().isBlank()) {
+            return null;
+        }
+        Optional<StoredFile> sfOpt = storedFileRepository.findById(syllabus.getStoredFileId());
+        if (sfOpt.isEmpty()) {
+            return null;
+        }
+        StoredFile sf = sfOpt.get();
         Map<String, Object> result = new HashMap<>();
         result.put("id", syllabus.getId());
         result.put("competitionId", syllabus.getCompetitionId());
         result.put("title", syllabus.getTitle());
         result.put("storedFileId", syllabus.getStoredFileId());
-        result.put("fileType", syllabus.getFileType());
+        result.put("fileType", syllabus.getFileType() != null ? syllabus.getFileType() : getFileExtension(sf.getOriginalName()));
+        result.put("fileName", sf.getOriginalName());
+        result.put("fileSize", sf.getSizeBytes());
         result.put("updatedAt", syllabus.getUpdatedAt());
 
-        if (syllabus.getStoredFileId() != null) {
-            storedFileRepository.findById(syllabus.getStoredFileId()).ifPresent(sf -> {
-                Map<String, Object> link = fileStorageService.generateFileLink(sf, 3600);
-                result.put("viewUrl", link.get("url"));
-                result.put("fileName", sf.getOriginalName());
-            });
+        try {
+            Map<String, Object> link = fileStorageService.generateFileLink(sf, 3600);
+            result.put("viewUrl", link != null ? link.get("url") : fileStorageService.getFileUrl(sf));
+        } catch (Exception e) {
+            result.put("viewUrl", fileStorageService.getFileUrl(sf));
         }
         return result;
+    }
+
+    private String getFileExtension(String fileName) {
+        if (fileName == null || !fileName.contains(".")) return "";
+        return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
     }
 
     @Transactional
@@ -787,6 +801,8 @@ public class CompetitionService {
             if (!isValidExt) {
                 throw new BadRequestException("Syllabus file must be PDF, DOC, DOCX, or TXT format. Media files are not allowed.");
             }
+            sf.setCategory("competition-syllabus");
+            storedFileRepository.save(sf);
         }
 
         CompetitionSyllabus syllabus = syllabusRepository.findByCompetitionId(compId)
@@ -798,12 +814,20 @@ public class CompetitionService {
                 });
 
         if (syllabus.getStoredFileId() != null && !syllabus.getStoredFileId().equals(storedFileId)) {
-            fileStorageService.deleteFile(syllabus.getStoredFileId());
+            try {
+                fileStorageService.deleteFile(syllabus.getStoredFileId());
+            } catch (Exception ignored) {}
         }
 
-        syllabus.setTitle(title != null ? title : "Competition Syllabus");
+        syllabus.setTitle(title != null && !title.isBlank() ? title : "Competition Syllabus");
         if (storedFileId != null) syllabus.setStoredFileId(storedFileId);
-        if (fileType != null) syllabus.setFileType(fileType);
+        if (fileType != null && !fileType.isBlank()) {
+            syllabus.setFileType(fileType.toLowerCase(Locale.ROOT));
+        } else if (storedFileId != null) {
+            storedFileRepository.findById(storedFileId).ifPresent(sf -> {
+                syllabus.setFileType(getFileExtension(sf.getOriginalName()));
+            });
+        }
         return syllabusRepository.save(syllabus);
     }
 
@@ -1304,7 +1328,8 @@ public class CompetitionService {
         }
 
         int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
-        asmt.setPublishVersion(currentVer + 1);
+        int nextVer = currentVer + 1;
+        asmt.setPublishVersion(nextVer);
         asmt.setRepublishedAt(OffsetDateTime.now(ZoneId.of("Asia/Kolkata")));
         asmt.setStatus("PUBLISHED");
 
@@ -1312,7 +1337,62 @@ public class CompetitionService {
         saved.setQuestionCount((long) questions.size());
         saved.setTargetQuestions(questions.size());
 
-        // Write an audit row per republish (K7 requirement 5)
+        // Regenerate sets if this is a FINAL assessment and sets exist
+        if ("FINAL".equalsIgnoreCase(asmt.getType()) && setRepository != null) {
+            try {
+                List<CompetitionSet> sets = setRepository.findByCompetitionIdOrderByCodeAsc(asmt.getCompetitionId());
+                if (!sets.isEmpty() && assessmentSetQuestionRepository != null) {
+                    assessmentSetQuestionRepository.deleteByAssessmentId(asmtId);
+                    if (assessmentSetOptionRepository != null) {
+                        assessmentSetOptionRepository.deleteByAssessmentId(asmtId);
+                    }
+                    for (int sIdx = 0; sIdx < sets.size(); sIdx++) {
+                        CompetitionSet set = sets.get(sIdx);
+                        List<AssessmentQuestion> setQuestions = new ArrayList<>(questions);
+                        long seed = (long) set.getCode().hashCode() * 31L + (sIdx + 1) * 17L;
+                        Collections.shuffle(setQuestions, new Random(seed));
+
+                        for (int pos = 0; pos < setQuestions.size(); pos++) {
+                            AssessmentQuestion q = setQuestions.get(pos);
+                            AssessmentSetQuestion asq = new AssessmentSetQuestion(
+                                    "asq_" + UUID.randomUUID(),
+                                    asmtId,
+                                    set.getId(),
+                                    q.getId(),
+                                    pos
+                            );
+                            assessmentSetQuestionRepository.save(asq);
+
+                            if ("MCQ_OPTIONS".equalsIgnoreCase(q.getAnswerFormat())) {
+                                List<QuestionOption> options = new ArrayList<>(questionOptionRepository.findByQuestionIdOrderBySortOrderAsc(q.getId()));
+                                if (!options.isEmpty()) {
+                                    long optSeed = seed + pos * 13L;
+                                    Collections.shuffle(options, new Random(optSeed));
+                                    for (int oPos = 0; oPos < options.size(); oPos++) {
+                                        QuestionOption opt = options.get(oPos);
+                                        AssessmentSetOption aso = new AssessmentSetOption(
+                                                "aso_" + UUID.randomUUID(),
+                                                asmtId,
+                                                set.getId(),
+                                                q.getId(),
+                                                opt.getId(),
+                                                oPos
+                                        );
+                                        if (assessmentSetOptionRepository != null) {
+                                            assessmentSetOptionRepository.save(aso);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to regenerate set papers on republish: {}", e.getMessage());
+            }
+        }
+
+        // Write an audit row per republish (M5 requirement 6)
         if (republishAuditRepository != null) {
             RepublishAudit audit = new RepublishAudit(
                     "rep_aud_" + UUID.randomUUID(),
@@ -1320,12 +1400,14 @@ public class CompetitionService {
                     adminUser != null ? adminUser.getId() : null,
                     deletedAttemptsCount,
                     deletedAnswersCount,
-                    voiceFilesToDelete.size()
+                    voiceFilesToDelete.size(),
+                    currentVer,
+                    nextVer
             );
             republishAuditRepository.save(audit);
         }
 
-        // Notify candidates that the test is available again (K7 requirement 3)
+        // Notify candidates that the test is available again (M5 requirement)
         if (notificationService != null) {
             try {
                 List<CompetitionRegistration> regs = registrationRepository.findByCompetitionId(asmt.getCompetitionId());
@@ -1342,11 +1424,20 @@ public class CompetitionService {
             } catch (Exception ignored) {}
         }
 
-        // After the transaction commits, delete related objects from Bunny Storage (K7 requirement 1)
+        // After the transaction commits, delete related objects from Bunny Storage with retry (M5 requirement 2)
         for (String fileId : voiceFilesToDelete) {
-            try {
-                fileStorageService.deleteFile(fileId);
-            } catch (Exception ignored) {}
+            int retries = 3;
+            while (retries > 0) {
+                try {
+                    fileStorageService.deleteFile(fileId);
+                    break;
+                } catch (Exception e) {
+                    retries--;
+                    if (retries == 0) {
+                        log.warn("Failed to delete Bunny object {} after retries: {}", fileId, e.getMessage());
+                    }
+                }
+            }
         }
 
         return saved;
@@ -2414,10 +2505,10 @@ public class CompetitionService {
         } else {
             Optional<AssessmentAttempt> olderAttempt = assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(asmtId, regId);
             if (olderAttempt.isPresent() && olderAttempt.get().getPublishVersion() != null && olderAttempt.get().getPublishVersion() < currentVer) {
-                throw new ConflictException("This test was republished. Please start again.");
+                throw new ConflictException("Test has been updated by admin. Please restart.");
             }
             if ((asmt.getPublishVersion() != null && asmt.getPublishVersion() > 1) || (republishAuditRepository != null && republishAuditRepository.existsByAssessmentId(asmtId))) {
-                throw new ConflictException("This test was republished. Please start again.");
+                throw new ConflictException("Test has been updated by admin. Please restart.");
             }
             throw new BadRequestException("No active attempt found for this assessment");
         }
@@ -2432,11 +2523,13 @@ public class CompetitionService {
         Map<String, Object> result = new HashMap<>();
         result.put("attemptId", savedAttempt.getId());
         result.put("status", savedAttempt.getStatus());
-        if (!"FINAL".equalsIgnoreCase(asmt.getType()) && "EVALUATION_PENDING".equalsIgnoreCase(savedAttempt.getStatus())) {
+        result.put("evaluationMode", savedAttempt.getEvaluationMode());
+        if (!"FINAL".equalsIgnoreCase(asmt.getType()) && ("EVALUATION_PENDING".equalsIgnoreCase(savedAttempt.getStatus()) || "MANUAL_PENDING".equalsIgnoreCase(savedAttempt.getEvaluationMode()))) {
             result.put("isPendingEvaluation", true);
             result.put("mcqMarks", null);
             result.put("totalMarks", null);
         } else {
+            result.put("isPendingEvaluation", false);
             result.put("mcqMarks", savedAttempt.getMcqMarks());
             result.put("totalMarks", savedAttempt.getTotalMarks());
         }
@@ -2451,6 +2544,7 @@ public class CompetitionService {
     @Transactional
     public void evaluateAndFinalizeAttempt(AssessmentAttempt attempt) {
         String asmtId = attempt.getAssessmentId();
+        CompetitionAssessment asmt = assessmentRepository.findById(asmtId).orElse(null);
         List<AssessmentQuestion> questions = questionRepository.findByAssessmentIdOrderBySortOrderAsc(asmtId);
         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(attempt.getId());
         Map<String, AttemptAnswer> answerMap = answers.stream()
@@ -2458,22 +2552,24 @@ public class CompetitionService {
 
         OffsetDateTime now = OffsetDateTime.now(ZoneId.of("Asia/Kolkata"));
         BigDecimal totalMcqMarks = BigDecimal.ZERO;
-        boolean hasVoiceQuestionsWithUpload = false;
+        int answeredMcqCount = 0;
+        int answeredVoiceCount = 0;
 
         for (AssessmentQuestion q : questions) {
             AttemptAnswer ans = answerMap.get(q.getId());
-            if ("MCQ_OPTIONS".equalsIgnoreCase(q.getAnswerFormat())) {
+            if ("MCQ_OPTIONS".equalsIgnoreCase(q.getAnswerFormat()) || "MCQ".equalsIgnoreCase(q.getAnswerFormat())) {
                 List<QuestionOption> options = questionOptionRepository.findByQuestionIdOrderBySortOrderAsc(q.getId());
                 Optional<QuestionOption> correctOpt = options.stream().filter(o -> Boolean.TRUE.equals(o.getIsCorrect())).findFirst();
 
                 boolean isCorrect = false;
-                if (ans != null && ans.getSelectedOptionId() != null && correctOpt.isPresent()) {
+                if (ans != null && ans.getSelectedOptionId() != null) {
+                    answeredMcqCount++;
                     // Check if selected option still exists in current options
                     UUID selectedId = ans.getSelectedOptionId();
                     boolean optionStillExists = options.stream().anyMatch(o -> o.getId().equals(selectedId));
                     if (!optionStillExists) {
                         ans.setSelectedOptionId(null);
-                    } else if (selectedId.equals(correctOpt.get().getId())) {
+                    } else if (correctOpt.isPresent() && selectedId.equals(correctOpt.get().getId())) {
                         isCorrect = true;
                     }
                 }
@@ -2496,11 +2592,18 @@ public class CompetitionService {
                 attemptAnswerRepository.save(ans);
             } else if ("VOICE".equalsIgnoreCase(q.getAnswerFormat())) {
                 if (ans != null && ans.getVoiceFileId() != null && !ans.getVoiceFileId().isBlank()) {
-                    hasVoiceQuestionsWithUpload = true;
+                    answeredVoiceCount++;
                     ans.setEvaluationStatus("PENDING_TRAINER");
                     ans.setMarksAwarded(null);
                     attemptAnswerRepository.save(ans);
-                } else if (ans != null) {
+                } else {
+                    if (ans == null) {
+                        ans = new AttemptAnswer();
+                        ans.setId("ans_" + UUID.randomUUID());
+                        ans.setAttemptId(attempt.getId());
+                        ans.setQuestionId(q.getId());
+                        ans.setSavedAt(now);
+                    }
                     ans.setEvaluationStatus("SKIPPED");
                     ans.setMarksAwarded(BigDecimal.ZERO);
                     attemptAnswerRepository.save(ans);
@@ -2513,11 +2616,32 @@ public class CompetitionService {
         attempt.setVoiceMarks(BigDecimal.ZERO);
         attempt.setTotalMarks(totalMcqMarks);
 
-        if (hasVoiceQuestionsWithUpload) {
-            attempt.setStatus("EVALUATION_PENDING");
+        // M1 Server Classification:
+        // CASE 1: answered >= 1 MCQ AND >= 1 voice question -> MANUAL_PENDING, EVALUATION_PENDING
+        // CASE 2: answered MCQ(s) ONLY (no voice answers) OR zero answers -> AUTO_EVALUATED, COMPLETED
+        // CASE 3: answered voice question(s) ONLY (no MCQ answered) -> MANUAL_PENDING, EVALUATION_PENDING
+        // FINAL ASSESSMENT: retains existing behavior
+        boolean isFinal = asmt != null && "FINAL".equalsIgnoreCase(asmt.getType());
+        if (isFinal) {
+            if (answeredVoiceCount > 0) {
+                attempt.setEvaluationMode("MANUAL_PENDING");
+                attempt.setStatus("EVALUATION_PENDING");
+            } else {
+                attempt.setEvaluationMode("AUTO_EVALUATED");
+                attempt.setStatus("COMPLETED");
+            }
         } else {
-            attempt.setStatus("COMPLETED");
+            if (answeredVoiceCount > 0) {
+                // CASE 1 or CASE 3
+                attempt.setEvaluationMode("MANUAL_PENDING");
+                attempt.setStatus("EVALUATION_PENDING");
+            } else {
+                // CASE 2 (MCQ only or zero answers)
+                attempt.setEvaluationMode("AUTO_EVALUATED");
+                attempt.setStatus("COMPLETED");
+            }
         }
+        assessmentAttemptRepository.save(attempt);
     }
 
     @Transactional
@@ -2643,7 +2767,8 @@ public class CompetitionService {
         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(attempt.getId());
 
         boolean isStudent = "STUDENT".equals(role);
-        boolean isPendingEval = !"FINAL".equalsIgnoreCase(asmt.getType()) && "EVALUATION_PENDING".equalsIgnoreCase(attempt.getStatus());
+        boolean isPendingEval = !"FINAL".equalsIgnoreCase(asmt.getType()) && 
+                ("EVALUATION_PENDING".equalsIgnoreCase(attempt.getStatus()) || "MANUAL_PENDING".equalsIgnoreCase(attempt.getEvaluationMode()));
 
         if (isStudent && isPendingEval) {
             Set<String> voiceQuestionIds = questions.stream()
@@ -2658,6 +2783,7 @@ public class CompetitionService {
             Map<String, Object> summary = new HashMap<>();
             summary.put("attemptId", attempt.getId());
             summary.put("status", attempt.getStatus());
+            summary.put("evaluationMode", attempt.getEvaluationMode());
             summary.put("isPendingEvaluation", true);
             summary.put("startedAt", attempt.getStartedAt());
             summary.put("submittedAt", attempt.getSubmittedAt());
@@ -2742,6 +2868,7 @@ public class CompetitionService {
         Map<String, Object> summary = new HashMap<>();
         summary.put("attemptId", attempt.getId());
         summary.put("status", attempt.getStatus());
+        summary.put("evaluationMode", attempt.getEvaluationMode());
         summary.put("startedAt", attempt.getStartedAt());
         summary.put("submittedAt", attempt.getSubmittedAt());
         summary.put("mcqMarks", attempt.getMcqMarks());
@@ -2841,6 +2968,7 @@ public class CompetitionService {
                 item.put("assessmentType", asmt.getType());
                 item.put("sequenceNo", asmt.getSequenceNo());
                 item.put("status", att.getStatus());
+                item.put("evaluationMode", att.getEvaluationMode());
                 item.put("startedAt", att.getStartedAt());
                 item.put("submittedAt", att.getSubmittedAt());
                 item.put("mcqMarks", att.getMcqMarks());
@@ -3025,6 +3153,7 @@ public class CompetitionService {
         attemptSummary.put("assessmentTitle", asmt.getTitle());
         attemptSummary.put("assessmentType", asmt.getType());
         attemptSummary.put("status", att.getStatus());
+        attemptSummary.put("evaluationMode", att.getEvaluationMode());
         attemptSummary.put("startedAt", att.getStartedAt());
         attemptSummary.put("submittedAt", att.getSubmittedAt());
         attemptSummary.put("mcqMarks", att.getMcqMarks());
@@ -3058,6 +3187,10 @@ public class CompetitionService {
 
         AssessmentAttempt attempt = assessmentAttemptRepository.findById(attemptId)
                 .orElseThrow(() -> new ResourceNotFoundException("Attempt not found with id: " + attemptId));
+
+        if ("AUTO_EVALUATED".equalsIgnoreCase(attempt.getEvaluationMode())) {
+            throw new ConflictException("Cannot evaluate system-evaluated attempt (Case 2 MCQ-only submission)");
+        }
 
         String setId = attempt.getSetId();
         if (setId == null) {
@@ -3159,6 +3292,7 @@ public class CompetitionService {
 
         if (!anyVoicePending) {
             attempt.setStatus("COMPLETED");
+            attempt.setEvaluationMode("EVALUATED");
             if (notificationService != null && attempt.getRegistrationId() != null) {
                 try {
                     CompetitionAssessment asmt = assessmentRepository.findById(attempt.getAssessmentId()).orElse(null);
@@ -3183,6 +3317,7 @@ public class CompetitionService {
         resp.put("success", true);
         resp.put("attemptId", savedAttempt.getId());
         resp.put("status", savedAttempt.getStatus());
+        resp.put("evaluationMode", savedAttempt.getEvaluationMode());
         resp.put("mcqMarks", savedAttempt.getMcqMarks());
         resp.put("voiceMarks", savedAttempt.getVoiceMarks());
         resp.put("totalMarks", savedAttempt.getTotalMarks());
@@ -3576,13 +3711,15 @@ public class CompetitionService {
 
         Map<String, List<AssessmentAttempt>> byFolderType = new HashMap<>();
         byFolderType.put("TEST_SERIES", new ArrayList<>());
-        byFolderType.put("MOCK_TEST", new ArrayList<>());
-        byFolderType.put("FINAL_ASSESSMENT", new ArrayList<>());
+        byFolderType.put("MOCK", new ArrayList<>());
+        byFolderType.put("FINAL", new ArrayList<>());
 
         for (AssessmentAttempt att : attempts) {
             CompetitionAssessment asmt = assessmentRepository.findById(att.getAssessmentId()).orElse(null);
             if (asmt != null && asmt.getType() != null) {
                 String typeUpper = asmt.getType().toUpperCase();
+                if ("MOCK_TEST".equals(typeUpper)) typeUpper = "MOCK";
+                if ("FINAL_ASSESSMENT".equals(typeUpper)) typeUpper = "FINAL";
                 if (byFolderType.containsKey(typeUpper)) {
                     byFolderType.get(typeUpper).add(att);
                 }
@@ -3593,7 +3730,7 @@ public class CompetitionService {
 
         // 1. Test Series
         List<AssessmentAttempt> tsAttempts = byFolderType.get("TEST_SERIES");
-        long tsPending = tsAttempts.stream().filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus())).count();
+        long tsPending = tsAttempts.stream().filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus()) || "MANUAL_PENDING".equalsIgnoreCase(a.getEvaluationMode())).count();
         long tsTotal = tsAttempts.size();
         Map<String, Object> tsFolder = new HashMap<>();
         tsFolder.put("folderKey", "TEST_SERIES");
@@ -3607,8 +3744,8 @@ public class CompetitionService {
         folders.add(tsFolder);
 
         // 2. Mock Tests
-        List<AssessmentAttempt> mtAttempts = byFolderType.get("MOCK_TEST");
-        long mtPending = mtAttempts.stream().filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus())).count();
+        List<AssessmentAttempt> mtAttempts = byFolderType.get("MOCK");
+        long mtPending = mtAttempts.stream().filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus()) || "MANUAL_PENDING".equalsIgnoreCase(a.getEvaluationMode())).count();
         long mtTotal = mtAttempts.size();
         Map<String, Object> mtFolder = new HashMap<>();
         mtFolder.put("folderKey", "MOCK_TEST");
@@ -3621,18 +3758,20 @@ public class CompetitionService {
                 : "All mock tests are corrected");
         folders.add(mtFolder);
 
-        // 3. Final Assessment
-        List<AssessmentAttempt> faAttempts = byFolderType.get("FINAL_ASSESSMENT");
-        long faPending = faAttempts.stream().filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus())).count();
+        // 3. Final Assessment (at most 1 submission shown)
+        List<AssessmentAttempt> faAttempts = byFolderType.get("FINAL");
+        long faPending = faAttempts.stream().filter(a -> "EVALUATION_PENDING".equalsIgnoreCase(a.getStatus()) || "MANUAL_PENDING".equalsIgnoreCase(a.getEvaluationMode())).count();
         long faTotal = faAttempts.size();
+        long faDisplayTotal = Math.min(faTotal, 1);
+        long faDisplayPending = Math.min(faPending, 1);
         Map<String, Object> faFolder = new HashMap<>();
         faFolder.put("folderKey", "FINAL_ASSESSMENT");
         faFolder.put("title", "Final Assessment");
-        faFolder.put("totalSubmissions", faTotal);
-        faFolder.put("pendingCount", faPending);
-        faFolder.put("correctedCount", faTotal - faPending);
+        faFolder.put("totalSubmissions", faDisplayTotal);
+        faFolder.put("pendingCount", faDisplayPending);
+        faFolder.put("correctedCount", Math.max(0, faDisplayTotal - faDisplayPending));
         faFolder.put("statusText", faTotal == 0 ? "No submissions yet"
-                : faPending > 0 ? ("Correction pending (" + faPending + ")")
+                : faDisplayPending > 0 ? ("Correction pending (" + faDisplayPending + ")")
                 : "Final assessment is corrected");
         folders.add(faFolder);
 
@@ -3669,11 +3808,20 @@ public class CompetitionService {
 
         List<Map<String, Object>> submissions = new ArrayList<>();
 
+        String targetType = folderType != null ? folderType.toUpperCase() : "ALL";
+        if ("MOCK_TEST".equals(targetType)) targetType = "MOCK";
+        if ("FINAL_ASSESSMENT".equals(targetType)) targetType = "FINAL";
+
         for (AssessmentAttempt att : attempts) {
             CompetitionAssessment asmt = assessmentRepository.findById(att.getAssessmentId()).orElse(null);
             if (asmt == null || asmt.getType() == null) continue;
-            if (folderType != null && !folderType.isBlank() && !"ALL".equalsIgnoreCase(folderType)) {
-                if (!asmt.getType().equalsIgnoreCase(folderType)) continue;
+
+            String asmtType = asmt.getType().toUpperCase();
+            if ("MOCK_TEST".equals(asmtType)) asmtType = "MOCK";
+            if ("FINAL_ASSESSMENT".equals(asmtType)) asmtType = "FINAL";
+
+            if (!"ALL".equals(targetType)) {
+                if (!asmtType.equals(targetType)) continue;
             }
 
             List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(att.getId());
@@ -3690,6 +3838,7 @@ public class CompetitionService {
             sub.put("setCode", setCode);
             sub.put("submittedAt", att.getSubmittedAt());
             sub.put("status", att.getStatus());
+            sub.put("evaluationMode", att.getEvaluationMode());
             sub.put("mcqMarks", att.getMcqMarks());
             sub.put("voiceMarks", att.getVoiceMarks());
             sub.put("totalMarks", att.getTotalMarks());
@@ -3701,6 +3850,17 @@ public class CompetitionService {
             sub.put("autoSubmitted", Boolean.TRUE.equals(att.getAutoSubmitted()));
 
             submissions.add(sub);
+        }
+
+        // M3 Rule 2: A student has at most ONE final assessment attempt: the Final Assessment folder shows one item or none; never a list.
+        if ("FINAL".equals(targetType) && submissions.size() > 1) {
+            submissions.sort((a, b) -> {
+                OffsetDateTime aTime = (OffsetDateTime) a.get("submittedAt");
+                OffsetDateTime bTime = (OffsetDateTime) b.get("submittedAt");
+                if (aTime != null && bTime != null) return bTime.compareTo(aTime);
+                return 0;
+            });
+            submissions = new ArrayList<>(submissions.subList(0, 1));
         }
 
         submissions.sort(Comparator.comparing(s -> (Integer) s.getOrDefault("sequenceNo", 0)));
@@ -3781,10 +3941,14 @@ public class CompetitionService {
                 Optional<AssessmentAttempt> opt = assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(finalAsmt.getId(), reg.getId());
                 if (opt.isPresent()) {
                     AssessmentAttempt att = opt.get();
-                    if (att.getTotalMarks() != null) {
-                        row.totalMarks = att.getTotalMarks();
+                    // M1 Rule 4: Exclude pending evaluations from leaderboard until fully evaluated
+                    boolean isPending = "EVALUATION_PENDING".equalsIgnoreCase(att.getStatus()) || "MANUAL_PENDING".equalsIgnoreCase(att.getEvaluationMode());
+                    if (!isPending) {
+                        if (att.getTotalMarks() != null) {
+                            row.totalMarks = att.getTotalMarks();
+                        }
+                        row.submittedAt = att.getSubmittedAt() != null ? att.getSubmittedAt() : att.getStartedAt();
                     }
-                    row.submittedAt = att.getSubmittedAt() != null ? att.getSubmittedAt() : att.getStartedAt();
                 }
             }
 

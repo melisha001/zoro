@@ -55,6 +55,9 @@ public class AssessmentAttempt {
     @Column(name = "auto_submitted")
     private Boolean autoSubmitted = false;
 
+    @Column(name = "evaluation_mode", length = 50)
+    private String evaluationMode; // AUTO_EVALUATED, MANUAL_PENDING
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
@@ -102,6 +105,9 @@ public class AssessmentAttempt {
 
     public Boolean getAutoSubmitted() { return autoSubmitted != null ? autoSubmitted : false; }
     public void setAutoSubmitted(Boolean autoSubmitted) { this.autoSubmitted = autoSubmitted; }
+
+    public String getEvaluationMode() { return evaluationMode; }
+    public void setEvaluationMode(String evaluationMode) { this.evaluationMode = evaluationMode; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }

@@ -379,6 +379,9 @@ export default function CompetitionMockTestsPage() {
               <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
                 Submitted successfully - Evaluation pending
               </h1>
+              <p className="text-sm font-bold text-slate-800">
+                {assessment?.title || activeTest?.title || 'Mock Test Assessment'}
+              </p>
               <p className="text-xs sm:text-sm text-slate-500 font-medium">
                 Submitted on {attempt?.submittedAt ? new Date(attempt.submittedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Recently'} (IST)
               </p>
@@ -556,9 +559,19 @@ export default function CompetitionMockTestsPage() {
                         </span>
                       )
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
-                        <Mic className="w-3.5 h-3.5" /> {ans?.voiceFileId ? 'Pending Trainer Evaluation' : 'Unanswered'}
-                      </span>
+                      ans?.evaluationStatus === 'EVALUATED' ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                          <Check className="w-3.5 h-3.5" /> Evaluated (+{ans?.marksAwarded || 0})
+                        </span>
+                      ) : (!ans?.voiceFileId || ans?.evaluationStatus === 'SKIPPED' || attempt?.evaluationMode === 'AUTO_EVALUATED') ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">
+                          <X className="w-3.5 h-3.5" /> Not answered (0 marks)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+                          <Mic className="w-3.5 h-3.5" /> Pending Trainer
+                        </span>
+                      )
                     )}
                   </div>
                 </div>
@@ -618,7 +631,7 @@ export default function CompetitionMockTestsPage() {
                     {ans?.voiceFileId ? (
                       <AudioPromptPlayer src={ans.voiceFileId} label="Student Recorded Voice" />
                     ) : (
-                      <p className="text-sm text-slate-500 italic">No audio recorded for this question.</p>
+                      <p className="text-sm text-slate-500 italic">Not answered (0 marks)</p>
                     )}
                   </div>
                 )}

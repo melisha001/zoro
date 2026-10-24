@@ -21,7 +21,7 @@ import {
   duplicateAssessmentQuestion, reorderAssessmentQuestions
 } from '../../api/competitionApi';
 import { getTrainers } from '../../api/userApi';
-import { uploadFile, resolveFileUrl } from '../../api/fileApi';
+import { uploadFile, resolveFileUrl, openFileWithSignedLink } from '../../api/fileApi';
 import ButtonSpinner from '../common/ButtonSpinner';
 import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
@@ -277,10 +277,14 @@ export default function AdminCompetitionManagementPage() {
 
     setSylUploading(true);
     try {
-      const uploadRes = await uploadFile(file, 'private');
+      const uploadRes = await uploadFile(file, 'competition-syllabus');
       const storedId = uploadRes.fileId || uploadRes.id;
       const fileExt = lowerName.split('.').pop();
-      const saveRes = await saveCompetitionSyllabus(selectedCompetition.id, sylTitle, storedId, fileExt);
+      const saveRes = await saveCompetitionSyllabus(selectedCompetition.id, {
+        title: sylTitle || file.name,
+        storedFileId: storedId,
+        fileType: fileExt
+      });
       if (saveRes && saveRes.success) {
         await showSuccess('Competition syllabus uploaded successfully.');
         loadTabData('syllabus', selectedCompetition.id);
@@ -1147,12 +1151,25 @@ export default function AdminCompetitionManagementPage() {
                     />
                   </div>
                 ) : (
-                  <div className="p-8 bg-white rounded-xl border border-slate-200 text-center space-y-2">
-                    <FileText className="w-10 h-10 text-slate-400 mx-auto" />
-                    <p className="font-bold text-xs text-slate-700">This file type cannot be previewed directly</p>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      File: {syllabus.fileName || syllabus.title} ({syllabus.fileType?.toUpperCase()})
-                    </p>
+                  <div className="p-8 bg-white rounded-xl border border-slate-200 text-center space-y-3">
+                    <FileText className="w-10 h-10 text-indigo-500 mx-auto" />
+                    <div>
+                      <p className="font-bold text-xs text-slate-800">Office Document / Non-inline Preview</p>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        File: {syllabus.fileName || syllabus.title} ({syllabus.fileType?.toUpperCase()})
+                        {syllabus.fileSize ? ` • ${(syllabus.fileSize / 1024).toFixed(1)} KB` : ''}
+                      </p>
+                    </div>
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => openFileWithSignedLink(syllabus.storedFileId || syllabus.id, syllabus.fileName || `${syllabus.title}.${syllabus.fileType}`)}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl inline-flex items-center space-x-1.5 cursor-pointer shadow-xs"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Admin Download</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1925,12 +1942,12 @@ export default function AdminCompetitionManagementPage() {
 
             <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-2 text-xs text-rose-900">
               <p className="font-bold leading-relaxed">
-                Republishing permanently deletes ALL previous attempts, answers, voice recordings and marks of ALL students for this test. This cannot be undone.
+                Republish will permanently delete all {republishModalData.loading ? '...' : (republishModalData.attemptCount || 0)} existing attempts and recordings for this test. Candidates will have to retake it. Check 'I understand' to proceed.
               </p>
               <p className="text-[11px] text-rose-700">
                 {republishModalData.loading
                   ? 'Calculating affected attempts...'
-                  : `${republishModalData.attemptCount} student attempt(s) will be permanently deleted.`}
+                  : `${republishModalData.attemptCount || 0} student attempt(s) will be permanently deleted.`}
               </p>
             </div>
 

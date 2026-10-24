@@ -114,19 +114,11 @@ export default function CompetitionPortalLayout() {
     );
   }
 
-  // Task K6: While an exam attempt is on screen, render ONLY the exam UI inside the viewport
-  if (isExamActive) {
-    return (
-      <div className="w-full min-h-screen bg-slate-950 text-slate-100 overflow-y-auto">
-        <Outlet context={{ currentCompetition, isExamActive, setIsExamActive }} />
-      </div>
-    );
-  }
-
   return (
-    <div className="h-screen w-full flex overflow-hidden bg-slate-50 font-sans antialiased text-slate-900">
+    <div className={`h-screen w-full flex overflow-hidden ${isExamActive ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'} font-sans antialiased`}>
       {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex flex-col w-64 bg-slate-900 text-slate-300 border-r border-slate-800 shrink-0">
+      {!isExamActive && (
+        <aside className="hidden md:flex flex-col w-64 bg-slate-900 text-slate-300 border-r border-slate-800 shrink-0">
         <div className="p-5 flex items-center space-x-3 border-b border-slate-800">
           <img src="/assets/logo.png" alt="Zoro Logo" className="h-7 w-auto object-contain" />
           <div>
@@ -232,9 +224,10 @@ export default function CompetitionPortalLayout() {
           </button>
         </div>
       </aside>
+      )}
 
       {/* Mobile Drawer */}
-      {isMobileMenuOpen && (
+      {!isExamActive && isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs" onClick={() => setIsMobileMenuOpen(false)} />
           <div className="relative w-72 max-w-[80vw] bg-slate-900 text-white flex flex-col h-full shadow-2xl z-10">
@@ -299,60 +292,62 @@ export default function CompetitionPortalLayout() {
       {/* Main Container */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
         {/* Top Header */}
-        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-30 shadow-xs">
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="md:hidden p-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl"
-            >
-              <Menu className="w-4 h-4" />
-            </button>
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-black text-slate-900 tracking-tight">Competition Portal</span>
-              {currentCompetition && (
-                <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
-                  {currentCompetition.title || currentCompetition.name}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            {/* Switch Portal Button (Shown when both portals are accessible) */}
-            {portals.learning && (
+        {!isExamActive && (
+          <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+            <div className="flex items-center space-x-3">
               <button
-                onClick={handleSwitchToLearning}
-                className="hidden sm:inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0F52BA] border border-blue-200 text-xs font-bold transition cursor-pointer shadow-2xs"
-                title="Switch back to Learning Portal without logging out"
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="md:hidden p-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl"
               >
-                <ArrowLeftRight className="w-3.5 h-3.5" />
-                <span>Switch to Learning Portal</span>
+                <Menu className="w-4 h-4" />
               </button>
-            )}
-
-            {/* Profile Avatar */}
-            <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
-              {user?.avatar ? (
-                <img
-                  src={resolveFileUrl(user.avatar)}
-                  alt={user.name || 'User'}
-                  className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-500/20"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs ring-2 ring-blue-500/20">
-                  {user?.name ? user.name.trim().charAt(0).toUpperCase() : <User className="w-4 h-4 text-blue-600" />}
-                </div>
-              )}
-              <div className="hidden lg:block text-left leading-tight">
-                <span className="text-xs font-bold text-slate-800 block">{user?.name}</span>
-                <span className="text-[10px] font-semibold text-slate-500 block">Candidate</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-black text-slate-900 tracking-tight">Competition Portal</span>
+                {currentCompetition && (
+                  <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
+                    {currentCompetition.title || currentCompetition.name}
+                  </span>
+                )}
               </div>
             </div>
-          </div>
-        </header>
+
+            <div className="flex items-center space-x-3">
+              {/* Switch Portal Button (Shown when both portals are accessible) */}
+              {portals.learning && (
+                <button
+                  onClick={handleSwitchToLearning}
+                  className="hidden sm:inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0F52BA] border border-blue-200 text-xs font-bold transition cursor-pointer shadow-2xs"
+                  title="Switch back to Learning Portal without logging out"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" />
+                  <span>Switch to Learning Portal</span>
+                </button>
+              )}
+
+              {/* Profile Avatar */}
+              <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
+                {user?.avatar ? (
+                  <img
+                    src={resolveFileUrl(user.avatar)}
+                    alt={user.name || 'User'}
+                    className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-500/20"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs ring-2 ring-blue-500/20">
+                    {user?.name ? user.name.trim().charAt(0).toUpperCase() : <User className="w-4 h-4 text-blue-600" />}
+                  </div>
+                )}
+                <div className="hidden lg:block text-left leading-tight">
+                  <span className="text-xs font-bold text-slate-800 block">{user?.name}</span>
+                  <span className="text-[10px] font-semibold text-slate-500 block">Candidate</span>
+                </div>
+              </div>
+            </div>
+          </header>
+        )}
 
         {/* Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        <main className={`flex-1 ${isExamActive ? 'p-0 overflow-y-auto bg-slate-950 text-slate-100' : 'p-4 sm:p-6 lg:p-8 overflow-y-auto'}`}>
           <Outlet context={{ currentCompetition, setCurrentCompetition, portals, isExamActive, setIsExamActive }} />
         </main>
       </div>

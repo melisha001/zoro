@@ -237,6 +237,9 @@ export default function CompetitionTestSeriesPage() {
               <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
                 Submitted successfully - Evaluation pending
               </h1>
+              <p className="text-sm font-bold text-slate-800">
+                {assessment?.title || activeTest?.title || 'Test Series Assessment'}
+              </p>
               <p className="text-xs sm:text-sm text-slate-500 font-medium">
                 Submitted on {attempt?.submittedAt ? new Date(attempt.submittedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Recently'} (IST)
               </p>
@@ -392,10 +395,22 @@ export default function CompetitionTestSeriesPage() {
                         )
                       )}
                       {isVoice && (
-                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-bold">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>{studentAns?.evaluationStatus === 'EVALUATED' ? `Evaluated (+${studentAns.marksAwarded || 0} marks)` : 'Pending Trainer'}</span>
-                        </span>
+                        studentAns?.evaluationStatus === 'EVALUATED' ? (
+                          <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Evaluated (+{studentAns.marksAwarded || 0} marks)</span>
+                          </span>
+                        ) : (!studentAns?.voiceFileId || studentAns?.evaluationStatus === 'SKIPPED' || attempt?.evaluationMode === 'AUTO_EVALUATED') ? (
+                          <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-rose-100 text-rose-800 rounded-full text-xs font-bold">
+                            <X className="w-3.5 h-3.5" />
+                            <span>Not answered (0 marks)</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-bold">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Pending Trainer</span>
+                          </span>
+                        )
                       )}
                       <span className="text-xs font-black text-slate-700">
                         {q.marks || 1} {q.marks === 1 ? 'Mark' : 'Marks'}
@@ -465,7 +480,7 @@ export default function CompetitionTestSeriesPage() {
                           <span>Voice recording captured and stored ({studentAns.voiceDurationSec || 0} seconds)</span>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-500 italic">No recording uploaded</span>
+                        <span className="text-xs text-slate-500 italic">Not answered (0 marks)</span>
                       )}
                       {studentAns?.feedback && (
                         <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
