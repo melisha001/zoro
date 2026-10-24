@@ -2,6 +2,7 @@ package com.zoroacademy.service;
 
 import com.zoroacademy.entity.*;
 import com.zoroacademy.exception.BadRequestException;
+import com.zoroacademy.exception.ConflictException;
 import com.zoroacademy.exception.ForbiddenException;
 import com.zoroacademy.exception.ResourceNotFoundException;
 import com.zoroacademy.repository.*;
@@ -82,6 +83,12 @@ public class CompetitionService {
 
     @Autowired(required = false)
     private ExamProctorEventRepository examProctorEventRepository;
+
+    @Autowired(required = false)
+    private RepublishAuditRepository republishAuditRepository;
+
+    @Autowired(required = false)
+    private NotificationService notificationService;
 
     @Autowired
     public CompetitionService(
@@ -1197,12 +1204,34 @@ public class CompetitionService {
         return saved;
     }
 
-    /**
-     * Republishes an assessment with an incremented publishVersion, allowing students
-     * a fresh attempt while preserving previous attempts and scoring history.
-     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getRepublishInfo(String asmtId) {
+        CompetitionAssessment asmt = getAssessmentById(asmtId);
+        int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
+        long attemptCount = (assessmentAttemptRepository != null)
+                ? assessmentAttemptRepository.countByAssessmentId(asmtId)
+                : 0;
+        Map<String, Object> info = new HashMap<>();
+        info.put("assessmentId", asmtId);
+        info.put("title", asmt.getTitle());
+        info.put("publishVersion", currentVer);
+        info.put("attemptCount", attemptCount);
+        return info;
+    }
+
     @Transactional
     public CompetitionAssessment republishAssessment(String asmtId) {
+        return republishAssessment(asmtId, null);
+    }
+
+    /**
+     * Task K7: Republish permanently deletes ALL previous attempt data for that test
+     * across all students in ONE DB transaction (attempts, answers, scores, trainer
+     * evaluations/marks, reviews, proctor events, leaderboard cache/entries), increments
+     * publishVersion, logs an audit row, notifies candidates, and deletes related objects from Bunny Storage.
+     */
+    @Transactional
+    public CompetitionAssessment republishAssessment(String asmtId, User adminUser) {
         CompetitionAssessment asmt = getAssessmentById(asmtId);
         List<AssessmentQuestion> questions = questionRepository.findByAssessmentIdOrderBySortOrderAsc(asmtId);
         if (questions.isEmpty()) {
@@ -1225,6 +1254,55 @@ public class CompetitionService {
         }
         asmt.setTotalMarks(computedTotalMarks);
 
+        List<String> voiceFilesToDelete = new ArrayList<>();
+        int deletedAttemptsCount = 0;
+        int deletedAnswersCount = 0;
+
+        if (assessmentAttemptRepository != null) {
+            List<AssessmentAttempt> attempts = assessmentAttemptRepository.findByAssessmentId(asmtId);
+            deletedAttemptsCount = attempts.size();
+
+            for (AssessmentAttempt att : attempts) {
+                if (attemptAnswerRepository != null) {
+                    List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(att.getId());
+                    deletedAnswersCount += answers.size();
+                    for (AttemptAnswer ans : answers) {
+                        if (ans.getVoiceFileId() != null && !ans.getVoiceFileId().isBlank()) {
+                            voiceFilesToDelete.add(ans.getVoiceFileId());
+                        }
+                        if (ans.getAudioFileId() != null && !ans.getAudioFileId().isBlank()) {
+                            voiceFilesToDelete.add(ans.getAudioFileId());
+                        }
+                        if (voiceEvaluationScoreRepository != null) {
+                            try {
+                                voiceEvaluationScoreRepository.deleteByAnswerId(ans.getId());
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                    try {
+                        attemptAnswerRepository.deleteAll(answers);
+                    } catch (Exception ignored) {}
+                }
+
+                if (examProctorEventRepository != null) {
+                    try {
+                        examProctorEventRepository.deleteByAttemptId(att.getId());
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            try {
+                assessmentAttemptRepository.deleteAll(attempts);
+            } catch (Exception ignored) {}
+        }
+
+        // Clear leaderboard cache for this competition so rankings are cleanly recomputed
+        if (leaderboardCacheRepository != null) {
+            try {
+                leaderboardCacheRepository.deleteByCompetitionId(asmt.getCompetitionId());
+            } catch (Exception ignored) {}
+        }
+
         int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
         asmt.setPublishVersion(currentVer + 1);
         asmt.setRepublishedAt(OffsetDateTime.now(ZoneId.of("Asia/Kolkata")));
@@ -1233,6 +1311,44 @@ public class CompetitionService {
         CompetitionAssessment saved = assessmentRepository.save(asmt);
         saved.setQuestionCount((long) questions.size());
         saved.setTargetQuestions(questions.size());
+
+        // Write an audit row per republish (K7 requirement 5)
+        if (republishAuditRepository != null) {
+            RepublishAudit audit = new RepublishAudit(
+                    "rep_aud_" + UUID.randomUUID(),
+                    asmtId,
+                    adminUser != null ? adminUser.getId() : null,
+                    deletedAttemptsCount,
+                    deletedAnswersCount,
+                    voiceFilesToDelete.size()
+            );
+            republishAuditRepository.save(audit);
+        }
+
+        // Notify candidates that the test is available again (K7 requirement 3)
+        if (notificationService != null) {
+            try {
+                List<CompetitionRegistration> regs = registrationRepository.findByCompetitionId(asmt.getCompetitionId());
+                for (CompetitionRegistration r : regs) {
+                    if (r.getStudentId() != null) {
+                        notificationService.createNotification(
+                                r.getStudentId(),
+                                asmt.getTitle() + " is available again",
+                                "The test has been republished by the administrator. You may now start a fresh attempt.",
+                                "STUDENT"
+                        );
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // After the transaction commits, delete related objects from Bunny Storage (K7 requirement 1)
+        for (String fileId : voiceFilesToDelete) {
+            try {
+                fileStorageService.deleteFile(fileId);
+            } catch (Exception ignored) {}
+        }
+
         return saved;
     }
 
@@ -1275,23 +1391,10 @@ public class CompetitionService {
         String qId = (String) payload.get("id");
         boolean isNew = (qId == null || qId.isBlank() || !questionRepository.existsById(qId));
 
-        // Check attempt lock: once attempts exist for current version, structural modification is blocked
-        int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
-        long attemptCount = (assessmentAttemptRepository != null)
-                ? assessmentAttemptRepository.countByAssessmentIdAndPublishVersion(asmtId, currentVer)
-                : 0;
-        if (attemptCount > 0) {
-            if (isNew) {
-                throw new BadRequestException("Cannot add new questions to an assessment version that already has student attempts. Please republish to create a new version.");
-            }
-            AssessmentQuestion existing = questionRepository.findById(qId).orElseThrow();
-            if (payload.containsKey("marks") && ((Number) payload.get("marks")).intValue() != existing.getMarks()) {
-                throw new BadRequestException("Cannot modify marks of a question once attempts exist for this version");
-            }
-            if (payload.containsKey("options")) {
-                throw new BadRequestException("Cannot modify question options once attempts exist for this version");
-            }
-        }
+        // Task K3: Admin can add, edit (text, options, correct answer, marks, media, formats),
+        // reorder, and delete questions at any time on published assessments without blocking.
+        // A non-blocking banner is displayed in the UI when attempts exist for the current version.
+        // Existing attempts are preserved with their original stored scores until Republish (K7) is pressed.
 
         String qFormat = (String) payload.getOrDefault("questionFormat", "MCQ");
         String aFormat = (String) payload.getOrDefault("answerFormat", "MCQ_OPTIONS");
@@ -1379,10 +1482,7 @@ public class CompetitionService {
                 .orElseThrow(() -> new ResourceNotFoundException("Question not found: " + questionId));
         String asmtId = q.getAssessmentId();
         CompetitionAssessment asmt = assessmentRepository.findById(asmtId).orElse(null);
-        int currentVer = (asmt != null && asmt.getPublishVersion() != null) ? asmt.getPublishVersion() : 1;
-        if (assessmentAttemptRepository != null && assessmentAttemptRepository.countByAssessmentIdAndPublishVersion(asmtId, currentVer) > 0) {
-            throw new BadRequestException("Cannot delete question from an assessment version that already has student attempts");
-        }
+        // Task K3: Admin can delete questions without blocking even if attempts exist.
         questionRepository.delete(q);
         if (asmt != null) {
             List<AssessmentQuestion> allQs = questionRepository.findByAssessmentIdOrderBySortOrderAsc(asmtId);
@@ -1657,9 +1757,13 @@ public class CompetitionService {
                     item.put("attemptId", att.getId());
                     item.put("startedAt", att.getStartedAt());
                     item.put("submittedAt", att.getSubmittedAt());
-                    item.put("mcqMarks", att.getMcqMarks());
-                    item.put("voiceMarks", att.getVoiceMarks());
-                    item.put("totalMarksAwarded", att.getTotalMarks());
+
+                    boolean hidePendingScores = "EVALUATION_PENDING".equalsIgnoreCase(att.getStatus());
+                    if (!hidePendingScores) {
+                        item.put("mcqMarks", att.getMcqMarks());
+                        item.put("voiceMarks", att.getVoiceMarks());
+                        item.put("totalMarksAwarded", att.getTotalMarks());
+                    }
 
                     if (attemptAnswerRepository != null) {
                         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(att.getId());
@@ -1771,9 +1875,13 @@ public class CompetitionService {
                     item.put("attemptId", att.getId());
                     item.put("startedAt", att.getStartedAt());
                     item.put("submittedAt", att.getSubmittedAt());
-                    item.put("mcqMarks", att.getMcqMarks());
-                    item.put("voiceMarks", att.getVoiceMarks());
-                    item.put("totalMarksAwarded", att.getTotalMarks());
+
+                    boolean hidePendingScores = "EVALUATION_PENDING".equalsIgnoreCase(att.getStatus());
+                    if (!hidePendingScores) {
+                        item.put("mcqMarks", att.getMcqMarks());
+                        item.put("voiceMarks", att.getVoiceMarks());
+                        item.put("totalMarksAwarded", att.getTotalMarks());
+                    }
 
                     if (attemptAnswerRepository != null) {
                         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(att.getId());
@@ -2213,9 +2321,20 @@ public class CompetitionService {
         String regId = reg != null ? reg.getId() : "reg_admin_" + user.getId();
         int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
 
-        AssessmentAttempt attempt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(asmtId, regId, currentVer)
-                .or(() -> assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(asmtId, regId))
-                .orElseThrow(() -> new BadRequestException("No active attempt found for this assessment"));
+        Optional<AssessmentAttempt> currentAttemptOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(asmtId, regId, currentVer);
+        AssessmentAttempt attempt;
+        if (currentAttemptOpt.isPresent()) {
+            attempt = currentAttemptOpt.get();
+        } else {
+            Optional<AssessmentAttempt> olderAttempt = assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(asmtId, regId);
+            if (olderAttempt.isPresent() && olderAttempt.get().getPublishVersion() != null && olderAttempt.get().getPublishVersion() < currentVer) {
+                throw new ConflictException("This test was republished. Please start again.");
+            }
+            if ((asmt.getPublishVersion() != null && asmt.getPublishVersion() > 1) || (republishAuditRepository != null && republishAuditRepository.existsByAssessmentId(asmtId))) {
+                throw new ConflictException("This test was republished. Please start again.");
+            }
+            throw new BadRequestException("No active attempt found for this assessment");
+        }
 
         if (!"IN_PROGRESS".equalsIgnoreCase(attempt.getStatus())) {
             throw new BadRequestException("Attempt is not in progress (status: " + attempt.getStatus() + ")");
@@ -2288,9 +2407,20 @@ public class CompetitionService {
         String regId = reg != null ? reg.getId() : "reg_admin_" + user.getId();
         int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
 
-        AssessmentAttempt attempt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(asmtId, regId, currentVer)
-                .or(() -> assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(asmtId, regId))
-                .orElseThrow(() -> new BadRequestException("No active attempt found for this assessment"));
+        Optional<AssessmentAttempt> currentAttemptOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(asmtId, regId, currentVer);
+        AssessmentAttempt attempt;
+        if (currentAttemptOpt.isPresent()) {
+            attempt = currentAttemptOpt.get();
+        } else {
+            Optional<AssessmentAttempt> olderAttempt = assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(asmtId, regId);
+            if (olderAttempt.isPresent() && olderAttempt.get().getPublishVersion() != null && olderAttempt.get().getPublishVersion() < currentVer) {
+                throw new ConflictException("This test was republished. Please start again.");
+            }
+            if ((asmt.getPublishVersion() != null && asmt.getPublishVersion() > 1) || (republishAuditRepository != null && republishAuditRepository.existsByAssessmentId(asmtId))) {
+                throw new ConflictException("This test was republished. Please start again.");
+            }
+            throw new BadRequestException("No active attempt found for this assessment");
+        }
 
         if (!"IN_PROGRESS".equalsIgnoreCase(attempt.getStatus())) {
             throw new BadRequestException("Attempt is not in progress (status: " + attempt.getStatus() + ")");
@@ -2302,8 +2432,14 @@ public class CompetitionService {
         Map<String, Object> result = new HashMap<>();
         result.put("attemptId", savedAttempt.getId());
         result.put("status", savedAttempt.getStatus());
-        result.put("mcqMarks", savedAttempt.getMcqMarks());
-        result.put("totalMarks", savedAttempt.getTotalMarks());
+        if (!"FINAL".equalsIgnoreCase(asmt.getType()) && "EVALUATION_PENDING".equalsIgnoreCase(savedAttempt.getStatus())) {
+            result.put("isPendingEvaluation", true);
+            result.put("mcqMarks", null);
+            result.put("totalMarks", null);
+        } else {
+            result.put("mcqMarks", savedAttempt.getMcqMarks());
+            result.put("totalMarks", savedAttempt.getTotalMarks());
+        }
         result.put("submittedAt", savedAttempt.getSubmittedAt());
         result.put("autoSubmitted", Boolean.TRUE.equals(savedAttempt.getAutoSubmitted()));
         result.put("proctorViolationCount", savedAttempt.getProctorViolationCount() != null ? savedAttempt.getProctorViolationCount() : 0);
@@ -2332,7 +2468,12 @@ public class CompetitionService {
 
                 boolean isCorrect = false;
                 if (ans != null && ans.getSelectedOptionId() != null && correctOpt.isPresent()) {
-                    if (ans.getSelectedOptionId().equals(correctOpt.get().getId())) {
+                    // Check if selected option still exists in current options
+                    UUID selectedId = ans.getSelectedOptionId();
+                    boolean optionStillExists = options.stream().anyMatch(o -> o.getId().equals(selectedId));
+                    if (!optionStillExists) {
+                        ans.setSelectedOptionId(null);
+                    } else if (selectedId.equals(correctOpt.get().getId())) {
                         isCorrect = true;
                     }
                 }
@@ -2500,6 +2641,42 @@ public class CompetitionService {
 
         List<AssessmentQuestion> questions = questionRepository.findByAssessmentIdOrderBySortOrderAsc(asmtId);
         List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(attempt.getId());
+
+        boolean isStudent = "STUDENT".equals(role);
+        boolean isPendingEval = !"FINAL".equalsIgnoreCase(asmt.getType()) && "EVALUATION_PENDING".equalsIgnoreCase(attempt.getStatus());
+
+        if (isStudent && isPendingEval) {
+            Set<String> voiceQuestionIds = questions.stream()
+                    .filter(q -> "VOICE".equalsIgnoreCase(q.getAnswerFormat()))
+                    .map(q -> q.getId() != null ? q.getId().toString() : "")
+                    .collect(Collectors.toSet());
+            long vCount = voiceQuestionIds.size();
+            long vEvalCount = answers.stream()
+                    .filter(a -> a.getQuestionId() != null && voiceQuestionIds.contains(a.getQuestionId()) && "EVALUATED".equalsIgnoreCase(a.getEvaluationStatus()))
+                    .count();
+
+            Map<String, Object> summary = new HashMap<>();
+            summary.put("attemptId", attempt.getId());
+            summary.put("status", attempt.getStatus());
+            summary.put("isPendingEvaluation", true);
+            summary.put("startedAt", attempt.getStartedAt());
+            summary.put("submittedAt", attempt.getSubmittedAt());
+            summary.put("totalQuestions", questions.size());
+            summary.put("answeredCount", answers.size());
+            summary.put("voiceCount", (int) vCount);
+            summary.put("voiceEvaluatedCount", (int) vEvalCount);
+            summary.put("autoSubmitted", Boolean.TRUE.equals(attempt.getAutoSubmitted()));
+            summary.put("proctorViolationCount", attempt.getProctorViolationCount() != null ? attempt.getProctorViolationCount() : 0);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("assessment", asmt);
+            result.put("attempt", summary);
+            result.put("questions", Collections.emptyList());
+            result.put("isPendingEvaluation", true);
+            result.put("serverNow", OffsetDateTime.now(ZoneId.of("Asia/Kolkata")));
+            return result;
+        }
+
         Map<String, AttemptAnswer> answerMap = answers.stream()
                 .collect(Collectors.toMap(AttemptAnswer::getQuestionId, a -> a, (a, b) -> a));
 
@@ -2529,7 +2706,9 @@ public class CompetitionService {
             if (ans != null) {
                 Map<String, Object> ansMap = new HashMap<>();
                 ansMap.put("id", ans.getId());
-                ansMap.put("selectedOptionId", ans.getSelectedOptionId());
+                UUID rawOpt = ans.getSelectedOptionId();
+                UUID selectedOpt = (rawOpt != null && options.stream().anyMatch(o -> o.getId().equals(rawOpt))) ? rawOpt : null;
+                ansMap.put("selectedOptionId", selectedOpt);
                 ansMap.put("isCorrect", ans.getIsCorrect());
                 ansMap.put("marksAwarded", ans.getMarksAwarded());
                 ansMap.put("voiceFileId", ans.getVoiceFileId());
@@ -2980,6 +3159,23 @@ public class CompetitionService {
 
         if (!anyVoicePending) {
             attempt.setStatus("COMPLETED");
+            if (notificationService != null && attempt.getRegistrationId() != null) {
+                try {
+                    CompetitionAssessment asmt = assessmentRepository.findById(attempt.getAssessmentId()).orElse(null);
+                    String asmtTitle = asmt != null ? asmt.getTitle() : "Test";
+                    Optional<CompetitionRegistration> regOpt = registrationRepository.findById(attempt.getRegistrationId());
+                    if (regOpt.isPresent() && regOpt.get().getStudentId() != null) {
+                        notificationService.createNotification(
+                                regOpt.get().getStudentId(),
+                                "Result Ready",
+                                "Your result for " + asmtTitle + " is ready",
+                                "STUDENT"
+                        );
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to send result ready notification: {}", e.getMessage());
+                }
+            }
         }
         AssessmentAttempt savedAttempt = assessmentAttemptRepository.save(attempt);
 

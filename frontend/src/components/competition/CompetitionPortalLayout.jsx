@@ -3,11 +3,10 @@ import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
 import { 
   Trophy, BookOpen, FileText, Layers, Target, Award, BarChart2, 
   Menu, X, ChevronDown, GraduationCap, ArrowLeftRight, LogOut,
-  Calendar, User, Bell, AlertTriangle, Clock, Info, CheckSquare
+  Calendar, User, AlertTriangle, Clock, Info, CheckSquare
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getMyPortals } from '../../api/competitionApi';
-import { getMyNotifications } from '../../api/notificationApi';
 import { resolveFileUrl } from '../../api/fileApi';
 import PageLoader from '../common/PageLoader';
 
@@ -21,10 +20,7 @@ export default function CompetitionPortalLayout() {
   const [currentCompetition, setCurrentCompetition] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showCompDropdown, setShowCompDropdown] = useState(false);
-
-  // Notification state
-  const [showNotifPanel, setShowNotifPanel] = useState(false);
-  const [notifList, setNotifList] = useState([]);
+  const [isExamActive, setIsExamActive] = useState(false);
 
   useEffect(() => {
     loadPortalsAndCompetitions();
@@ -45,26 +41,6 @@ export default function CompetitionPortalLayout() {
       console.error('Failed to load portal access:', err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadNotifications();
-  }, [user]);
-
-  const loadNotifications = async () => {
-    try {
-      const notifRes = await getMyNotifications();
-      const items = (notifRes.data || []).slice(0, 8).map(n => ({
-        id: `notif_${n.id}`,
-        title: n.title || 'Notification',
-        desc: n.desc || n.message || '',
-        time: n.time || (n.createdAt ? new Date(n.createdAt).toLocaleDateString() : 'Today'),
-        type: n.type === 'danger' ? 'danger' : n.type === 'warning' ? 'warning' : 'info'
-      }));
-      setNotifList(items);
-    } catch (e) {
-      // ignore
     }
   };
 
@@ -134,6 +110,15 @@ export default function CompetitionPortalLayout() {
             </button>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // Task K6: While an exam attempt is on screen, render ONLY the exam UI inside the viewport
+  if (isExamActive) {
+    return (
+      <div className="w-full min-h-screen bg-slate-950 text-slate-100 overflow-y-auto">
+        <Outlet context={{ currentCompetition, isExamActive, setIsExamActive }} />
       </div>
     );
   }
@@ -345,51 +330,6 @@ export default function CompetitionPortalLayout() {
               </button>
             )}
 
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifPanel(!showNotifPanel)}
-                className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                title="Notifications"
-              >
-                <Bell className="w-5 h-5" />
-                {notifList.length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-rose-600 text-white font-extrabold text-[9px] rounded-full flex items-center justify-center ring-2 ring-white">
-                    {notifList.length}
-                  </span>
-                )}
-              </button>
-
-              {showNotifPanel && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-3xl shadow-2xl border border-slate-200 p-4 space-y-3 z-50">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center space-x-2">
-                      <Bell className="w-4 h-4 text-blue-600" />
-                      <h4 className="text-sm font-black text-slate-900">Competition Notifications</h4>
-                    </div>
-                    <button
-                      onClick={() => setShowNotifPanel(false)}
-                      className="p-1 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="max-h-72 overflow-y-auto space-y-2 text-xs">
-                    {notifList.length === 0 ? (
-                      <p className="py-6 text-center text-slate-400 font-semibold">No new competition notifications.</p>
-                    ) : (
-                      notifList.map(n => (
-                        <div key={n.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-slate-800">
-                          <p className="font-bold text-xs">{n.title}</p>
-                          <p className="text-[11px] text-slate-600 mt-0.5">{n.desc}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Profile Avatar */}
             <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
               {user?.avatar ? (
@@ -413,7 +353,7 @@ export default function CompetitionPortalLayout() {
 
         {/* Content Area */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-          <Outlet context={{ currentCompetition, setCurrentCompetition, portals }} />
+          <Outlet context={{ currentCompetition, setCurrentCompetition, portals, isExamActive, setIsExamActive }} />
         </main>
       </div>
     </div>

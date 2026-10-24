@@ -24,7 +24,7 @@ import ProctorViolationWarningModal from './ProctorViolationWarningModal';
 import { useSecureExamProctor } from './useSecureExamProctor';
 
 export default function CompetitionMockTestsPage() {
-  const { currentCompetition } = useOutletContext();
+  const { currentCompetition, isExamActive, setIsExamActive } = useOutletContext();
 
   const [mockTests, setMockTests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,6 +52,15 @@ export default function CompetitionMockTestsPage() {
   // Results View state
   const [resultsData, setResultsData] = useState(null);
   const [loadingResults, setLoadingResults] = useState(false);
+
+  // Task K6: Sync exam active state with portal layout
+  useEffect(() => {
+    const active = Boolean(activeTest && !resultsData);
+    setIsExamActive?.(active);
+    return () => {
+      setIsExamActive?.(false);
+    };
+  }, [activeTest, resultsData, setIsExamActive]);
 
   // Live countdown ticker for upcoming/live tests in list view
   const [nowTick, setNowTick] = useState(Date.now());
@@ -352,10 +361,50 @@ export default function CompetitionMockTestsPage() {
   // ==========================================
   if (resultsData) {
     const { assessment, attempt, questions } = resultsData;
-    const isPendingEvaluation = attempt?.status === 'EVALUATION_PENDING';
+    const isPendingEvaluation = attempt?.status === 'EVALUATION_PENDING' || Boolean(resultsData?.isPendingEvaluation);
     const totalAwarded = attempt?.totalMarks || 0;
     const maxMarks = attempt?.maxMarks || assessment?.totalMarks || 1;
     const accuracy = maxMarks > 0 ? Math.round((totalAwarded / maxMarks) * 100) : 0;
+
+    // Task K8: Mixed answer types acknowledgement page
+    if (isPendingEvaluation) {
+      return (
+        <div className="max-w-2xl mx-auto py-12 space-y-6 text-center animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-8 sm:p-10 shadow-sm space-y-6">
+            <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-3xl flex items-center justify-center mx-auto border border-amber-200">
+              <Clock className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                Submitted successfully - Evaluation pending
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 font-medium">
+                Submitted on {attempt?.submittedAt ? new Date(attempt.submittedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Recently'} (IST)
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 leading-relaxed max-w-md mx-auto">
+              Your answers have been securely recorded. The result will be published after the trainer evaluates the voice answers.
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setResultsData(null);
+                  setActiveTest(null);
+                  loadMockTests();
+                }}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+              >
+                Back to Mock Tests
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="max-w-5xl mx-auto space-y-6">

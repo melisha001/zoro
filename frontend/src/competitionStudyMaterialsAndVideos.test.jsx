@@ -65,7 +65,7 @@ describe('Competition Syllabus & Guidance Videos (Phase 6)', () => {
 
     // Check Syllabus Section
     expect(await screen.findByText('2026 Official English Olympiad Syllabus')).toBeDefined();
-    expect(screen.getByText('View Syllabus PDF')).toBeDefined();
+    expect(screen.getByText('View Syllabus')).toBeDefined();
     expect(screen.getByText(/Olympiad_Syllabus_2026\.pdf/)).toBeDefined();
 
     // Check Guidance Videos Section

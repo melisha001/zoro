@@ -36,6 +36,7 @@ public class FileAccessService {
     private final CompetitionAssessmentRepository competitionAssessmentRepository;
     private final AssessmentAttemptRepository assessmentAttemptRepository;
     private final CompetitionSetRepository competitionSetRepository;
+    private final CompetitionSyllabusRepository competitionSyllabusRepository;
 
     @Autowired
     public FileAccessService(
@@ -60,7 +61,8 @@ public class FileAccessService {
             CompetitionRegistrationRepository competitionRegistrationRepository,
             CompetitionAssessmentRepository competitionAssessmentRepository,
             AssessmentAttemptRepository assessmentAttemptRepository,
-            CompetitionSetRepository competitionSetRepository
+            CompetitionSetRepository competitionSetRepository,
+            CompetitionSyllabusRepository competitionSyllabusRepository
     ) {
         this.storedFileRepository = storedFileRepository;
         this.courseModuleRepository = courseModuleRepository;
@@ -84,6 +86,7 @@ public class FileAccessService {
         this.competitionAssessmentRepository = competitionAssessmentRepository;
         this.assessmentAttemptRepository = assessmentAttemptRepository;
         this.competitionSetRepository = competitionSetRepository;
+        this.competitionSyllabusRepository = competitionSyllabusRepository;
     }
 
     @Transactional(readOnly = true)
@@ -94,13 +97,14 @@ public class FileAccessService {
 
         String fileId = file.getId();
         List<CompetitionStudyMaterial> studyMaterials = competitionStudyMaterialRepository.findByStoredFileId(fileId);
+        List<CompetitionSyllabus> syllabusList = (competitionSyllabusRepository != null) ? competitionSyllabusRepository.findByStoredFileId(fileId) : List.of();
         List<AssessmentQuestion> questions = assessmentQuestionRepository.findByMediaRefContaining(fileId);
         List<AttemptAnswer> attemptAnswers = attemptAnswerRepository.findByVoiceFileIdOrAudioFileId(fileId, fileId);
 
-        boolean isRestrictedExamResource = !studyMaterials.isEmpty() || !questions.isEmpty() || !attemptAnswers.isEmpty();
+        boolean isRestrictedExamResource = !studyMaterials.isEmpty() || !syllabusList.isEmpty() || !questions.isEmpty() || !attemptAnswers.isEmpty();
 
         // Generic public files are accessible to everyone, but competition study materials,
-        // questions, and attempt answers are strictly restricted to registered candidates/assigned trainers.
+        // syllabus, questions, and attempt answers are strictly restricted to registered candidates/assigned trainers.
         if (Boolean.TRUE.equals(file.getIsPublic()) && !isRestrictedExamResource) {
             return FileAccessResult.allowed();
         }
@@ -134,11 +138,21 @@ public class FileAccessService {
 
         boolean hasReferences = !modules.isEmpty() || !schedules.isEmpty() || !assignments.isEmpty()
                 || !submissions.isEmpty() || !courseResources.isEmpty() || !competitions.isEmpty()
-                || !studyMaterials.isEmpty() || !questions.isEmpty() || !attemptAnswers.isEmpty();
+                || !studyMaterials.isEmpty() || !syllabusList.isEmpty() || !questions.isEmpty() || !attemptAnswers.isEmpty();
 
         // A private file referenced nowhere is denied with a clear reason
         if (!hasReferences) {
             return FileAccessResult.forbidden("Access denied: Private file is not referenced by any course, schedule, or assignment");
+        }
+
+        // Competition Syllabus authorization (strictly registered candidates/admin)
+        if (!syllabusList.isEmpty()) {
+            for (CompetitionSyllabus syl : syllabusList) {
+                if (isUserRegisteredForCompetition(currentUser, syl.getCompetitionId())) {
+                    return FileAccessResult.allowed();
+                }
+            }
+            return FileAccessResult.forbidden("Access denied: You must be registered for this competition to view the syllabus");
         }
 
         // Competition Study Materials authorization (strictly registered candidates/admin)

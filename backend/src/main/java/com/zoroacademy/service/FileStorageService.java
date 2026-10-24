@@ -323,22 +323,11 @@ public class FileStorageService {
         result.put("size", storedFile.getSizeBytes());
         result.put("isPublic", storedFile.getIsPublic());
 
-        if (Boolean.TRUE.equals(storedFile.getIsPublic())) {
-            result.put("url", getFileUrl(storedFile));
-            result.put("expiresAt", 0L);
-            return result;
-        }
-
         long expiresAt = (System.currentTimeMillis() / 1000) + expirationSeconds;
-        String publicCdn = storageProvider.getPublicUrl(storedFile.getStoragePath());
-        if (publicCdn != null && bunnyTokenService != null && !publicCdn.contains("b-cdn.net")) {
-            String token = bunnyTokenService.generateToken(storedFile.getStoragePath(), expiresAt);
-            result.put("url", publicCdn + "?token=" + token + "&expires=" + expiresAt);
-            result.put("expiresAt", expiresAt);
-            return result;
-        }
 
-        // Direct backend signed link
+        // Guaranteed secure signed link flow: generate an internal HMAC token bound to fileId and expiry
+        // so that <audio>, <video>, <img>, <iframe>, and new tabs can access the backend streaming endpoint
+        // reliably without requiring an Authorization header (Rule 5 & Task K5).
         String token = generateInternalToken(storedFile.getId(), expiresAt);
         result.put("url", "/api/files/" + storedFile.getId() + "?token=" + token + "&expires=" + expiresAt);
         result.put("expiresAt", expiresAt);

@@ -55,7 +55,7 @@ const SET_STYLES = {
 };
 
 export default function CompetitionFinalAssessmentPage() {
-  const { currentCompetition } = useOutletContext();
+  const { currentCompetition, isExamActive, setIsExamActive } = useOutletContext();
 
   const [assessmentData, setAssessmentData] = useState(null);
   const [assignedSet, setAssignedSet] = useState(null);
@@ -83,6 +83,15 @@ export default function CompetitionFinalAssessmentPage() {
   // Results View state
   const [resultsData, setResultsData] = useState(null);
   const [loadingResults, setLoadingResults] = useState(false);
+
+  // Task K6: Sync exam active state with portal layout
+  useEffect(() => {
+    const active = Boolean(isTestActive && !resultsData);
+    setIsExamActive?.(active);
+    return () => {
+      setIsExamActive?.(false);
+    };
+  }, [isTestActive, resultsData, setIsExamActive]);
 
   // Live countdown ticker for upcoming/live list view
   const [nowTick, setNowTick] = useState(Date.now());

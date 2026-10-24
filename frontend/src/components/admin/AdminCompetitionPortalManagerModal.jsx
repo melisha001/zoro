@@ -20,6 +20,8 @@ import InlineSpinner from '../common/InlineSpinner';
 import UnifiedUploader from '../common/UnifiedUploader';
 import SafeVideo from '../common/SafeVideo';
 import GuidanceVideoManager from './GuidanceVideoManager';
+import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
+import QuestionPreview from '../common/QuestionPreview';
 import { useDialog } from '../../context/DialogContext';
 
 export default function AdminCompetitionPortalManagerModal({ competition, isOpen, onClose }) {
@@ -27,6 +29,7 @@ export default function AdminCompetitionPortalManagerModal({ competition, isOpen
 
   const [activeTab, setActiveTab] = useState('sets'); // 'sets' | 'syllabus' | 'videos' | 'materials' | 'assessments'
   const [loading, setLoading] = useState(false);
+  const [viewingFile, setViewingFile] = useState(null);
 
   // Data states
   const [trainers, setTrainers] = useState([]);
@@ -518,10 +521,20 @@ export default function AdminCompetitionPortalManagerModal({ competition, isOpen
                         <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                         <span>Syllabus Active: {syllabus.fileName || 'Syllabus.pdf'}</span>
                       </span>
-                      <a href={syllabus.viewUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center space-x-1">
+                      <button
+                        type="button"
+                        onClick={() => setViewingFile({
+                          id: syllabus.storedFileId || syllabus.id,
+                          url: syllabus.viewUrl,
+                          name: syllabus.fileName || syllabus.title,
+                          title: syllabus.title,
+                          type: syllabus.fileType
+                        })}
+                        className="text-blue-600 hover:underline inline-flex items-center space-x-1 cursor-pointer"
+                      >
                         <span>Preview</span>
                         <ExternalLink className="w-3 h-3" />
-                      </a>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -577,9 +590,20 @@ export default function AdminCompetitionPortalManagerModal({ competition, isOpen
                             </div>
                             <div className="flex items-center space-x-1">
                               {m.viewUrl && (
-                                <a href={m.viewUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg">
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingFile({
+                                    id: m.storedFileId || m.id,
+                                    url: m.viewUrl,
+                                    name: m.fileName || m.title,
+                                    title: m.title,
+                                    type: m.fileType
+                                  })}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
+                                  title="Preview Material"
+                                >
                                   <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
+                                </button>
                               )}
                               <button
                                 onClick={() => handleDeleteMaterial(m.id)}
@@ -704,26 +728,10 @@ export default function AdminCompetitionPortalManagerModal({ competition, isOpen
                                 </button>
                               </div>
 
-                              <p className="text-xs font-bold text-slate-900">{q.questionText}</p>
-
-                              {/* Options preview for MCQ */}
-                              {q.options && q.options.length > 0 && (
-                                <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
-                                  {q.options.map((opt, oIdx) => (
-                                    <div
-                                      key={opt.id || oIdx}
-                                      className={`p-2 rounded-xl border font-semibold flex items-center space-x-1.5 ${
-                                        opt.isCorrect
-                                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                                          : 'bg-slate-50 border-slate-200 text-slate-700'
-                                      }`}
-                                    >
-                                      {opt.isCorrect && <Check className="w-3 h-3 text-emerald-600 shrink-0" />}
-                                      <span className="truncate">{opt.text}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                              {/* Shared miniature preview mirroring student layout (Task K4) */}
+                              <div className="pt-1">
+                                <QuestionPreview question={q} isAdmin={true} />
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -953,6 +961,14 @@ export default function AdminCompetitionPortalManagerModal({ competition, isOpen
           </div>
         </div>
       )}
+
+      {/* Universal File Viewer Modal (Tasks K1 & K2) */}
+      <UniversalFileViewerModal
+        isOpen={Boolean(viewingFile)}
+        onClose={() => setViewingFile(null)}
+        file={viewingFile}
+        hideDownload={false}
+      />
     </div>
   );
 }

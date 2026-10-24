@@ -376,6 +376,14 @@ export const republishCompetitionAssessment = async (asmtId) => {
   return apiResponse(null, false, res?.message || 'Failed to republish assessment');
 };
 
+export const getAssessmentRepublishInfo = async (asmtId) => {
+  const res = await apiGet(`/competitions/assessments/${encodeURIComponent(asmtId)}/republish-info`);
+  if (res && (res.success || res.attemptCount !== undefined || res.data)) {
+    return apiResponse(res.data || res);
+  }
+  return apiResponse(null, false, res?.message || 'Failed to fetch republish info');
+};
+
 // --- COMPETITION MANAGEMENT (OVERVIEW & STUDENTS) ---
 export const getCompetitionOverview = async (competitionId) => {
   const res = await apiGet(`/competitions/${encodeURIComponent(competitionId)}/overview`);

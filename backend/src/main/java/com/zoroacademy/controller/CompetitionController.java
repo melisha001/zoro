@@ -245,10 +245,17 @@ public class CompetitionController {
         return ApiResponse.ok(competitionService.publishAssessment(asmtId), "Assessment published successfully");
     }
 
+    @GetMapping("/assessments/{asmtId}/republish-info")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<Map<String, Object>> getRepublishInfo(@PathVariable String asmtId) {
+        return ApiResponse.ok(competitionService.getRepublishInfo(asmtId));
+    }
+
     @PostMapping("/assessments/{asmtId}/republish")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     public ApiResponse<CompetitionAssessment> republishAssessment(@PathVariable String asmtId) {
-        return ApiResponse.ok(competitionService.republishAssessment(asmtId), "Assessment republished successfully");
+        User user = getCurrentUser();
+        return ApiResponse.ok(competitionService.republishAssessment(asmtId, user), "Assessment republished successfully");
     }
 
     // --- Questions Builder (Phase 7) ---

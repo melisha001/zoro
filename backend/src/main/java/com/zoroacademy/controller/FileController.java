@@ -36,6 +36,7 @@ public class FileController {
     private final com.zoroacademy.repository.CompetitionStudyMaterialRepository competitionStudyMaterialRepository;
     private final com.zoroacademy.repository.AttemptAnswerRepository attemptAnswerRepository;
     private final com.zoroacademy.repository.AssessmentQuestionRepository assessmentQuestionRepository;
+    private final com.zoroacademy.repository.CompetitionSyllabusRepository competitionSyllabusRepository;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.zoroacademy.service.BunnyStreamService bunnyStreamService;
@@ -48,13 +49,15 @@ public class FileController {
                           CompetitionRepository competitionRepository,
                           com.zoroacademy.repository.CompetitionStudyMaterialRepository competitionStudyMaterialRepository,
                           com.zoroacademy.repository.AttemptAnswerRepository attemptAnswerRepository,
-                          com.zoroacademy.repository.AssessmentQuestionRepository assessmentQuestionRepository) {
+                          com.zoroacademy.repository.AssessmentQuestionRepository assessmentQuestionRepository,
+                          com.zoroacademy.repository.CompetitionSyllabusRepository competitionSyllabusRepository) {
         this.fileStorageService = fileStorageService;
         this.fileAccessService = fileAccessService;
         this.competitionRepository = competitionRepository;
         this.competitionStudyMaterialRepository = competitionStudyMaterialRepository;
         this.attemptAnswerRepository = attemptAnswerRepository;
         this.assessmentQuestionRepository = assessmentQuestionRepository;
+        this.competitionSyllabusRepository = competitionSyllabusRepository;
     }
 
     public static String resolveMimeType(String originalName, String defaultType) {
@@ -258,14 +261,15 @@ public class FileController {
         boolean isStudyMaterial = !competitionStudyMaterialRepository.findByStoredFileId(id).isEmpty();
         boolean isAttemptAnswer = !attemptAnswerRepository.findByVoiceFileIdOrAudioFileId(id, id).isEmpty();
         boolean isQuestionMedia = !assessmentQuestionRepository.findByMediaRefContaining(id).isEmpty();
-        boolean isRestrictedExamResource = isStudyMaterial || isAttemptAnswer || isQuestionMedia;
+        boolean isSyllabus = (competitionSyllabusRepository != null) && !competitionSyllabusRepository.findByStoredFileId(id).isEmpty();
+        boolean isRestrictedExamResource = isStudyMaterial || isAttemptAnswer || isQuestionMedia || isSyllabus;
 
         if (download) {
             String cat = storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "";
             boolean isViewOnly = isRestrictedExamResource
                     || cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("schedule")
                     || cat.contains("study") || cat.contains("material") || cat.contains("question") || cat.contains("voice")
-                    || cat.contains("answer");
+                    || cat.contains("answer") || cat.contains("syllabus");
 
             if (isViewOnly) {
                 boolean isAdmin = currentUser != null && ("ADMIN".equals(currentUser.getRole()) || "SUPER_ADMIN".equals(currentUser.getRole()));
@@ -347,6 +351,7 @@ public class FileController {
                         .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + actualEnd + "/" + contentLength)
                         .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(buffer.length))
                         .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+                        .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
                         .header("Content-Security-Policy", "frame-ancestors 'self' " + allowedOriginsCsp)
                         .body(rangeResource);
             } catch (Exception e) {
@@ -358,6 +363,7 @@ public class FileController {
                 .header(HttpHeaders.CONTENT_TYPE, mediaType)
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                 .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
                 .header("Content-Security-Policy", "frame-ancestors 'self' " + allowedOriginsCsp)
                 .body(resource);
     }
@@ -374,7 +380,8 @@ public class FileController {
         boolean isStudyMaterial = !competitionStudyMaterialRepository.findByStoredFileId(id).isEmpty();
         boolean isAttemptAnswer = !attemptAnswerRepository.findByVoiceFileIdOrAudioFileId(id, id).isEmpty();
         boolean isQuestionMedia = !assessmentQuestionRepository.findByMediaRefContaining(id).isEmpty();
-        boolean isRestrictedExamResource = isStudyMaterial || isAttemptAnswer || isQuestionMedia;
+        boolean isSyllabus = (competitionSyllabusRepository != null) && !competitionSyllabusRepository.findByStoredFileId(id).isEmpty();
+        boolean isRestrictedExamResource = isStudyMaterial || isAttemptAnswer || isQuestionMedia || isSyllabus;
 
         if (!Boolean.TRUE.equals(storedFile.getIsPublic()) || isRestrictedExamResource) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -382,7 +389,7 @@ public class FileController {
         String cat = storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "";
         if (cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("schedule")
                 || cat.contains("study") || cat.contains("material") || cat.contains("question") || cat.contains("voice")
-                || cat.contains("answer")) {
+                || cat.contains("answer") || cat.contains("syllabus")) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 

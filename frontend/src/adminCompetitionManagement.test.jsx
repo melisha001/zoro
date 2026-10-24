@@ -108,6 +108,11 @@ describe('Admin Competition Management & Question Builder (Phase 7)', () => {
       data: mockQuestions
     });
 
+    vi.spyOn(compApi, 'getAssessmentRepublishInfo').mockResolvedValue({
+      success: true,
+      data: { attemptCount: 0 }
+    });
+
     render(
       <DialogProvider>
         <AdminCompetitionManagementPage />

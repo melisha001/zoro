@@ -5,6 +5,7 @@ import { getCompetitionSyllabus, getCompetitionGuidanceVideos } from '../../api/
 import SafeVideo from '../common/SafeVideo';
 import InlineSpinner from '../common/InlineSpinner';
 import SkeletonCard from '../common/SkeletonCard';
+import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 
 export default function CompetitionSyllabusPage() {
   const { currentCompetition } = useOutletContext();
@@ -109,7 +110,7 @@ export default function CompetitionSyllabusPage() {
                   className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-[#0F52BA] hover:bg-blue-700 text-white font-bold text-xs transition shadow-sm cursor-pointer"
                 >
                   <Eye className="w-4 h-4" />
-                  <span>View Syllabus PDF</span>
+                  <span>View Syllabus</span>
                 </button>
               ) : (
                 <span className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
@@ -127,7 +128,7 @@ export default function CompetitionSyllabusPage() {
                   className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center space-x-1 cursor-pointer"
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>View in Reader</span>
+                  <span>Open in Viewer</span>
                 </button>
               </div>
             )}
@@ -217,37 +218,19 @@ export default function CompetitionSyllabusPage() {
           </div>
         </div>
       )}
-      {/* View-Only Syllabus PDF Modal */}
-      {showPdfModal && syllabus?.viewUrl && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-              <div className="flex items-center space-x-2">
-                <FileText className="w-5 h-5 text-blue-400" />
-                <span className="font-bold text-sm">{syllabus.title || 'Competition Syllabus'} (View-Only)</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPdfModal(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-full bg-slate-800 hover:bg-slate-700 cursor-pointer transition"
-                title="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div
-              className="flex-1 w-full h-full relative bg-slate-100"
-              onContextMenu={(e) => e.preventDefault()}
-            >
-              <iframe
-                src={`${syllabus.viewUrl}#toolbar=0&navpanes=0&scrollbar=1`}
-                className="w-full h-full border-0 select-none"
-                title="Syllabus PDF Reader"
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* View-Only Syllabus Signed-Link Viewer Modal (Task K10) */}
+      <UniversalFileViewerModal
+        isOpen={showPdfModal}
+        onClose={() => setShowPdfModal(false)}
+        file={syllabus ? {
+          id: syllabus.storedFileId || syllabus.id,
+          url: syllabus.viewUrl,
+          name: syllabus.fileName || syllabus.title,
+          title: syllabus.title,
+          type: syllabus.fileType
+        } : null}
+        hideDownload={true}
+      />
     </div>
   );
 }

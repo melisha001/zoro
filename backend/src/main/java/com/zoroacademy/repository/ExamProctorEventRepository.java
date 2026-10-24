@@ -10,4 +10,5 @@ import java.util.List;
 public interface ExamProctorEventRepository extends JpaRepository<ExamProctorEvent, String> {
     List<ExamProctorEvent> findByAttemptIdOrderByCreatedAtAsc(String attemptId);
     long countByAttemptId(String attemptId);
+    void deleteByAttemptId(String attemptId);
 }

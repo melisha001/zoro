@@ -4,7 +4,7 @@ import {
   Trophy, Users, BookOpen, Video, FileText, Layers, Plus, 
   Trash2, Edit, CheckCircle2, Clock, 
   Upload, Check, Search, Download, Copy, X,
-  ChevronUp, ChevronDown, Eye, BarChart2, Award, Volume2, RefreshCw
+  ChevronUp, ChevronDown, Eye, BarChart2, Award, Volume2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { 
   getCompetitions,
@@ -16,7 +16,7 @@ import {
   reorderCompetitionGuidanceVideos,
   getCompetitionStudyMaterials, saveCompetitionStudyMaterial, deleteCompetitionStudyMaterial,
   getCompetitionAssessments, updateCompetitionAssessment, publishCompetitionAssessment,
-  republishCompetitionAssessment,
+  republishCompetitionAssessment, getAssessmentRepublishInfo,
   getAssessmentQuestions, saveAssessmentQuestion, deleteAssessmentQuestion,
   duplicateAssessmentQuestion, reorderAssessmentQuestions
 } from '../../api/competitionApi';
@@ -29,6 +29,8 @@ import UnifiedUploader from '../common/UnifiedUploader';
 import SafeVideo from '../common/SafeVideo';
 import AudioPromptPlayer from '../common/AudioPromptPlayer';
 import GuidanceVideoManager from './GuidanceVideoManager';
+import QuestionPreview from '../common/QuestionPreview';
+import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 import { useDialog } from '../../context/DialogContext';
 import { formatDate } from '../../utils/dateFormatter';
 
@@ -128,6 +130,19 @@ export default function AdminCompetitionManagementPage() {
     ]
   });
   const [savingQuestion, setSavingQuestion] = useState(false);
+  const [attemptCountForEditor, setAttemptCountForEditor] = useState(0);
+
+  // Universal File Viewer State (Tasks K1 & K2)
+  const [viewingFile, setViewingFile] = useState(null);
+
+  // Republish Confirm Modal State (Task K7)
+  const [republishModalData, setRepublishModalData] = useState({
+    open: false,
+    assessment: null,
+    attemptCount: 0,
+    understand: false,
+    loading: false
+  });
 
   // Load competitions on mount
   useEffect(() => {
@@ -498,27 +513,48 @@ export default function AdminCompetitionManagementPage() {
     }
   };
 
-  const handleRepublishAssessment = async (asmt) => {
-    const confirmed = await confirm(
-      `Republish "${asmt.title}"? This increments the publish version and allows students to make a fresh attempt while keeping all historical attempts safe.`,
-      'Republish Assessment',
-      'Yes, Republish Test'
-    );
-    if (!confirmed) return;
+  const handleOpenRepublishModal = async (asmt) => {
+    setRepublishModalData({
+      open: true,
+      assessment: asmt,
+      attemptCount: 0,
+      understand: false,
+      loading: true
+    });
+    try {
+      const repInfo = await getAssessmentRepublishInfo(asmt.id);
+      const count = repInfo?.data?.attemptCount ?? repInfo?.attemptCount ?? 0;
+      setRepublishModalData(prev => ({
+        ...prev,
+        attemptCount: count,
+        loading: false
+      }));
+    } catch {
+      setRepublishModalData(prev => ({ ...prev, loading: false }));
+    }
+  };
 
+  const handleConfirmRepublish = async () => {
+    const asmt = republishModalData.assessment;
+    if (!asmt || !republishModalData.understand) return;
+
+    setRepublishModalData(prev => ({ ...prev, loading: true }));
     try {
       const res = await republishCompetitionAssessment(asmt.id);
       if (res && res.success) {
         await showSuccess(
-          `"${asmt.title}" republished successfully! (Version ${res.data?.publishVersion || 'new'} is now open for students)`,
+          `"${asmt.title}" republished successfully! All previous attempts were cleared. Version ${res.data?.publishVersion || 'new'} is now open for students.`,
           'Republished'
         );
+        setRepublishModalData({ open: false, assessment: null, attemptCount: 0, understand: false, loading: false });
         loadTabData(activeTab, selectedCompetition.id);
       } else {
         await showError(res?.message || 'Failed to republish assessment');
+        setRepublishModalData(prev => ({ ...prev, loading: false }));
       }
     } catch (err) {
       await showError(err.message || 'Failed to republish assessment');
+      setRepublishModalData(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -527,12 +563,17 @@ export default function AdminCompetitionManagementPage() {
     setActiveAsmtForQuestions(asmt);
     setLoadingQuestions(true);
     try {
-      const res = await getAssessmentQuestions(asmt.id);
+      const [res, repInfo] = await Promise.all([
+        getAssessmentQuestions(asmt.id),
+        getAssessmentRepublishInfo(asmt.id).catch(() => ({ success: true, data: { attemptCount: 0 } }))
+      ]);
       const qs = res?.data || [];
       setQuestions(qs);
       setAssessments((prev) =>
         prev.map((a) => (a.id === asmt.id ? { ...a, questionCount: qs.length } : a))
       );
+      const count = repInfo?.data?.attemptCount ?? repInfo?.attemptCount ?? 0;
+      setAttemptCountForEditor(count);
     } catch (err) {
       console.error('Failed to load questions:', err);
     } finally {
@@ -1033,35 +1074,87 @@ export default function AdminCompetitionManagementPage() {
           </div>
 
           {syllabus ? (
-            <div className="p-5 rounded-2xl border border-emerald-200 bg-emerald-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center space-x-3">
-                <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
-                <div>
-                  <h4 className="font-black text-sm text-slate-900">{syllabus.title}</h4>
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    Format: {syllabus.fileType?.toUpperCase()} • Last updated: {formatDate(syllabus.updatedAt)}
-                  </p>
+            <div className="space-y-4">
+              <div className="p-5 rounded-2xl border border-emerald-200 bg-emerald-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center space-x-3">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+                  <div>
+                    <h4 className="font-black text-sm text-slate-900">{syllabus.title}</h4>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      File: {syllabus.fileName || 'Syllabus Document'} • Format: {syllabus.fileType?.toUpperCase()} • Last updated: {formatDate(syllabus.updatedAt)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {syllabus.viewUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setViewingFile({
+                        id: syllabus.storedFileId || syllabus.id,
+                        url: syllabus.viewUrl,
+                        name: syllabus.fileName || syllabus.title,
+                        title: syllabus.title,
+                        type: syllabus.fileType
+                      })}
+                      className="px-3.5 py-1.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 font-bold text-xs rounded-xl flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Preview in Modal</span>
+                    </button>
+                  )}
+                  <label className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl flex items-center space-x-1.5 cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{sylUploading ? 'Replacing...' : 'Replace'}</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt"
+                      className="hidden"
+                      onChange={handleSyllabusUpload}
+                      disabled={sylUploading}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleDeleteSyllabus}
+                    className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
-                {syllabus.viewUrl && (
-                  <a
-                    href={syllabus.viewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-3.5 py-1.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 font-bold text-xs rounded-xl flex items-center space-x-1.5"
-                  >
-                    <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>View Document</span>
-                  </a>
+
+              {/* Inline Syllabus Preview Card (Task K1) */}
+              <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-3">
+                <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                  Inline Syllabus Document Preview
+                </span>
+
+                {syllabus.fileType === 'pdf' || (syllabus.fileName && syllabus.fileName.toLowerCase().endsWith('.pdf')) ? (
+                  <div className="w-full h-96 rounded-xl border border-slate-200 overflow-hidden bg-white shadow-inner">
+                    <iframe
+                      src={`${syllabus.viewUrl}#toolbar=0&navpanes=0`}
+                      className="w-full h-full border-0 select-none"
+                      title="Syllabus Preview"
+                    />
+                  </div>
+                ) : ['png', 'jpg', 'jpeg', 'webp'].includes(syllabus.fileType?.toLowerCase()) ? (
+                  <div className="flex justify-center p-2 bg-white rounded-xl border border-slate-200">
+                    <img
+                      src={syllabus.viewUrl}
+                      alt="Syllabus Preview"
+                      className="max-h-96 rounded-lg object-contain shadow-xs"
+                    />
+                  </div>
+                ) : (
+                  <div className="p-8 bg-white rounded-xl border border-slate-200 text-center space-y-2">
+                    <FileText className="w-10 h-10 text-slate-400 mx-auto" />
+                    <p className="font-bold text-xs text-slate-700">This file type cannot be previewed directly</p>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      File: {syllabus.fileName || syllabus.title} ({syllabus.fileType?.toUpperCase()})
+                    </p>
+                  </div>
                 )}
-                <button
-                  onClick={handleDeleteSyllabus}
-                  className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl flex items-center space-x-1.5 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete</span>
-                </button>
               </div>
             </div>
           ) : (
@@ -1146,14 +1239,20 @@ export default function AdminCompetitionManagementPage() {
                   </div>
                   <div className="flex items-center space-x-2">
                     {mat.viewUrl && (
-                      <a
-                        href={mat.viewUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg"
+                      <button
+                        type="button"
+                        onClick={() => setViewingFile({
+                          id: mat.storedFileId || mat.id,
+                          url: mat.viewUrl,
+                          name: mat.fileName || mat.title,
+                          title: mat.title,
+                          type: mat.fileType
+                        })}
+                        className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg cursor-pointer flex items-center space-x-1"
                       >
-                        View
-                      </a>
+                        <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Preview</span>
+                      </button>
                     )}
                     <button
                       onClick={() => handleDeleteMaterial(mat.id)}
@@ -1267,7 +1366,7 @@ export default function AdminCompetitionManagementPage() {
                         </button>
                       ) : (
                         <button
-                          onClick={() => handleRepublishAssessment(asmt)}
+                          onClick={() => handleOpenRepublishModal(asmt)}
                           className="py-1.5 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded-xl cursor-pointer flex items-center gap-1 shrink-0"
                           title="Republish to open a fresh attempt cycle for students"
                         >
@@ -1492,6 +1591,19 @@ export default function AdminCompetitionManagementPage() {
               </div>
             </div>
 
+            {/* Task K3: Non-blocking attempt banner */}
+            {attemptCountForEditor > 0 && (
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">{attemptCountForEditor} student{attemptCountForEditor === 1 ? '' : 's'} have already attempted this test.</span>
+                  <span className="block mt-0.5 text-amber-800 text-[11px]">
+                    Existing results stay as stored. Use Republish to apply your changes for everyone (this deletes all previous attempts).
+                  </span>
+                </div>
+              </div>
+            )}
+
             {loadingQuestions ? (
               <div className="py-12 flex justify-center"><InlineSpinner text="Loading questions..." /></div>
             ) : questions.length === 0 ? (
@@ -1557,32 +1669,10 @@ export default function AdminCompetitionManagementPage() {
                       </div>
                     </div>
 
-                    <p className="font-bold text-slate-900">{q.questionText}</p>
-
-                    {q.guidanceText && (
-                      <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2 rounded-xl">
-                        Guidance: {q.guidanceText}
-                      </p>
-                    )}
-
-                    {/* Options preview for MCQ */}
-                    {q.options && q.options.length > 0 && (
-                      <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
-                        {q.options.map((opt, oIdx) => (
-                          <div
-                            key={opt.id || oIdx}
-                            className={`p-2 rounded-xl border font-semibold flex items-center space-x-1.5 ${
-                              opt.isCorrect
-                                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                                : 'bg-slate-50 border-slate-200 text-slate-700'
-                            }`}
-                          >
-                            {opt.isCorrect && <Check className="w-3 h-3 text-emerald-600 shrink-0" />}
-                            <span className="truncate">{opt.text}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {/* Shared miniature preview mirroring student layout (Task K4) */}
+                    <div className="pt-1">
+                      <QuestionPreview question={q} isAdmin={true} />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1615,53 +1705,13 @@ export default function AdminCompetitionManagementPage() {
 
             {previewMode ? (
               <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-                <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
-                  Student Perspective Preview
-                </span>
-
-                {/* Audio Question Media Player */}
-                {questionFormData.questionFormat === 'AUDIO' && questionFormData.mediaRef && (
-                  <div className="p-2">
-                    <AudioPromptPlayer src={questionFormData.mediaRef} title="Audio Question Prompt" />
-                  </div>
-                )}
-
-                {/* Video Question Media Player */}
-                {questionFormData.questionFormat === 'VIDEO' && questionFormData.mediaRef && (
-                  <div className="p-2 bg-white rounded-xl border border-slate-200">
-                    <SafeVideo
-                      bunnyVideoId={questionFormData.mediaRef}
-                      src={resolveFileUrl(questionFormData.mediaRef)}
-                      className="w-full aspect-video rounded-lg"
-                    />
-                  </div>
-                )}
-
-                <p className="text-sm font-bold text-slate-900">{questionFormData.questionText}</p>
-                {questionFormData.guidanceText && (
-                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-900">
-                    {questionFormData.guidanceText}
-                  </div>
-                )}
-                {questionFormData.answerFormat === 'MCQ_OPTIONS' && (
-                  <div className="space-y-2">
-                    {questionFormData.options.map((opt, i) => (
-                      <div key={i} className="p-3 bg-white rounded-xl border border-slate-200 font-semibold flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full border border-slate-300" />
-                        <span>{opt.text || `Option ${i + 1}`}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {questionFormData.answerFormat === 'VOICE' && (
-                  <div className="p-4 bg-white rounded-xl border border-slate-200 text-center space-y-2">
-                    <p className="font-bold text-slate-700">Voice Recording Response</p>
-                    <p className="text-[11px] text-slate-400">Max Duration: {questionFormData.maxDurationSeconds}s</p>
-                    <div className="h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
-                      [Voice Recorder Widget Placeholder]
-                    </div>
-                  </div>
-                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                    Student Perspective Preview (Miniature)
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-400">Zero network requests</span>
+                </div>
+                <QuestionPreview question={questionFormData} isAdmin={false} />
               </div>
             ) : (
               <form onSubmit={handleSaveQuestion} className="space-y-3">
@@ -1858,6 +1908,77 @@ export default function AdminCompetitionManagementPage() {
           </div>
         </div>
       )}
+
+      {/* Task K7: Republish Confirmation Modal */}
+      {republishModalData.open && (
+        <div className="fixed inset-0 z-70 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h4 className="text-base font-black text-slate-900">Republish Test Confirmation</h4>
+                <p className="text-xs text-slate-500 font-semibold">{republishModalData.assessment?.title}</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-2 text-xs text-rose-900">
+              <p className="font-bold leading-relaxed">
+                Republishing permanently deletes ALL previous attempts, answers, voice recordings and marks of ALL students for this test. This cannot be undone.
+              </p>
+              <p className="text-[11px] text-rose-700">
+                {republishModalData.loading
+                  ? 'Calculating affected attempts...'
+                  : `${republishModalData.attemptCount} student attempt(s) will be permanently deleted.`}
+              </p>
+            </div>
+
+            <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={republishModalData.understand}
+                onChange={(e) => setRepublishModalData(prev => ({ ...prev, understand: e.target.checked }))}
+                className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-xs font-semibold text-slate-700">
+                I understand that all previous attempts, recordings and scores will be permanently deleted.
+              </span>
+            </label>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setRepublishModalData({ open: false, assessment: null, attemptCount: 0, understand: false, loading: false })}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!republishModalData.understand || republishModalData.loading}
+                onClick={handleConfirmRepublish}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
+              >
+                {republishModalData.loading ? <ButtonSpinner text="Republishing..." /> : (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Confirm & Republish</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Universal File Viewer Modal (Tasks K1 & K2) */}
+      <UniversalFileViewerModal
+        isOpen={Boolean(viewingFile)}
+        onClose={() => setViewingFile(null)}
+        file={viewingFile}
+        hideDownload={false}
+      />
     </div>
   );
 }
