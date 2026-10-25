@@ -496,9 +496,12 @@ public class CompetitionController {
     @PreAuthorize("hasAnyRole('TRAINER', 'ADMIN', 'SUPER_ADMIN')")
     public ApiResponse<List<Map<String, Object>>> getTrainerStudentSubmissions(
             @PathVariable String registrationId,
-            @RequestParam(required = false, defaultValue = "ALL") String folderType) {
+            @RequestParam(value = "type", required = false) String type,
+            @RequestParam(value = "folderType", required = false) String folderType,
+            @RequestParam(value = "folder", required = false) String folder) {
+        String effectiveType = (type != null && !type.isBlank()) ? type : ((folderType != null && !folderType.isBlank()) ? folderType : folder);
         User user = getCurrentUser();
-        return ApiResponse.ok(competitionService.getTrainerStudentSubmissions(registrationId, folderType, user));
+        return ApiResponse.ok(competitionService.getTrainerStudentSubmissions(registrationId, effectiveType, user));
     }
 
     @PostMapping("/assessments/attempts/{attemptId}/proctor-event")

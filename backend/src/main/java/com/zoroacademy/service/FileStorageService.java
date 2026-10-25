@@ -140,18 +140,22 @@ public class FileStorageService {
         String sha256 = computeSha256(fileBytes);
 
         // Deduplication check: if identical content from same owner exists, increment ref_count and reuse
+        // Voice answers / recordings are never deduplicated across attempts to prevent cross-attempt collisions and dangling refs
+        boolean isVoiceCategory = normCategory.contains("voice") || normCategory.contains("audio-recording");
         Optional<StoredFile> existingFileOpt = Optional.empty();
-        if (ownerId != null && !ownerId.isBlank()) {
-            existingFileOpt = storedFileRepository.findFirstBySha256HashAndOwnerId(sha256, ownerId);
-        }
-        if (existingFileOpt.isEmpty()) {
-            existingFileOpt = storedFileRepository.findFirstBySha256Hash(sha256);
-        }
+        if (!isVoiceCategory) {
+            if (ownerId != null && !ownerId.isBlank()) {
+                existingFileOpt = storedFileRepository.findFirstBySha256HashAndOwnerId(sha256, ownerId);
+            }
+            if (existingFileOpt.isEmpty()) {
+                existingFileOpt = storedFileRepository.findFirstBySha256Hash(sha256);
+            }
 
-        if (existingFileOpt.isPresent()) {
-            StoredFile existing = existingFileOpt.get();
-            existing.setRefCount((existing.getRefCount() != null ? existing.getRefCount() : 1) + 1);
-            return storedFileRepository.save(existing);
+            if (existingFileOpt.isPresent()) {
+                StoredFile existing = existingFileOpt.get();
+                existing.setRefCount((existing.getRefCount() != null ? existing.getRefCount() : 1) + 1);
+                return storedFileRepository.save(existing);
+            }
         }
 
         // Determine public status and partition storage path
@@ -159,7 +163,9 @@ public class FileStorageService {
         String prefix = isPublic ? "public" : "private";
 
         String fileId = UUID.randomUUID().toString();
-        String storedFilename = fileId + (ext.isEmpty() ? "" : "." + ext);
+        String storedFilename = isVoiceCategory 
+                ? fileId + "_" + System.currentTimeMillis() + (ext.isEmpty() ? "" : "." + ext)
+                : fileId + (ext.isEmpty() ? "" : "." + ext);
         String storagePath = prefix + "/" + normCategory + "/" + storedFilename;
 
         String contentType = file.getContentType();

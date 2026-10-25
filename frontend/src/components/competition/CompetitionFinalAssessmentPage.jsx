@@ -22,6 +22,7 @@ import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 import SecureExamConsentModal from './SecureExamConsentModal';
 import ProctorViolationWarningModal from './ProctorViolationWarningModal';
 import { useSecureExamProctor } from './useSecureExamProctor';
+import { getServerNow } from '../../utils/scheduleSortUtil';
 
 const SET_STYLES = {
   A: {
@@ -172,7 +173,14 @@ export default function CompetitionFinalAssessmentPage() {
         setAttemptData(res.data);
         setIsTestActive(true);
         setCurrentQuestionIndex(0);
-        setRemainingSeconds(res.data.remainingSeconds != null ? res.data.remainingSeconds : (assessmentData.durationMinutes || 60) * 60);
+        const durationSec = (res.data.durationMinutes || assessmentData.durationMinutes || 60) * 60;
+        let initialRemaining = res.data.remainingSeconds != null ? res.data.remainingSeconds : durationSec;
+        if (res.data.endsAt) {
+          const endsAtMs = new Date(res.data.endsAt).getTime();
+          const serverNowMs = getServerNow().getTime();
+          initialRemaining = Math.max(0, Math.floor((endsAtMs - serverNowMs) / 1000));
+        }
+        setRemainingSeconds(initialRemaining);
 
         // Preload existing answers
         const rawAnswers = res.data.answers || {};
@@ -690,7 +698,7 @@ export default function CompetitionFinalAssessmentPage() {
 
               {/* Synchronized Countdown Clock */}
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-mono text-sm font-black border ${
-                (remainingSeconds ?? 0) <= 300 
+                remainingSeconds !== null && remainingSeconds <= 300 && remainingSeconds > 0 
                   ? 'bg-rose-950/60 text-rose-400 border-rose-500/50 animate-pulse' 
                   : 'bg-slate-800/80 text-white border-slate-700'
               }`}>

@@ -1287,6 +1287,14 @@ public class CompetitionService {
             deletedAttemptsCount = attempts.size();
 
             for (AssessmentAttempt att : attempts) {
+                if (examProctorEventRepository != null) {
+                    try {
+                        examProctorEventRepository.deleteByAttemptId(att.getId());
+                    } catch (Exception e) {
+                        log.warn("Failed to delete proctor events for attempt {}: {}", att.getId(), e.getMessage());
+                    }
+                }
+
                 if (attemptAnswerRepository != null) {
                     List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(att.getId());
                     deletedAnswersCount += answers.size();
@@ -1299,25 +1307,35 @@ public class CompetitionService {
                         }
                         if (voiceEvaluationScoreRepository != null) {
                             try {
-                                voiceEvaluationScoreRepository.deleteByAnswerId(ans.getId());
-                            } catch (Exception ignored) {}
+                                List<VoiceEvaluationScore> scores = voiceEvaluationScoreRepository.findByAnswerId(ans.getId());
+                                if (!scores.isEmpty()) {
+                                    voiceEvaluationScoreRepository.deleteAll(scores);
+                                }
+                            } catch (Exception e) {
+                                log.warn("Failed to delete voice evaluation scores for answer {}: {}", ans.getId(), e.getMessage());
+                            }
                         }
                     }
-                    try {
+                    if (!answers.isEmpty()) {
                         attemptAnswerRepository.deleteAll(answers);
-                    } catch (Exception ignored) {}
-                }
-
-                if (examProctorEventRepository != null) {
-                    try {
-                        examProctorEventRepository.deleteByAttemptId(att.getId());
-                    } catch (Exception ignored) {}
+                    }
                 }
             }
 
-            try {
+            if (!attempts.isEmpty()) {
                 assessmentAttemptRepository.deleteAll(attempts);
-            } catch (Exception ignored) {}
+            }
+        }
+
+        // Delete voice stored_files rows from database
+        if (storedFileRepository != null && !voiceFilesToDelete.isEmpty()) {
+            for (String fileId : voiceFilesToDelete) {
+                try {
+                    storedFileRepository.deleteById(fileId);
+                } catch (Exception e) {
+                    log.warn("Failed to delete stored_files record {}: {}", fileId, e.getMessage());
+                }
+            }
         }
 
         // Clear leaderboard cache for this competition so rankings are cleanly recomputed
@@ -2164,6 +2182,10 @@ public class CompetitionService {
             throw new ForbiddenException("You must have a paid registration to attempt this test");
         }
 
+        if (asmt.getDurationMinutes() == null || asmt.getDurationMinutes() <= 0) {
+            throw new BadRequestException("Assessment duration is not configured. Please contact the administrator.");
+        }
+
         String regId = reg != null ? reg.getId() : "reg_admin_" + user.getId();
         int currentVer = asmt.getPublishVersion() != null ? asmt.getPublishVersion() : 1;
         AssessmentAttempt attempt = null;
@@ -2171,8 +2193,26 @@ public class CompetitionService {
             Optional<AssessmentAttempt> existingOpt = assessmentAttemptRepository.findByAssessmentIdAndRegistrationIdAndPublishVersion(asmtId, regId, currentVer);
             if (existingOpt.isPresent()) {
                 attempt = existingOpt.get();
-                if ("COMPLETED".equalsIgnoreCase(attempt.getStatus()) || "EVALUATION_PENDING".equalsIgnoreCase(attempt.getStatus())) {
+                if ("COMPLETED".equalsIgnoreCase(attempt.getStatus()) || "EVALUATION_PENDING".equalsIgnoreCase(attempt.getStatus()) || "SUBMITTED".equalsIgnoreCase(attempt.getStatus()) || "AUTO_SUBMITTED".equalsIgnoreCase(attempt.getStatus())) {
                     throw new BadRequestException("You have already submitted this assessment");
+                }
+                if (attempt.getStartedAt() == null) {
+                    attempt.setStartedAt(now);
+                }
+                if (attempt.getEndsAt() == null) {
+                    OffsetDateTime endsAt = attempt.getStartedAt().plusMinutes(asmt.getDurationMinutes());
+                    if (asmt.getEndAt() != null && asmt.getEndAt().isBefore(endsAt)) {
+                        endsAt = asmt.getEndAt();
+                    }
+                    attempt.setEndsAt(endsAt);
+                    attempt.setDeadlineAt(endsAt);
+                    attempt = assessmentAttemptRepository.save(attempt);
+                }
+                if (now.isAfter(attempt.getEndsAt())) {
+                    attempt.setAutoSubmitted(true);
+                    evaluateAndFinalizeAttempt(attempt);
+                    assessmentAttemptRepository.save(attempt);
+                    throw new BadRequestException("Assessment time has expired and your exam has been auto-submitted.");
                 }
             } else {
                 attempt = new AssessmentAttempt();
@@ -2188,7 +2228,13 @@ public class CompetitionService {
                 }
 
                 attempt.setStatus("IN_PROGRESS");
-                attempt.setStartedAt(OffsetDateTime.now(ZoneId.of("Asia/Kolkata")));
+                attempt.setStartedAt(now);
+                OffsetDateTime calculatedEndsAt = now.plusMinutes(asmt.getDurationMinutes());
+                if (asmt.getEndAt() != null && asmt.getEndAt().isBefore(calculatedEndsAt)) {
+                    calculatedEndsAt = asmt.getEndAt();
+                }
+                attempt.setEndsAt(calculatedEndsAt);
+                attempt.setDeadlineAt(calculatedEndsAt);
                 attempt.setMcqMarks(BigDecimal.ZERO);
                 attempt.setVoiceMarks(BigDecimal.ZERO);
                 attempt.setTotalMarks(BigDecimal.ZERO);
@@ -2280,18 +2326,10 @@ public class CompetitionService {
         }
 
         long remainingSeconds = 0;
-        if (asmt.getDurationMinutes() != null && asmt.getDurationMinutes() > 0) {
-            long totalTestSeconds = asmt.getDurationMinutes() * 60L;
-            if (attempt != null && attempt.getStartedAt() != null) {
-                long elapsedSeconds = Math.max(0, java.time.Duration.between(attempt.getStartedAt(), now).getSeconds());
-                remainingSeconds = Math.max(0, totalTestSeconds - elapsedSeconds);
-            } else {
-                remainingSeconds = totalTestSeconds;
-            }
-            if (asmt.getEndAt() != null) {
-                long windowRemainingSeconds = Math.max(0, java.time.Duration.between(now, asmt.getEndAt()).getSeconds());
-                remainingSeconds = Math.min(remainingSeconds, windowRemainingSeconds);
-            }
+        if (attempt != null && attempt.getEndsAt() != null) {
+            remainingSeconds = Math.max(0, java.time.Duration.between(now, attempt.getEndsAt()).getSeconds());
+        } else if (asmt.getDurationMinutes() != null && asmt.getDurationMinutes() > 0) {
+            remainingSeconds = asmt.getDurationMinutes() * 60L;
         }
 
         Map<String, Object> assignedSetMap = null;
@@ -2309,6 +2347,9 @@ public class CompetitionService {
         Map<String, Object> result = new HashMap<>();
         result.put("attempt", attempt);
         result.put("attemptId", attempt != null ? attempt.getId() : null);
+        result.put("startedAt", attempt != null ? attempt.getStartedAt() : null);
+        result.put("endsAt", attempt != null ? attempt.getEndsAt() : null);
+        result.put("deadlineAt", attempt != null ? attempt.getDeadlineAt() : null);
         result.put("proctorViolationCount", attempt != null && attempt.getProctorViolationCount() != null ? attempt.getProctorViolationCount() : 0);
         result.put("autoSubmitted", attempt != null && Boolean.TRUE.equals(attempt.getAutoSubmitted()));
         result.put("assessment", asmt);
@@ -2431,6 +2472,16 @@ public class CompetitionService {
             throw new BadRequestException("Attempt is not in progress (status: " + attempt.getStatus() + ")");
         }
 
+        OffsetDateTime now = OffsetDateTime.now(ZoneId.of("Asia/Kolkata"));
+        if (attempt.getEndsAt() != null && now.isAfter(attempt.getEndsAt())) {
+            if ("IN_PROGRESS".equalsIgnoreCase(attempt.getStatus())) {
+                attempt.setAutoSubmitted(true);
+                evaluateAndFinalizeAttempt(attempt);
+                assessmentAttemptRepository.save(attempt);
+            }
+            throw new BadRequestException("Assessment time has expired. No further answers can be saved.");
+        }
+
         String questionId = (String) payload.get("questionId");
         if (questionId == null || questionId.isBlank()) {
             throw new BadRequestException("Question ID is required");
@@ -2471,7 +2522,6 @@ public class CompetitionService {
             answer.setVoiceDurationSec(dur != null ? ((Number) dur).intValue() : null);
         }
 
-        OffsetDateTime now = OffsetDateTime.now(ZoneId.of("Asia/Kolkata"));
         answer.setSavedAt(now);
 
         if ("VOICE".equalsIgnoreCase(question.getAnswerFormat())) {
@@ -2505,16 +2555,21 @@ public class CompetitionService {
         } else {
             Optional<AssessmentAttempt> olderAttempt = assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(asmtId, regId);
             if (olderAttempt.isPresent() && olderAttempt.get().getPublishVersion() != null && olderAttempt.get().getPublishVersion() < currentVer) {
-                throw new ConflictException("Test has been updated by admin. Please restart.");
+                throw new ConflictException("This test was republished. Please start again.");
             }
             if ((asmt.getPublishVersion() != null && asmt.getPublishVersion() > 1) || (republishAuditRepository != null && republishAuditRepository.existsByAssessmentId(asmtId))) {
-                throw new ConflictException("Test has been updated by admin. Please restart.");
+                throw new ConflictException("This test was republished. Please start again.");
             }
             throw new BadRequestException("No active attempt found for this assessment");
         }
 
         if (!"IN_PROGRESS".equalsIgnoreCase(attempt.getStatus())) {
             throw new BadRequestException("Attempt is not in progress (status: " + attempt.getStatus() + ")");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneId.of("Asia/Kolkata"));
+        if (attempt.getEndsAt() != null && now.isAfter(attempt.getEndsAt())) {
+            attempt.setAutoSubmitted(true);
         }
 
         evaluateAndFinalizeAttempt(attempt);
@@ -3790,10 +3845,35 @@ public class CompetitionService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getTrainerStudentSubmissions(String registrationId, String folderType, User user) {
-        validateTrainerAccessToStudent(registrationId, user);
+        if (folderType == null || folderType.isBlank()) {
+            throw new BadRequestException("Folder type is required. Must be one of: TEST_SERIES, MOCK_TEST, FINAL_ASSESSMENT");
+        }
 
-        CompetitionRegistration reg = registrationRepository.findById(registrationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Registration not found: " + registrationId));
+        String rawType = folderType.trim().toUpperCase();
+        String targetType;
+        if ("TEST_SERIES".equals(rawType) || "TEST".equals(rawType)) {
+            targetType = "TEST_SERIES";
+        } else if ("MOCK_TEST".equals(rawType) || "MOCK".equals(rawType)) {
+            targetType = "MOCK";
+        } else if ("FINAL_ASSESSMENT".equals(rawType) || "FINAL".equals(rawType)) {
+            targetType = "FINAL";
+        } else {
+            throw new BadRequestException("Invalid folder type '" + folderType + "'. Must be one of: TEST_SERIES, MOCK_TEST, FINAL_ASSESSMENT");
+        }
+
+        CompetitionRegistration reg = registrationRepository.findById(registrationId).orElse(null);
+        if (reg == null) {
+            List<CompetitionRegistration> regs = registrationRepository.findByStudentId(registrationId);
+            if (!regs.isEmpty()) {
+                reg = regs.get(0);
+                registrationId = reg.getId();
+            }
+        }
+        if (reg == null) {
+            throw new ResourceNotFoundException("Student registration not found: " + registrationId);
+        }
+
+        validateTrainerAccessToStudent(registrationId, user);
 
         Optional<CompetitionSetMember> memOpt = setMemberRepository.findByRegistrationId(registrationId);
         String setCode = "";
@@ -3808,10 +3888,6 @@ public class CompetitionService {
 
         List<Map<String, Object>> submissions = new ArrayList<>();
 
-        String targetType = folderType != null ? folderType.toUpperCase() : "ALL";
-        if ("MOCK_TEST".equals(targetType)) targetType = "MOCK";
-        if ("FINAL_ASSESSMENT".equals(targetType)) targetType = "FINAL";
-
         for (AssessmentAttempt att : attempts) {
             CompetitionAssessment asmt = assessmentRepository.findById(att.getAssessmentId()).orElse(null);
             if (asmt == null || asmt.getType() == null) continue;
@@ -3819,9 +3895,10 @@ public class CompetitionService {
             String asmtType = asmt.getType().toUpperCase();
             if ("MOCK_TEST".equals(asmtType)) asmtType = "MOCK";
             if ("FINAL_ASSESSMENT".equals(asmtType)) asmtType = "FINAL";
+            if ("TEST".equals(asmtType)) asmtType = "TEST_SERIES";
 
-            if (!"ALL".equals(targetType)) {
-                if (!asmtType.equals(targetType)) continue;
+            if (!asmtType.equals(targetType)) {
+                continue;
             }
 
             List<AttemptAnswer> answers = attemptAnswerRepository.findByAttemptId(att.getId());

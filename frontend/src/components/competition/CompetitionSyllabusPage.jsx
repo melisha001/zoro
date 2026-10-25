@@ -122,14 +122,6 @@ export default function CompetitionSyllabusPage() {
             {syllabus?.viewUrl && (
               <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                 <span>File: {syllabus.fileName || 'Syllabus.pdf'}</span>
-                <button
-                  type="button"
-                  onClick={() => setShowPdfModal(true)}
-                  className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center space-x-1 cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Open in Viewer</span>
-                </button>
               </div>
             )}
           </div>

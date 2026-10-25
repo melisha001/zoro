@@ -166,7 +166,8 @@ export default function VoiceAnswerRecorder({
       const mime = mediaRecorderRef.current?.mimeType || 'audio/webm';
       const ext = mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : mime.includes('wav') ? 'wav' : 'webm';
       const blob = new Blob(audioChunksRef.current, { type: mime });
-      const file = new File([blob], `voice_answer_${questionId}_${Date.now()}.${ext}`, { type: mime });
+      const rand = Math.random().toString(36).substring(2, 9);
+      const file = new File([blob], `voice_answer_${questionId}_${Date.now()}_${rand}.${ext}`, { type: mime });
 
       const data = await uploadFile(file, 'voice-answer', (p) => setUploadProgress(p));
       if (data && data.id) {

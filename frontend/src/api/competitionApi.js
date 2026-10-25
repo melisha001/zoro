@@ -702,7 +702,7 @@ export const getTrainerStudentFolders = async (registrationId) => {
 };
 
 export const getTrainerStudentSubmissions = async (registrationId, folder) => {
-  const query = folder ? `?folder=${encodeURIComponent(folder)}` : '';
+  const query = folder ? `?type=${encodeURIComponent(folder)}&folderType=${encodeURIComponent(folder)}&folder=${encodeURIComponent(folder)}` : '';
   const res = await apiGet(`/competitions/trainer/students/${encodeURIComponent(registrationId)}/submissions${query}`);
   if (res && res.success) {
     return apiResponse(res.data);

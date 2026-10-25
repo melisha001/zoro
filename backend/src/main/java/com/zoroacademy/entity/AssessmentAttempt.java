@@ -34,6 +34,9 @@ public class AssessmentAttempt {
     @Column(name = "deadline_at")
     private OffsetDateTime deadlineAt;
 
+    @Column(name = "ends_at")
+    private OffsetDateTime endsAt;
+
     @Column(name = "submitted_at")
     private OffsetDateTime submittedAt;
 
@@ -82,8 +85,17 @@ public class AssessmentAttempt {
     public OffsetDateTime getStartedAt() { return startedAt; }
     public void setStartedAt(OffsetDateTime startedAt) { this.startedAt = startedAt; }
 
-    public OffsetDateTime getDeadlineAt() { return deadlineAt; }
-    public void setDeadlineAt(OffsetDateTime deadlineAt) { this.deadlineAt = deadlineAt; }
+    public OffsetDateTime getDeadlineAt() { return deadlineAt != null ? deadlineAt : endsAt; }
+    public void setDeadlineAt(OffsetDateTime deadlineAt) {
+        this.deadlineAt = deadlineAt;
+        if (this.endsAt == null) this.endsAt = deadlineAt;
+    }
+
+    public OffsetDateTime getEndsAt() { return endsAt != null ? endsAt : deadlineAt; }
+    public void setEndsAt(OffsetDateTime endsAt) {
+        this.endsAt = endsAt;
+        if (this.deadlineAt == null) this.deadlineAt = endsAt;
+    }
 
     public OffsetDateTime getSubmittedAt() { return submittedAt; }
     public void setSubmittedAt(OffsetDateTime submittedAt) { this.submittedAt = submittedAt; }

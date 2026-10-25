@@ -22,6 +22,7 @@ import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 import SecureExamConsentModal from './SecureExamConsentModal';
 import ProctorViolationWarningModal from './ProctorViolationWarningModal';
 import { useSecureExamProctor } from './useSecureExamProctor';
+import { getServerNow } from '../../utils/scheduleSortUtil';
 
 export default function CompetitionMockTestsPage() {
   const { currentCompetition, isExamActive, setIsExamActive } = useOutletContext();
@@ -146,7 +147,14 @@ export default function CompetitionMockTestsPage() {
         setAttemptData(res.data);
         setActiveTest(test);
         setCurrentQuestionIndex(0);
-        setRemainingSeconds(res.data.remainingSeconds != null ? res.data.remainingSeconds : (test.durationMinutes || 45) * 60);
+        const durationSec = (res.data.durationMinutes || test.durationMinutes || 45) * 60;
+        let initialRemaining = res.data.remainingSeconds != null ? res.data.remainingSeconds : durationSec;
+        if (res.data.endsAt) {
+          const endsAtMs = new Date(res.data.endsAt).getTime();
+          const serverNowMs = getServerNow().getTime();
+          initialRemaining = Math.max(0, Math.floor((endsAtMs - serverNowMs) / 1000));
+        }
+        setRemainingSeconds(initialRemaining);
 
         // Preload existing answers
         const rawAnswers = res.data.answers || {};
@@ -320,8 +328,13 @@ export default function CompetitionMockTestsPage() {
 
   const formatTimer = (seconds) => {
     if (seconds == null || isNaN(seconds)) return '00:00';
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
+    const totalSec = Math.max(0, Math.floor(seconds));
+    const hrs = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (hrs > 0) {
+      return `${hrs.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
@@ -700,7 +713,7 @@ export default function CompetitionMockTestsPage() {
 
             {/* Live Countdown Timer */}
             <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-mono text-sm font-bold border transition-colors ${
-              remainingSeconds !== null && remainingSeconds < 300 
+              remainingSeconds !== null && remainingSeconds <= 300 && remainingSeconds > 0 
                 ? 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse'
                 : 'bg-slate-50 text-slate-800 border-slate-200'
             }`}>
