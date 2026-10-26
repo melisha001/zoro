@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { unifiedUpload, resolveFileUrl } from '../../api/fileApi';
 import SafeVideo from './SafeVideo';
+import AudioPromptPlayer from './AudioPromptPlayer';
 
 /**
  * Unified drag-and-drop file uploader supporting Bunny Stream (videos) and Bunny Storage (audio/docs/images).
@@ -360,10 +361,10 @@ export default function UnifiedUploader({
                   item.type?.startsWith('audio/') ||
                   item.name?.match(/\.(mp3|wav|ogg|m4a|opus|aac)$/i)) && (
                   <div className="pt-1">
-                    <audio
-                      src={item.result?.url ? resolveFileUrl(item.result.url) : resolveFileUrl(item.result.id)}
-                      controls
-                      className="w-full h-8"
+                    <AudioPromptPlayer
+                      fileId={item.result?.id}
+                      src={item.result?.url || item.result?.id}
+                      title={item.name}
                     />
                   </div>
                 )}
@@ -421,10 +422,10 @@ export default function UnifiedUploader({
             (initialValue.name && initialValue.name.match(/\.(mp3|wav|ogg|m4a|opus|aac)$/i)) ||
             (initialValue.url && !initialValue.bunnyVideoId)) && (
             <div className="pt-1">
-              <audio
-                controls
-                src={initialValue.url ? resolveFileUrl(initialValue.url) : resolveFileUrl(initialValue.id)}
-                className="w-full h-8"
+              <AudioPromptPlayer
+                fileId={initialValue.id}
+                src={initialValue.url || initialValue.id}
+                title={initialValue.name || initialValue.title || 'Audio Prompt'}
               />
             </div>
           )}

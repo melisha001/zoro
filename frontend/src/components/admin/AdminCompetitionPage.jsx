@@ -16,6 +16,9 @@ import AdminCompetitionPortalManagerModal from './AdminCompetitionPortalManagerM
 const toIsoOrNull = (val) => {
   if (!val) return null;
   try {
+    if (typeof val === 'string' && val.includes('T') && !val.includes('Z') && !val.includes('+')) {
+      return `${val}:00+05:30`;
+    }
     return new Date(val).toISOString();
   } catch {
     return null;
@@ -27,8 +30,17 @@ const toLocalInput = (isoStr, fallbackDate, fallbackTime) => {
     try {
       const d = new Date(isoStr);
       if (!isNaN(d.getTime())) {
-        const pad = (n) => String(n).padStart(2, '0');
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        const parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }).formatToParts(d);
+        const getVal = (type) => parts.find(p => p.type === type)?.value || '00';
+        return `${getVal('year')}-${getVal('month')}-${getVal('day')}T${getVal('hour')}:${getVal('minute')}`;
       }
     } catch {}
   }
@@ -348,7 +360,7 @@ export default function AdminCompetitionPage() {
     const endAtVal = toLocalInput(comp.endAt, comp.endDate, comp.endTime);
     const regStartAtVal = toLocalInput(comp.regStartAt, comp.regStartDate, null);
     const regEndAtVal = toLocalInput(comp.regEndAt, comp.regEndDate, null);
-    const finalUnlockAtVal = toLocalInput(comp.finalUnlockAt);
+    const finalUnlockAtVal = toLocalInput(comp.finalUnlockAt || comp.final_unlock_at || comp.unlockDate);
     const publishVal = toLocalInput(comp.leaderboardPublishedAt)
       || (comp.leaderboardPublishTime?.includes('T') ? toLocalInput(comp.leaderboardPublishTime) : '')
       || getDefaultPublishAt(endAtVal, comp.leaderboardPublishTime || '18:00');

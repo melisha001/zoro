@@ -269,15 +269,22 @@ export default function CompetitionMockTestsPage() {
   };
 
   // Autosave voice recording
-  const handleVoiceUploadComplete = async (questionId, fileId, durationSec) => {
+  const handleVoiceUploadComplete = async (questionId, fileIdOrObj, durationSec) => {
     if (!activeTest) return;
+
+    const actualFileId = (typeof fileIdOrObj === 'object' && fileIdOrObj !== null)
+      ? (fileIdOrObj.voiceFileId || fileIdOrObj.id || fileIdOrObj.fileId)
+      : fileIdOrObj;
+    const actualDuration = (typeof fileIdOrObj === 'object' && fileIdOrObj !== null)
+      ? (fileIdOrObj.durationSec ?? fileIdOrObj.duration ?? durationSec)
+      : durationSec;
 
     setStudentAnswers(prev => ({
       ...prev,
       [questionId]: {
         ...(prev[questionId] || {}),
-        voiceFileId: fileId,
-        voiceDurationSec: durationSec
+        voiceFileId: actualFileId,
+        voiceDurationSec: actualDuration
       }
     }));
 
@@ -285,8 +292,8 @@ export default function CompetitionMockTestsPage() {
     try {
       const res = await saveMockAssessmentAnswer(activeTest.id, {
         questionId,
-        voiceFileId: fileId,
-        voiceDurationSec: durationSec
+        voiceFileId: actualFileId,
+        voiceDurationSec: actualDuration
       });
       if (res && res.success) {
         setSaveStatus('saved');
@@ -815,9 +822,9 @@ export default function CompetitionMockTestsPage() {
             </div>
 
             {/* Question Media Prompt (Audio or Video) */}
-            {currentQ.questionFormat === 'AUDIO' && currentQ.mediaRef && (
+            {(currentQ.questionFormat === 'AUDIO' || currentQ.audioUrl) && (currentQ.mediaRef || currentQ.audioUrl) && (
               <div className="mb-4">
-                <AudioPromptPlayer src={currentQ.mediaRef} title="Question Audio Prompt" />
+                <AudioPromptPlayer src={currentQ.mediaRef || currentQ.audioUrl} title="Question Audio Prompt" />
               </div>
             )}
             {currentQ.questionFormat === 'VIDEO' && currentQ.mediaRef && (
@@ -886,7 +893,7 @@ export default function CompetitionMockTestsPage() {
                   savedVoiceFileId={currentAns?.voiceFileId}
                   savedDurationSec={currentAns?.voiceDurationSec}
                   existingVoiceFileId={currentAns?.voiceFileId}
-                  onUploadComplete={(fileId, duration) => handleVoiceUploadComplete(currentQ.id, fileId, duration)}
+                  onUploadComplete={(data) => handleVoiceUploadComplete(currentQ.id, data)}
                 />
               </div>
             )}

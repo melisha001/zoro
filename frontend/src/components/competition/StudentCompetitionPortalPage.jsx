@@ -87,7 +87,7 @@ export default function StudentCompetitionPortalPage() {
               {serverNow && (
                 <div className="flex items-center space-x-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs" title="Authoritative server clock">
                   <Clock className="w-4 h-4 text-blue-400" />
-                  <span>Server: {serverNow} IST</span>
+                  <span>Date & Time: {serverNow} IST</span>
                 </div>
               )}
             </div>

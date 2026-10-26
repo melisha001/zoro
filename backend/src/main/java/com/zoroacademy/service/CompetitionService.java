@@ -90,6 +90,9 @@ public class CompetitionService {
     @Autowired(required = false)
     private NotificationService notificationService;
 
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
     @Autowired
     public CompetitionService(
             CompetitionRepository competitionRepository,
@@ -1338,10 +1341,20 @@ public class CompetitionService {
             }
         }
 
-        // Clear leaderboard cache for this competition so rankings are cleanly recomputed
+        // Clear leaderboard cache and entries for this competition so rankings are cleanly recomputed
         if (leaderboardCacheRepository != null) {
             try {
                 leaderboardCacheRepository.deleteByCompetitionId(asmt.getCompetitionId());
+            } catch (Exception ignored) {}
+        }
+        if (leaderboardEntryRepository != null) {
+            try {
+                leaderboardEntryRepository.deleteByCompetitionId(asmt.getCompetitionId());
+            } catch (Exception ignored) {}
+        }
+        if (entityManager != null) {
+            try {
+                entityManager.flush();
             } catch (Exception ignored) {}
         }
 
@@ -1360,9 +1373,12 @@ public class CompetitionService {
             try {
                 List<CompetitionSet> sets = setRepository.findByCompetitionIdOrderByCodeAsc(asmt.getCompetitionId());
                 if (!sets.isEmpty() && assessmentSetQuestionRepository != null) {
-                    assessmentSetQuestionRepository.deleteByAssessmentId(asmtId);
                     if (assessmentSetOptionRepository != null) {
                         assessmentSetOptionRepository.deleteByAssessmentId(asmtId);
+                    }
+                    assessmentSetQuestionRepository.deleteByAssessmentId(asmtId);
+                    if (entityManager != null) {
+                        entityManager.flush();
                     }
                     for (int sIdx = 0; sIdx < sets.size(); sIdx++) {
                         CompetitionSet set = sets.get(sIdx);
@@ -1403,6 +1419,9 @@ public class CompetitionService {
                                 }
                             }
                         }
+                    }
+                    if (entityManager != null) {
+                        entityManager.flush();
                     }
                 }
             } catch (Exception e) {
@@ -2514,12 +2533,32 @@ public class CompetitionService {
         }
 
         if (payload.containsKey("voiceFileId")) {
-            answer.setVoiceFileId((String) payload.get("voiceFileId"));
+            Object vVal = payload.get("voiceFileId");
+            if (vVal instanceof Map<?, ?> m) {
+                Object subFile = m.get("voiceFileId");
+                if (subFile == null) subFile = m.get("id");
+                if (subFile == null) subFile = m.get("fileId");
+                answer.setVoiceFileId(subFile != null ? subFile.toString() : null);
+                if (m.containsKey("durationSec") && !payload.containsKey("voiceDurationSec")) {
+                    Object dur = m.get("durationSec");
+                    if (dur instanceof Number) {
+                        answer.setVoiceDurationSec(((Number) dur).intValue());
+                    }
+                }
+            } else {
+                answer.setVoiceFileId(vVal != null ? vVal.toString() : null);
+            }
         }
 
         if (payload.containsKey("voiceDurationSec")) {
             Object dur = payload.get("voiceDurationSec");
-            answer.setVoiceDurationSec(dur != null ? ((Number) dur).intValue() : null);
+            if (dur instanceof Number) {
+                answer.setVoiceDurationSec(((Number) dur).intValue());
+            } else if (dur != null) {
+                try {
+                    answer.setVoiceDurationSec(Integer.parseInt(dur.toString()));
+                } catch (NumberFormatException ignored) {}
+            }
         }
 
         answer.setSavedAt(now);
@@ -2574,6 +2613,16 @@ public class CompetitionService {
 
         evaluateAndFinalizeAttempt(attempt);
         AssessmentAttempt savedAttempt = assessmentAttemptRepository.save(attempt);
+
+        // Immediately recalculate leaderboard so live board reflects final score
+        try {
+            CompetitionAssessment evalAsmt = assessmentRepository.findById(attempt.getAssessmentId()).orElse(null);
+            if (evalAsmt != null && "FINAL".equalsIgnoreCase(evalAsmt.getType()) && evalAsmt.getCompetitionId() != null) {
+                recalculateLeaderboard(evalAsmt.getCompetitionId(), null);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to recalculate leaderboard after evaluating voice answer: {}", e.getMessage());
+        }
 
         Map<String, Object> result = new HashMap<>();
         result.put("attemptId", savedAttempt.getId());
@@ -3368,6 +3417,16 @@ public class CompetitionService {
         }
         AssessmentAttempt savedAttempt = assessmentAttemptRepository.save(attempt);
 
+        // Immediately recalculate leaderboard so live board reflects final score
+        try {
+            CompetitionAssessment evalAsmt = assessmentRepository.findById(attempt.getAssessmentId()).orElse(null);
+            if (evalAsmt != null && "FINAL".equalsIgnoreCase(evalAsmt.getType()) && evalAsmt.getCompetitionId() != null) {
+                recalculateLeaderboard(evalAsmt.getCompetitionId(), null);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to recalculate leaderboard after evaluating voice answer: {}", e.getMessage());
+        }
+
         Map<String, Object> resp = new HashMap<>();
         resp.put("success", true);
         resp.put("attemptId", savedAttempt.getId());
@@ -4004,52 +4063,36 @@ public class CompetitionService {
             String setCode;
             BigDecimal totalMarks;
             OffsetDateTime submittedAt;
+            boolean isProvisional;
         }
 
         List<StudentScoreRow> rows = new ArrayList<>();
-        for (CompetitionRegistration reg : registrations) {
-            StudentScoreRow row = new StudentScoreRow();
-            row.reg = reg;
-            row.setCode = regSetCodeMap.getOrDefault(reg.getId(), "A");
-            row.totalMarks = BigDecimal.ZERO;
-            row.submittedAt = null;
-
-            if (finalAsmt != null && assessmentAttemptRepository != null) {
+        if (finalAsmt != null && assessmentAttemptRepository != null) {
+            for (CompetitionRegistration reg : registrations) {
                 Optional<AssessmentAttempt> opt = assessmentAttemptRepository.findTopByAssessmentIdAndRegistrationIdOrderByPublishVersionDesc(finalAsmt.getId(), reg.getId());
                 if (opt.isPresent()) {
                     AssessmentAttempt att = opt.get();
-                    // M1 Rule 4: Exclude pending evaluations from leaderboard until fully evaluated
-                    boolean isPending = "EVALUATION_PENDING".equalsIgnoreCase(att.getStatus()) || "MANUAL_PENDING".equalsIgnoreCase(att.getEvaluationMode());
-                    if (!isPending) {
-                        if (att.getTotalMarks() != null) {
-                            row.totalMarks = att.getTotalMarks();
-                        }
-                        row.submittedAt = att.getSubmittedAt() != null ? att.getSubmittedAt() : att.getStartedAt();
+                    // Candidate MUST have submitted the Final Assessment to appear on the leaderboard
+                    if ("IN_PROGRESS".equalsIgnoreCase(att.getStatus()) || att.getSubmittedAt() == null) {
+                        continue;
                     }
-                }
-            }
 
-            // Fallback: If no final attempt or final attempt totalMarks is 0, check other attempts in the competition
-            if (row.totalMarks.compareTo(BigDecimal.ZERO) == 0 && assessmentAttemptRepository != null) {
-                List<AssessmentAttempt> otherAttempts = assessmentAttemptRepository.findByRegistrationId(reg.getId());
-                BigDecimal sumMarks = BigDecimal.ZERO;
-                OffsetDateTime latestSubmit = null;
-                for (AssessmentAttempt att : otherAttempts) {
-                    if (att.getTotalMarks() != null && att.getTotalMarks().compareTo(BigDecimal.ZERO) > 0) {
-                        sumMarks = sumMarks.add(att.getTotalMarks());
-                        if (att.getSubmittedAt() != null && (latestSubmit == null || att.getSubmittedAt().isAfter(latestSubmit))) {
-                            latestSubmit = att.getSubmittedAt();
-                        }
+                    StudentScoreRow row = new StudentScoreRow();
+                    row.reg = reg;
+                    row.setCode = regSetCodeMap.getOrDefault(reg.getId(), "A");
+                    row.submittedAt = att.getSubmittedAt();
+
+                    boolean isPending = "EVALUATION_PENDING".equalsIgnoreCase(att.getStatus()) || "MANUAL_PENDING".equalsIgnoreCase(att.getEvaluationMode());
+                    if (isPending) {
+                        row.isProvisional = true;
+                        row.totalMarks = att.getMcqMarks() != null ? att.getMcqMarks() : BigDecimal.ZERO;
+                    } else {
+                        row.isProvisional = false;
+                        row.totalMarks = att.getTotalMarks() != null ? att.getTotalMarks() : BigDecimal.ZERO;
                     }
-                }
-                if (sumMarks.compareTo(BigDecimal.ZERO) > 0) {
-                    row.totalMarks = sumMarks;
-                    row.submittedAt = latestSubmit;
-                } else if (reg.getScore() != null && reg.getScore().compareTo(BigDecimal.ZERO) > 0) {
-                    row.totalMarks = reg.getScore();
+                    rows.add(row);
                 }
             }
-            rows.add(row);
         }
 
         // 4. Sort entries:
@@ -4115,6 +4158,7 @@ public class CompetitionService {
             cache.setStudentName(r.reg.getStudentName() != null ? r.reg.getStudentName() : "Student");
             cache.setSetCode(r.setCode);
             cache.setTotalMarks(r.totalMarks);
+            cache.setIsProvisional(r.isProvisional);
             cache.setRank(currentRank);
             cache.setPercentile(percentile);
             cache.setPublishedAt("PUBLISHED".equalsIgnoreCase(comp.getLeaderboardStatus()) ? now : null);
@@ -4134,6 +4178,7 @@ public class CompetitionService {
             entry.setStudentName(r.reg.getStudentName() != null ? r.reg.getStudentName() : "Student");
             entry.setSetCode(r.setCode);
             entry.setTotalMarks(r.totalMarks);
+            entry.setIsProvisional(r.isProvisional);
             entry.setRank(currentRank);
             entry.setPercentile(percentile);
             entry.setFinalSubmittedAt(r.submittedAt);
@@ -4175,10 +4220,21 @@ public class CompetitionService {
         ZoneId ist = ZoneId.of("Asia/Kolkata");
         OffsetDateTime now = OffsetDateTime.now(ist);
 
-        // Check if scheduled publish time has arrived for SCHEDULED status
-        if (!isPublished && "SCHEDULED".equalsIgnoreCase(comp.getLeaderboardStatus())
-                && comp.getLeaderboardPublishedAt() != null && now.isAfter(comp.getLeaderboardPublishedAt())) {
+        OffsetDateTime scheduledAt = comp.getLeaderboardPublishedAt();
+        if (scheduledAt == null && comp.getLeaderboardPublishTime() != null && comp.getLeaderboardPublishTime().contains("T")) {
+            try {
+                LocalDateTime ldt = LocalDateTime.parse(comp.getLeaderboardPublishTime());
+                scheduledAt = ldt.atZone(ist).toOffsetDateTime();
+            } catch (Exception ignored) {}
+        }
+
+        isPublished = "PUBLISHED".equalsIgnoreCase(comp.getLeaderboardStatus());
+        boolean isExplicitlyUnpublished = "UNPUBLISHED".equalsIgnoreCase(comp.getLeaderboardStatus());
+
+        // Check if scheduled publish time has arrived for lazy unlock
+        if (!isPublished && !isExplicitlyUnpublished && scheduledAt != null && (now.isAfter(scheduledAt) || now.isEqual(scheduledAt))) {
             comp.setLeaderboardStatus("PUBLISHED");
+            comp.setLeaderboardPublishedAt(scheduledAt);
             competitionRepository.save(comp);
             isPublished = true;
         }
@@ -4220,7 +4276,34 @@ public class CompetitionService {
             item.put("id", c.getId());
             item.put("rank", c.getRank());
             item.put("registrationId", c.getRegistrationId());
-            item.put("studentName", c.getStudentName());
+            boolean isProv = Boolean.TRUE.equals(c.getIsProvisional());
+            item.put("isProvisional", isProv);
+
+            boolean isCurrentStudent = false;
+            if (currentUser != null) {
+                Optional<CompetitionRegistration> regOpt = registrationRepository.findById(c.getRegistrationId());
+                if (regOpt.isPresent()) {
+                    CompetitionRegistration r = regOpt.get();
+                    if ((currentStudentId != null && currentStudentId.equals(r.getStudentId())) ||
+                        (currentStudentEmail != null && currentStudentEmail.equalsIgnoreCase(r.getStudentEmail()))) {
+                        isCurrentStudent = true;
+                    }
+                }
+            }
+
+            if (isProv) {
+                if (isCurrentStudent) {
+                    item.put("studentName", "You (evaluation pending)");
+                } else if (!isStaff) {
+                    item.put("studentName", "Candidate (evaluation pending)");
+                    item.put("registrationId", "PROVISIONAL");
+                } else {
+                    item.put("studentName", c.getStudentName() + " (evaluation pending)");
+                }
+            } else {
+                item.put("studentName", c.getStudentName());
+            }
+
             item.put("setCode", c.getSetCode());
             item.put("totalMarks", c.getTotalMarks());
             item.put("percentile", c.getPercentile());

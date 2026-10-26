@@ -5,6 +5,7 @@ export const getCompetitions = async () => {
   const res = await apiGet('/competitions');
   if (res && res.success && Array.isArray(res.data)) {
     const normalized = res.data.map(c => ({
+      ...c,
       id: c.id,
       title: c.title || 'Competition',
       name: c.title || 'Competition',
@@ -25,7 +26,16 @@ export const getCompetitions = async () => {
       registrationFee: parseFloat(c.registrationFee || 0),
       status: c.status || 'Active',
       modules: c.modules || [],
-      registrations: c.registrations || []
+      registrations: c.registrations || [],
+      finalUnlockAt: c.finalUnlockAt || c.final_unlock_at || null,
+      startAt: c.startAt || null,
+      endAt: c.endAt || null,
+      regStartAt: c.regStartAt || null,
+      regEndAt: c.regEndAt || null,
+      leaderboardPublishTime: c.leaderboardPublishTime || null,
+      leaderboardStatus: c.leaderboardStatus || 'NOT_PUBLISHED',
+      leaderboardPublishedAt: c.leaderboardPublishedAt || null,
+      answerReviewEnabled: Boolean(c.answerReviewEnabled)
     }));
     return apiResponse(normalized);
   }

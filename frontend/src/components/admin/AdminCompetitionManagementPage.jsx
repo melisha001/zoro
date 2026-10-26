@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
   Trophy, Users, BookOpen, Video, FileText, Layers, Plus, 
@@ -136,6 +136,7 @@ export default function AdminCompetitionManagementPage() {
   const [viewingFile, setViewingFile] = useState(null);
 
   // Republish Confirm Modal State (Task K7)
+  const isRepublishingRef = useRef(false);
   const [republishModalData, setRepublishModalData] = useState({
     open: false,
     assessment: null,
@@ -540,8 +541,9 @@ export default function AdminCompetitionManagementPage() {
 
   const handleConfirmRepublish = async () => {
     const asmt = republishModalData.assessment;
-    if (!asmt || !republishModalData.understand) return;
+    if (!asmt || !republishModalData.understand || isRepublishingRef.current) return;
 
+    isRepublishingRef.current = true;
     setRepublishModalData(prev => ({ ...prev, loading: true }));
     try {
       const res = await republishCompetitionAssessment(asmt.id);
@@ -559,6 +561,8 @@ export default function AdminCompetitionManagementPage() {
     } catch (err) {
       await showError(err.message || 'Failed to republish assessment');
       setRepublishModalData(prev => ({ ...prev, loading: false }));
+    } finally {
+      isRepublishingRef.current = false;
     }
   };
 
@@ -1724,10 +1728,15 @@ export default function AdminCompetitionManagementPage() {
               <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
-                    Student Perspective Preview (Miniature)
+                    Student Perspective Preview
                   </span>
-                  <span className="text-[10px] font-semibold text-slate-400">Zero network requests</span>
                 </div>
+                {questionFormData.questionFormat === 'AUDIO' && questionFormData.mediaRef && (
+                  <div className="mb-3">
+                    <span className="text-xs font-bold text-slate-700 block mb-1">Audio Prompt Playback:</span>
+                    <AudioPromptPlayer src={questionFormData.mediaRef} title="Question Audio Prompt" />
+                  </div>
+                )}
                 <QuestionPreview question={questionFormData} isAdmin={false} />
               </div>
             ) : (

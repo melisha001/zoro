@@ -43,8 +43,8 @@ export default function CompetitionLeaderboardPage() {
     loadLeaderboard();
   }, [currentCompetition]);
 
-  const loadLeaderboard = async () => {
-    setLoading(true);
+  const loadLeaderboard = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const res = await getCompetitionLeaderboard(currentCompetition.id);
       if (res && res.success && res.data) {
@@ -53,9 +53,30 @@ export default function CompetitionLeaderboardPage() {
     } catch (err) {
       console.error('Failed to load leaderboard:', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
+
+  // Live polling every 12s and refetch on tab focus
+  useEffect(() => {
+    if (!currentCompetition?.id) return;
+
+    const pollInterval = setInterval(() => {
+      loadLeaderboard(false);
+    }, 12000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadLeaderboard(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [currentCompetition?.id]);
 
   // Countdown timer calculation if unpublished
   useEffect(() => {
@@ -66,6 +87,13 @@ export default function CompetitionLeaderboardPage() {
     const interval = setInterval(() => {
       const now = new Date().getTime();
       const diff = Math.max(0, targetDate - now);
+
+      if (diff <= 0) {
+        clearInterval(interval);
+        setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+        loadLeaderboard(true);
+        return;
+      }
 
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -406,12 +434,19 @@ export default function CompetitionLeaderboardPage() {
                       )}
                     </div>
 
-                    <h4 className="text-base font-black text-slate-900 truncate">
-                      {p.studentName}
+                    <h4 className="text-base font-black text-slate-900 truncate flex items-center justify-center gap-1.5">
+                      <span>{p.studentName}</span>
+                      {p.isProvisional && (
+                        <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                          Provisional
+                        </span>
+                      )}
                     </h4>
-                    <div className="text-[11px] text-slate-500 font-mono truncate">
-                      {p.registrationId}
-                    </div>
+                    {!p.isProvisional && (
+                      <div className="text-[11px] text-slate-500 font-mono truncate">
+                        {p.registrationId}
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-3 border-t border-slate-200/60 flex items-center justify-between text-xs font-black">
@@ -549,15 +584,22 @@ export default function CompetitionLeaderboardPage() {
                         <td className="py-3.5 px-4">
                           <div className="flex items-center space-x-2">
                             <span className="font-bold text-slate-900">{row.studentName}</span>
+                            {row.isProvisional && (
+                              <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                                Provisional
+                              </span>
+                            )}
                             {isUserRow && (
                               <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-amber-500 text-slate-950">
                                 You
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-slate-400 font-mono">
-                            {row.registrationId}
-                          </div>
+                          {!row.isProvisional && (
+                            <div className="text-[11px] text-slate-400 font-mono">
+                              {row.registrationId}
+                            </div>
+                          )}
                         </td>
 
                         {/* Set Code */}

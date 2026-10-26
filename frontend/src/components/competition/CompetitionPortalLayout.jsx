@@ -122,7 +122,7 @@ export default function CompetitionPortalLayout() {
         <div className="p-5 flex items-center space-x-3 border-b border-slate-800">
           <img src="/assets/logo.png" alt="Zoro Logo" className="h-7 w-auto object-contain" />
           <div>
-            <span className="font-extrabold text-white text-xs block leading-tight">Zoro Academy</span>
+            <span className="font-extrabold text-white text-xs block leading-tight">Zoro English Academy</span>
             <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block">Competition Portal</span>
           </div>
         </div>

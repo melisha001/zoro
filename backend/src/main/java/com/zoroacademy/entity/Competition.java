@@ -1,5 +1,6 @@
 package com.zoroacademy.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -99,8 +100,8 @@ public class Competition {
     @JsonManagedReference
     private List<CompetitionModule> modules = new ArrayList<>();
 
-    @OneToMany(mappedBy = "competition", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
-    @JsonManagedReference
+    @JsonIgnore
+    @OneToMany(mappedBy = "competition", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<CompetitionRegistration> registrations = new ArrayList<>();
 
     @CreationTimestamp

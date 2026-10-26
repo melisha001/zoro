@@ -31,6 +31,9 @@ public class CompetitionLeaderboardCache {
     @Column(name = "total_marks", precision = 8, scale = 2, nullable = false)
     private BigDecimal totalMarks = BigDecimal.ZERO;
 
+    @Column(name = "is_provisional", nullable = false)
+    private Boolean isProvisional = false;
+
     @Column(nullable = false)
     private Integer rank;
 
@@ -63,6 +66,9 @@ public class CompetitionLeaderboardCache {
 
     public BigDecimal getTotalMarks() { return totalMarks; }
     public void setTotalMarks(BigDecimal totalMarks) { this.totalMarks = totalMarks; }
+
+    public Boolean getIsProvisional() { return isProvisional != null ? isProvisional : false; }
+    public void setIsProvisional(Boolean isProvisional) { this.isProvisional = isProvisional != null ? isProvisional : false; }
 
     public Integer getRank() { return rank; }
     public void setRank(Integer rank) { this.rank = rank; }
