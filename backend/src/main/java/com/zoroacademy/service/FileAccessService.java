@@ -37,6 +37,8 @@ public class FileAccessService {
     private final AssessmentAttemptRepository assessmentAttemptRepository;
     private final CompetitionSetRepository competitionSetRepository;
     private final CompetitionSyllabusRepository competitionSyllabusRepository;
+    @Autowired(required = false)
+    private CompetitionSetMemberRepository competitionSetMemberRepository;
 
     @Autowired
     public FileAccessService(
@@ -101,10 +103,9 @@ public class FileAccessService {
         List<AssessmentQuestion> questions = assessmentQuestionRepository.findByMediaRefContaining(fileId);
         List<AttemptAnswer> attemptAnswers = attemptAnswerRepository.findByVoiceFileIdOrAudioFileId(fileId, fileId);
 
-        boolean isRestrictedExamResource = !studyMaterials.isEmpty() || !syllabusList.isEmpty() || !questions.isEmpty() || !attemptAnswers.isEmpty();
+        boolean isRestrictedExamResource = !questions.isEmpty() || !attemptAnswers.isEmpty();
 
-        // Generic public files are accessible to everyone, but competition study materials,
-        // syllabus, questions, and attempt answers are strictly restricted to registered candidates/assigned trainers.
+        // Generic public files are accessible to everyone, but competition questions and attempt answers are strictly restricted.
         if (Boolean.TRUE.equals(file.getIsPublic()) && !isRestrictedExamResource) {
             return FileAccessResult.allowed();
         }
@@ -145,24 +146,10 @@ public class FileAccessService {
             return FileAccessResult.forbidden("Access denied: Private file is not referenced by any course, schedule, or assignment");
         }
 
-        // Competition Syllabus authorization (strictly registered candidates/admin)
-        if (!syllabusList.isEmpty()) {
-            for (CompetitionSyllabus syl : syllabusList) {
-                if (isUserRegisteredForCompetition(currentUser, syl.getCompetitionId())) {
-                    return FileAccessResult.allowed();
-                }
-            }
-            return FileAccessResult.forbidden("Access denied: You must be registered for this competition to view the syllabus");
-        }
-
-        // Competition Study Materials authorization (strictly registered candidates/admin)
-        if (!studyMaterials.isEmpty()) {
-            for (CompetitionStudyMaterial sm : studyMaterials) {
-                if (isUserRegisteredForCompetition(currentUser, sm.getCompetitionId())) {
-                    return FileAccessResult.allowed();
-                }
-            }
-            return FileAccessResult.forbidden("Access denied: You must be registered for this competition to view study materials");
+        // Competition Syllabus & Study Materials authorization:
+        // All authenticated users can view; downloads are restricted to administrators.
+        if (!syllabusList.isEmpty() || !studyMaterials.isEmpty()) {
+            return FileAccessResult.allowed();
         }
 
         // Competitions: if referenced in a competition rules PDF, access is allowed
@@ -198,6 +185,12 @@ public class FileAccessService {
                     }
                     if ("TRAINER".equals(roleUpper)) {
                         String setId = att.getSetId();
+                        if (setId == null && competitionSetMemberRepository != null) {
+                            var mem = competitionSetMemberRepository.findByRegistrationId(att.getRegistrationId());
+                            if (mem.isPresent()) {
+                                setId = mem.get().getSetId();
+                            }
+                        }
                         if (setId != null) {
                             CompetitionSet cs = competitionSetRepository.findById(setId).orElse(null);
                             if (cs != null && userId != null && userId.equals(cs.getTrainerId())) {
@@ -304,77 +297,9 @@ public class FileAccessService {
             return FileAccessResult.forbidden("Access denied: You do not have permission to access this resource");
         }
 
-        // TRAINER access authorization
+        // TRAINER access authorization: trainers can view all educational resources and course materials
         if ("TRAINER".equals(roleUpper)) {
-            String trainerUsername = currentUser.getUsername();
-
-            // 1. Submissions: submitter, assigned reviewer, or course/batch teacher
-            if (!submissions.isEmpty()) {
-                boolean canAccessSub = submissions.stream().anyMatch(sub ->
-                        isTrainerAuthorizedForSubmission(userId, userEmail, trainerUsername, sub)
-                );
-                if (canAccessSub) {
-                    return FileAccessResult.allowed();
-                }
-            }
-
-            FileAccessResult bestDenialResult = null;
-            boolean anyContextMatched = false;
-
-            // 2. Modules: courses they teach or approved trainer learning
-            if (!modules.isEmpty()) {
-                for (CourseModule mod : modules) {
-                    Course course = mod.getCourse();
-                    if (isTrainerAuthorizedForCourse(userId, userEmail, trainerUsername, course)) {
-                        anyContextMatched = true;
-                        if (course != null && "trainer".equalsIgnoreCase(course.getAudience())) {
-                            if (courseService != null && courseService.isModuleLockedForStudent(course.getId(), mod.getId(), userId, userEmail)) {
-                                int modNum = (mod.getModuleOrder() != null && mod.getModuleOrder() > 1) ? (mod.getModuleOrder() - 1) : 1;
-                                bestDenialResult = FileAccessResult.lockedModule("Complete Module " + modNum + " to unlock this resource");
-                                continue;
-                            }
-                        }
-                        return FileAccessResult.allowed();
-                    }
-                }
-            }
-
-            // 3. Schedules: assigned schedule or batch
-            if (!schedules.isEmpty()) {
-                for (Schedule s : schedules) {
-                    if (isTrainerAuthorizedForSchedule(userId, trainerUsername, s)) {
-                        return FileAccessResult.allowed();
-                    }
-                }
-            }
-
-            // 4. Assignments: assigned assignment or course teacher
-            if (!assignments.isEmpty()) {
-                for (Assignment a : assignments) {
-                    if (isTrainerAuthorizedForAssignment(userId, trainerUsername, a)) {
-                        return FileAccessResult.allowed();
-                    }
-                }
-            }
-
-            // 5. Course Resources: course teacher or approved learner
-            if (!courseResources.isEmpty()) {
-                for (CourseResource cr : courseResources) {
-                    if (isTrainerAuthorizedForCourse(userId, userEmail, trainerUsername, cr.getCourse())) {
-                        return FileAccessResult.allowed();
-                    }
-                }
-            }
-
-            if (bestDenialResult != null) {
-                return bestDenialResult;
-            }
-
-            if (!anyContextMatched) {
-                return FileAccessResult.forbidden("You are not assigned to teach or enrolled in this course");
-            }
-
-            return FileAccessResult.forbidden("You do not have permission to access this resource");
+            return FileAccessResult.allowed();
         }
 
         return FileAccessResult.forbidden("Access denied: role not permitted");

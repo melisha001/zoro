@@ -19,6 +19,7 @@ import SkeletonCard from '../common/SkeletonCard';
 import SafeVideo from '../common/SafeVideo';
 import SafeImage from '../common/SafeImage';
 import AudioPromptPlayer from '../common/AudioPromptPlayer';
+import QuestionMedia from '../common/QuestionMedia';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 
 export default function CompetitionTestSeriesPage() {
@@ -641,27 +642,13 @@ export default function CompetitionTestSeriesPage() {
                   </button>
                 </div>
 
-                {/* Media (if video or audio question) */}
-                {currentQ.questionFormat === 'AUDIO' && currentQ.mediaRef && (
+                {/* Shared Question Media Prompt */}
+                {(currentQ.questionFormat === 'IMAGE' || currentQ.questionFormat === 'VIDEO' || currentQ.questionFormat === 'AUDIO' || currentQ.mediaRef || currentQ.imageUrl) && (
                   <div className="mb-5">
-                    <AudioPromptPlayer src={currentQ.mediaRef} title="Question Audio Prompt" />
-                  </div>
-                )}
-                {currentQ.questionFormat === 'VIDEO' && currentQ.mediaRef && (
-                  <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200">
-                    <SafeVideo
-                      bunnyVideoId={currentQ.mediaRef}
-                      src={resolveFileUrl(currentQ.mediaRef)}
-                      className="w-full aspect-video"
-                    />
-                  </div>
-                )}
-                {currentQ.questionFormat === 'IMAGE' && (currentQ.mediaRef || currentQ.imageUrl) && (
-                  <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200 p-2 bg-slate-50">
-                    <SafeImage
-                      src={resolveFileUrl(currentQ.imageUrl || currentQ.mediaRef)}
-                      alt="Question Image Prompt"
-                      className="max-h-96 w-auto rounded-xl object-contain mx-auto"
+                    <QuestionMedia
+                      questionFormat={currentQ.questionFormat || (currentQ.imageUrl ? 'IMAGE' : 'MCQ')}
+                      mediaRef={currentQ.mediaRef || currentQ.imageUrl}
+                      title="Question Media Prompt"
                     />
                   </div>
                 )}
@@ -795,7 +782,7 @@ export default function CompetitionTestSeriesPage() {
 
               <div className="grid grid-cols-5 gap-2">
                 {questions.map((q, idx) => {
-                  const isAns = studentAnswers[q.id]?.selectedOptionId || studentAnswers[q.id]?.voiceFileId;
+                  const isAns = !!(studentAnswers[q.id]?.selectedOptionId || studentAnswers[q.id]?.voiceFileId || (studentAnswers[q.id]?.textAnswer && studentAnswers[q.id].textAnswer.trim().length > 0));
                   const isCurrent = currentQuestionIndex === idx;
                   const isFlag = flaggedQuestions[q.id];
 

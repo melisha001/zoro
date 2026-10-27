@@ -19,6 +19,7 @@ import SkeletonCard from '../common/SkeletonCard';
 import SafeVideo from '../common/SafeVideo';
 import SafeImage from '../common/SafeImage';
 import AudioPromptPlayer from '../common/AudioPromptPlayer';
+import QuestionMedia from '../common/QuestionMedia';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 import SecureExamConsentModal from './SecureExamConsentModal';
 import ProctorViolationWarningModal from './ProctorViolationWarningModal';
@@ -804,7 +805,7 @@ export default function CompetitionMockTestsPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {questions.map((q, idx) => {
-              const isAnswered = studentAnswers[q.id]?.selectedOptionId || studentAnswers[q.id]?.voiceFileId;
+              const isAnswered = !!(studentAnswers[q.id]?.selectedOptionId || studentAnswers[q.id]?.voiceFileId || (studentAnswers[q.id]?.textAnswer && studentAnswers[q.id].textAnswer.trim().length > 0));
               const isFlagged = flaggedQuestions[q.id];
               const isCurrent = idx === currentQuestionIndex;
 
@@ -855,27 +856,13 @@ export default function CompetitionMockTestsPage() {
               </button>
             </div>
 
-            {/* Question Media Prompt (Audio, Video, or Image) */}
-            {(currentQ.questionFormat === 'AUDIO' || currentQ.audioUrl) && (currentQ.mediaRef || currentQ.audioUrl) && (
+            {/* Shared Question Media Prompt */}
+            {(currentQ.questionFormat === 'IMAGE' || currentQ.questionFormat === 'VIDEO' || currentQ.questionFormat === 'AUDIO' || currentQ.mediaRef || currentQ.imageUrl || currentQ.audioUrl) && (
               <div className="mb-4">
-                <AudioPromptPlayer src={currentQ.mediaRef || currentQ.audioUrl} title="Question Audio Prompt" />
-              </div>
-            )}
-            {currentQ.questionFormat === 'VIDEO' && currentQ.mediaRef && (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 mb-4">
-                <SafeVideo
-                  bunnyVideoId={currentQ.mediaRef}
-                  src={resolveFileUrl(currentQ.mediaRef)}
-                  className="w-full aspect-video"
-                />
-              </div>
-            )}
-            {currentQ.questionFormat === 'IMAGE' && (currentQ.mediaRef || currentQ.imageUrl) && (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 p-2 bg-slate-50 mb-4">
-                <SafeImage
-                  src={resolveFileUrl(currentQ.imageUrl || currentQ.mediaRef)}
-                  alt="Question Image"
-                  className="max-h-96 w-auto rounded-xl object-contain mx-auto"
+                <QuestionMedia
+                  questionFormat={currentQ.questionFormat || (currentQ.imageUrl ? 'IMAGE' : currentQ.audioUrl ? 'AUDIO' : 'MCQ')}
+                  mediaRef={currentQ.mediaRef || currentQ.imageUrl || currentQ.audioUrl}
+                  title="Question Media Prompt"
                 />
               </div>
             )}
@@ -1008,7 +995,7 @@ export default function CompetitionMockTestsPage() {
                 <div className="flex justify-between">
                   <span>Answered Questions:</span>
                   <span className="font-bold text-emerald-600">
-                    {Object.values(studentAnswers).filter(a => a?.selectedOptionId || a?.voiceFileId).length}
+                    {Object.values(studentAnswers).filter(a => a?.selectedOptionId || a?.voiceFileId || (a?.textAnswer && a.textAnswer.trim().length > 0)).length}
                   </span>
                 </div>
                 <div className="flex justify-between">

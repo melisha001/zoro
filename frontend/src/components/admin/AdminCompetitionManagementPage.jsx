@@ -681,6 +681,11 @@ export default function AdminCompetitionManagementPage() {
     e.preventDefault();
     if (!questionFormData.questionText.trim()) return;
 
+    if (questionFormData.questionFormat === 'IMAGE' && (!questionFormData.mediaRef || !questionFormData.mediaRef.trim())) {
+      showWarning('Please upload an image for this Image Question.', 'Image Required');
+      return;
+    }
+
     if (questionFormData.answerFormat === 'MCQ_OPTIONS') {
       const correctCount = questionFormData.options.filter(o => o.isCorrect).length;
       if (correctCount !== 1) {

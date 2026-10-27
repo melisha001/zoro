@@ -191,31 +191,8 @@ public class RazorpayPaymentService {
         Competition comp = competitionRepository.findById(request.getCompetitionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Competition not found with ID: " + request.getCompetitionId()));
 
-        if (!"Active".equalsIgnoreCase(comp.getStatus())) {
-            throw new BadRequestException("Competition is not active for registration");
-        }
-
-        // Validate registration window if dates configured
-        LocalDate today = LocalDate.now();
-        if (comp.getRegStartDate() != null && !comp.getRegStartDate().isBlank()) {
-            try {
-                LocalDate start = LocalDate.parse(comp.getRegStartDate().trim(), DateTimeFormatter.ISO_LOCAL_DATE);
-                if (today.isBefore(start)) {
-                    throw new BadRequestException("Competition registration has not opened yet (Opens: " + comp.getRegStartDate() + ")");
-                }
-            } catch (Exception ignored) {
-                // Ignore parsing errors for non-standard formats
-            }
-        }
-        if (comp.getRegEndDate() != null && !comp.getRegEndDate().isBlank()) {
-            try {
-                LocalDate end = LocalDate.parse(comp.getRegEndDate().trim(), DateTimeFormatter.ISO_LOCAL_DATE);
-                if (today.isAfter(end)) {
-                    throw new BadRequestException("Competition registration has closed (Closed: " + comp.getRegEndDate() + ")");
-                }
-            } catch (Exception ignored) {
-                // Ignore parsing errors for non-standard formats
-            }
+        if (!CompetitionService.isRegistrationOpen(comp)) {
+            throw new ConflictException("Registration for this competition is closed.");
         }
 
         String sanitizedPhone = PhoneValidator.sanitize(request.getStudentPhone());
@@ -334,8 +311,8 @@ public class RazorpayPaymentService {
 
         // Paid Competition -> Check server keys
         if (keyId == null || keyId.isBlank() || keySecret == null || keySecret.isBlank()) {
-            log.error("Online payments are not configured: RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is not set in the environment.");
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Online payments are not configured");
+            log.error("Payment gateway unconfigured: missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Payments are not configured");
         }
 
         // Call Razorpay Orders REST API

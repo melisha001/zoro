@@ -216,6 +216,16 @@ public class FileController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("NOT_FOUND", "File not found", errData));
         }
 
+        if (download) {
+            boolean isAdmin = currentUser != null && ("ADMIN".equals(currentUser.getRole()) || "SUPER_ADMIN".equals(currentUser.getRole()));
+            if (!isAdmin) {
+                Map<String, Object> errData = new HashMap<>();
+                errData.put("code", "DOWNLOAD_FORBIDDEN");
+                errData.put("message", "Download is disabled for view-only resources");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("DOWNLOAD_FORBIDDEN", "Download is disabled for view-only resources", errData));
+            }
+        }
+
         FileAccessResult accessResult = fileAccessService.checkAccess(storedFile, currentUser);
         if (!accessResult.isAllowed()) {
             Map<String, Object> errData = new HashMap<>();
@@ -265,19 +275,11 @@ public class FileController {
         boolean isRestrictedExamResource = isStudyMaterial || isAttemptAnswer || isQuestionMedia || isSyllabus;
 
         if (download) {
-            String cat = storedFile.getCategory() != null ? storedFile.getCategory().toLowerCase() : "";
-            boolean isViewOnly = isRestrictedExamResource
-                    || cat.contains("notes") || cat.contains("worksheet") || cat.contains("assignment") || cat.contains("schedule")
-                    || cat.contains("study") || cat.contains("material") || cat.contains("question") || cat.contains("voice")
-                    || cat.contains("answer") || cat.contains("syllabus");
-
-            if (isViewOnly) {
-                boolean isAdmin = currentUser != null && ("ADMIN".equals(currentUser.getRole()) || "SUPER_ADMIN".equals(currentUser.getRole()));
-                if (!isAdmin) {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                            .header("X-Error-Code", "DOWNLOAD_FORBIDDEN")
-                            .body(ApiResponse.error("DOWNLOAD_FORBIDDEN", "Download is disabled for view-only resources"));
-                }
+            boolean isAdmin = currentUser != null && ("ADMIN".equals(currentUser.getRole()) || "SUPER_ADMIN".equals(currentUser.getRole()));
+            if (!isAdmin) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .header("X-Error-Code", "DOWNLOAD_FORBIDDEN")
+                        .body(ApiResponse.error("DOWNLOAD_FORBIDDEN", "Download is disabled for view-only resources"));
             }
         }
 

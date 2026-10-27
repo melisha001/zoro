@@ -247,10 +247,7 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
 
         {/* Modal Footer */}
         <div className="px-6 py-3.5 border-t border-slate-100 bg-white flex items-center justify-between">
-          <div className="text-xs font-semibold text-slate-400">
-            Zoro Universal File Viewer
-          </div>
-          <div className="flex items-center space-x-3">
+          <div>
             {!hideDownload && !errorMsg && fileUrl && fileUrl !== '#' && (
               <button
                 type="button"
@@ -261,6 +258,8 @@ export default function UniversalFileViewerModal({ isOpen, onClose, file, hideDo
                 <span>Download</span>
               </button>
             )}
+          </div>
+          <div className="flex items-center space-x-3">
             <button
               onClick={onClose}
               className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs transition-colors cursor-pointer"

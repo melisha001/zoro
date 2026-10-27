@@ -19,6 +19,7 @@ import SkeletonCard from '../common/SkeletonCard';
 import SafeVideo from '../common/SafeVideo';
 import SafeImage from '../common/SafeImage';
 import AudioPromptPlayer from '../common/AudioPromptPlayer';
+import QuestionMedia from '../common/QuestionMedia';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 import SecureExamConsentModal from './SecureExamConsentModal';
 import ProctorViolationWarningModal from './ProctorViolationWarningModal';
@@ -790,36 +791,13 @@ export default function CompetitionFinalAssessmentPage() {
                     {currentQuestion.prompt || currentQuestion.questionText}
                   </h3>
 
-                  {/* Audio question media player */}
-                  {(currentQuestion.audioUrl || (currentQuestion.questionFormat === 'AUDIO' && currentQuestion.mediaRef)) && (
+                  {/* Shared Question Media Prompt (Audio, Video, Image) */}
+                  {(currentQuestion.questionFormat === 'IMAGE' || currentQuestion.questionFormat === 'VIDEO' || currentQuestion.questionFormat === 'AUDIO' || currentQuestion.mediaRef || currentQuestion.audioUrl || currentQuestion.videoUrl || currentQuestion.imageUrl) && (
                     <div className="mt-4">
-                      <AudioPromptPlayer 
-                        src={currentQuestion.audioUrl || currentQuestion.mediaRef} 
-                        title="Question Audio Attachment" 
-                      />
-                    </div>
-                  )}
-
-                  {/* Video question media player */}
-                  {(currentQuestion.videoUrl || (currentQuestion.questionFormat === 'VIDEO' && currentQuestion.mediaRef)) && (
-                    <div className="mt-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                      <p className="text-xs text-slate-400 mb-2 font-semibold">Video Attachment:</p>
-                      <SafeVideo
-                        bunnyVideoId={currentQuestion.mediaRef}
-                        src={resolveFileUrl(currentQuestion.videoUrl || currentQuestion.mediaRef)}
-                        className="w-full aspect-video rounded-lg"
-                      />
-                    </div>
-                  )}
-
-                  {/* Image question media player */}
-                  {(currentQuestion.questionFormat === 'IMAGE' && (currentQuestion.mediaRef || currentQuestion.imageUrl)) && (
-                    <div className="mt-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                      <p className="text-xs text-slate-400 mb-2 font-semibold">Image Attachment:</p>
-                      <SafeImage
-                        src={resolveFileUrl(currentQuestion.imageUrl || currentQuestion.mediaRef)}
-                        alt="Question Image"
-                        className="max-h-96 w-auto rounded-lg object-contain mx-auto"
+                      <QuestionMedia
+                        questionFormat={currentQuestion.questionFormat || (currentQuestion.audioUrl ? 'AUDIO' : currentQuestion.videoUrl ? 'VIDEO' : currentQuestion.imageUrl ? 'IMAGE' : 'MCQ')}
+                        mediaRef={currentQuestion.mediaRef || currentQuestion.audioUrl || currentQuestion.videoUrl || currentQuestion.imageUrl}
+                        title="Question Media Attachment"
                       />
                     </div>
                   )}
@@ -947,7 +925,7 @@ export default function CompetitionFinalAssessmentPage() {
               <div className="grid grid-cols-5 gap-2">
                 {questions.map((q, idx) => {
                   const ans = studentAnswers[q.id];
-                  const hasAnswered = !!(ans?.selectedOptionId || ans?.voiceFileId);
+                  const hasAnswered = !!(ans?.selectedOptionId || ans?.voiceFileId || (ans?.textAnswer && ans.textAnswer.trim().length > 0));
                   const isFlag = !!flaggedQuestions[q.id];
                   const isCurrent = idx === currentQuestionIndex;
 

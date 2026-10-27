@@ -27,7 +27,8 @@ import {
   ArrowLeft,
   ShieldAlert,
   ShieldCheck,
-  Mic
+  Mic,
+  FileText
 } from 'lucide-react';
 import {
   getTrainerAssignedCompetitions,
@@ -39,6 +40,7 @@ import {
   getTrainerStudentSubmissions
 } from '../../api/competitionApi';
 import AudioPromptPlayer from '../common/AudioPromptPlayer';
+import QuestionMedia from '../common/QuestionMedia';
 import { resolveFileUrl } from '../../api/fileApi';
 import SafeVideo from '../common/SafeVideo';
 import InlineSpinner from '../common/InlineSpinner';
@@ -1216,7 +1218,7 @@ export default function TrainerCompetitionsPage() {
                     <div className="flex items-center gap-6">
                       <div className="text-right">
                         <div className="text-[10px] font-bold text-slate-400 uppercase">
-                          MCQ Score
+                          MCQ Score (auto)
                         </div>
                         <div className="text-sm font-black text-slate-700">
                           {attemptDetail.attempt?.mcqMarks ?? 0}
@@ -1224,7 +1226,7 @@ export default function TrainerCompetitionsPage() {
                       </div>
                       <div className="text-right">
                         <div className="text-[10px] font-bold text-slate-400 uppercase">
-                          Voice Score
+                          Manual Score (text + voice)
                         </div>
                         <div className="text-sm font-black text-purple-700">
                           {attemptDetail.attempt?.voiceMarks ?? 0}
@@ -1236,7 +1238,7 @@ export default function TrainerCompetitionsPage() {
                         </div>
                         <div className="text-base font-black text-indigo-700">
                           {attemptDetail.attempt?.totalMarks ?? 0} /{' '}
-                          {attemptDetail.attempt?.maxMarks || 20}
+                          {attemptDetail.assessment?.totalMarks || attemptDetail.attempt?.maxMarks || 20}
                         </div>
                       </div>
                     </div>
@@ -1276,8 +1278,11 @@ export default function TrainerCompetitionsPage() {
                       const ans = q.studentAnswer;
                       const isVoice =
                         q.answerFormat === 'VOICE' ||
+                        Boolean(ans?.voiceFileId) ||
                         (ans?.audioUrl != null && ans?.audioUrl !== '');
                       const isVideo = q.answerFormat === 'VIDEO';
+                      const isText = q.answerFormat === 'TEXT' || Boolean(ans?.textAnswer != null && ans.textAnswer !== '');
+                      const isManual = isVoice || isVideo || isText;
                       const formState = ans ? evaluatingMap[ans.id] || {} : {};
 
                       return (
@@ -1296,6 +1301,8 @@ export default function TrainerCompetitionsPage() {
                                   className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
                                     isVoice
                                       ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                      : isText
+                                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                                       : isVideo
                                       ? 'bg-blue-50 text-blue-700 border border-blue-200'
                                       : 'bg-slate-100 text-slate-700 border border-slate-200'
@@ -1303,6 +1310,8 @@ export default function TrainerCompetitionsPage() {
                                 >
                                   {isVoice
                                     ? 'Voice Answer'
+                                    : isText
+                                    ? 'Written Answer'
                                     : isVideo
                                     ? 'Video Answer'
                                     : 'MCQ Option'}
@@ -1319,24 +1328,27 @@ export default function TrainerCompetitionsPage() {
                             {ans && (
                               <span
                                 className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                                  ans.evaluationStatus === 'EVALUATED'
+                                  (!isManual || ans.evaluationStatus === 'EVALUATED')
                                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                     : 'bg-amber-50 text-amber-700 border border-amber-200'
                                 }`}
                               >
-                                {ans.evaluationStatus === 'EVALUATED' ? 'Graded' : 'Pending'}
+                                {(!isManual)
+                                  ? 'Auto-Evaluated'
+                                  : ans.evaluationStatus === 'EVALUATED'
+                                  ? 'Graded'
+                                  : 'Pending'}
                               </span>
                             )}
                           </div>
 
                           {/* Media prompt if present */}
-                          {q.mediaRef && (
-                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] text-slate-600">
-                              <span className="font-bold text-slate-800">Media Prompt:</span>{' '}
-                              <code className="text-[10px] font-mono text-indigo-700">
-                                {q.mediaRef}
-                              </code>
-                            </div>
+                          {(q.questionFormat === 'IMAGE' || q.questionFormat === 'VIDEO' || q.questionFormat === 'AUDIO' || q.mediaRef || q.fileId || q.imageUrl) && (
+                            <QuestionMedia
+                              questionFormat={q.questionFormat || (q.imageUrl ? 'IMAGE' : 'MCQ')}
+                              mediaRef={q.mediaRef || q.fileId || q.imageUrl}
+                              title={`Question ${idx + 1} Prompt`}
+                            />
                           )}
 
                           {/* Student Answer Section */}
@@ -1350,6 +1362,11 @@ export default function TrainerCompetitionsPage() {
                                       <Volume2 className="w-3.5 h-3.5 text-purple-600" />
                                       Voice Recording
                                     </span>
+                                    {ans.voiceDurationSec && (
+                                      <span className="text-[10px] text-slate-400 font-bold">
+                                        Duration: {ans.voiceDurationSec}s
+                                      </span>
+                                    )}
                                   </div>
 
                                   {(ans.voiceFileId || ans.audioUrl) ? (
@@ -1364,6 +1381,30 @@ export default function TrainerCompetitionsPage() {
                                     <p className="text-xs text-amber-700 italic">
                                       Voice question not answered (0 marks)
                                     </p>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Written Text Answer */}
+                              {isText && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                      <span>Candidate's Written Answer</span>
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-bold">
+                                      {(ans.textAnswer || '').length} characters
+                                    </span>
+                                  </div>
+                                  {ans.textAnswer ? (
+                                    <div className="p-3.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed">
+                                      {ans.textAnswer}
+                                    </div>
+                                  ) : (
+                                    <div className="p-3 bg-amber-50 text-amber-800 text-[11px] rounded-xl border border-amber-200 italic">
+                                      Written answer not submitted or student skipped this question.
+                                    </div>
                                   )}
                                 </div>
                               )}
@@ -1395,21 +1436,43 @@ export default function TrainerCompetitionsPage() {
                                 </div>
                               )}
 
-                              {/* MCQ Option Info */}
-                              {!isVoice && !isVideo && (
-                                <div className="text-xs text-slate-700 flex flex-wrap items-center gap-2">
-                                  <span className="font-bold">Selected Option:</span>{' '}
-                                  <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-200 font-bold text-indigo-700">
-                                    {ans.selectedOption || 'None'}
-                                  </span>
-                                  {q.correctOption && (
-                                    <span className="text-[11px] text-slate-500">
-                                      (Correct: {q.correctOption})
+                              {/* MCQ Option Info (Read-only auto-evaluated) */}
+                              {!isManual && (
+                                <div className="text-xs space-y-1.5">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-bold text-slate-600">Candidate Choice:</span>{' '}
+                                    <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-200 font-bold text-indigo-700">
+                                      {(() => {
+                                        if (!ans.selectedOptionId && !ans.selectedOption) return 'None';
+                                        if (q.options && q.options.length > 0) {
+                                          const match = q.options.find(
+                                            (o) => o.id === ans.selectedOptionId || o.id === ans.selectedOption
+                                          );
+                                          if (match) return match.optionText || match.text;
+                                        }
+                                        return ans.selectedOption || ans.selectedOptionId;
+                                      })()}
                                     </span>
-                                  )}
-                                  <span className="ml-2 font-bold text-emerald-600">
-                                    Marks: {ans.marksAwarded ?? (ans.isCorrect ? (q.marks || 1) : 0)} / {q.marks || 1}
-                                  </span>
+                                    {ans.isCorrect != null && (
+                                      <span
+                                        className={`font-bold ${
+                                          ans.isCorrect ? 'text-emerald-600' : 'text-rose-600'
+                                        }`}
+                                      >
+                                        ({ans.isCorrect ? 'Correct' : 'Incorrect'})
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {q.correctOption && (
+                                      <span className="text-[11px] text-slate-500">
+                                        (Correct: {q.correctOption})
+                                      </span>
+                                    )}
+                                    <span className="font-bold text-emerald-600">
+                                      Marks: {ans.marksAwarded ?? (ans.isCorrect ? (q.marks || 1) : 0)} / {q.marks || 1}
+                                    </span>
+                                  </div>
                                 </div>
                               )}
 
@@ -1432,8 +1495,8 @@ export default function TrainerCompetitionsPage() {
                             <p className="text-xs text-slate-400 italic">No answer submitted.</p>
                           )}
 
-                          {/* Trainer Evaluation Controls (only for answers submitted and when not read-only) */}
-                          {ans && !isReadOnly && (
+                          {/* Trainer Evaluation Controls (STRICTLY for manual answers: Voice, Written Text, Video - NEVER MCQ) */}
+                          {ans && !isReadOnly && isManual && (
                             <div className="pt-3 border-t border-slate-100 space-y-3">
                               <div className="flex items-center justify-between">
                                 <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
@@ -1562,11 +1625,11 @@ export default function TrainerCompetitionsPage() {
                             </div>
                           )}
 
-                          {ans && isReadOnly && (
+                          {ans && isReadOnly && isManual && (
                             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                               <span className="font-bold text-slate-600">Marks Awarded:</span>
                               <span className="font-black text-indigo-700">
-                                {ans.marksAwarded ?? (isCase2 ? 0 : (ans.isCorrect ? (q.marks || 1) : 0))} / {q.marks || 1}
+                                {ans.marksAwarded ?? 0} / {q.marks || 1}
                               </span>
                             </div>
                           )}

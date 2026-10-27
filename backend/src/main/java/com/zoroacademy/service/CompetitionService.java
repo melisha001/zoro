@@ -175,6 +175,46 @@ public class CompetitionService {
         return competitionRepository.findAll();
     }
 
+    public static boolean isRegistrationOpen(Competition comp) {
+        if (comp == null) return false;
+        if (!"Active".equalsIgnoreCase(comp.getStatus())) return false;
+        ZoneId zone = ZoneId.of("Asia/Kolkata");
+        OffsetDateTime now = ZonedDateTime.now(zone).toOffsetDateTime();
+
+        // 1. Check regStart: defaults to 00:00:00 IST of regStartDate
+        OffsetDateTime start = comp.getRegStartAt();
+        if (start == null && comp.getRegStartDate() != null && !comp.getRegStartDate().isBlank()) {
+            try {
+                LocalDate d = LocalDate.parse(comp.getRegStartDate().trim().substring(0, 10));
+                start = ZonedDateTime.of(d, LocalTime.MIN, zone).toOffsetDateTime();
+            } catch (Exception ignored) {}
+        }
+        if (start != null && now.isBefore(start)) {
+            return false;
+        }
+
+        // 2. Check regEnd: defaults to 23:59:59.999 IST of regEndDate
+        OffsetDateTime end = comp.getRegEndAt();
+        if (end == null && comp.getRegEndDate() != null && !comp.getRegEndDate().isBlank()) {
+            try {
+                LocalDate d = LocalDate.parse(comp.getRegEndDate().trim().substring(0, 10));
+                end = ZonedDateTime.of(d, LocalTime.of(23, 59, 59, 999_000_000), zone).toOffsetDateTime();
+            } catch (Exception ignored) {}
+        }
+        if (end != null && now.isAfter(end)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Competition> getPublicActiveCompetitions() {
+        return competitionRepository.findAll().stream()
+                .filter(CompetitionService::isRegistrationOpen)
+                .collect(Collectors.toList());
+    }
+
     @Transactional(readOnly = true)
     public Competition getCompetitionById(String id) {
         return competitionRepository.findById(id)
@@ -443,6 +483,9 @@ public class CompetitionService {
     @Transactional
     public CompetitionRegistration registerStudent(String compId, CompetitionRegistration reg) {
         Competition comp = getCompetitionById(compId);
+        if (!isRegistrationOpen(comp)) {
+            throw new ConflictException("Registration for this competition is closed.");
+        }
         if (reg.getId() == null || reg.getId().isBlank()) {
             reg.setId("reg_" + UUID.randomUUID());
         }
@@ -1530,6 +1573,12 @@ public class CompetitionService {
         // Format validation: Fill in the blank is rejected everywhere
         if ("FILL_BLANK".equalsIgnoreCase(qFormat) || "FILL_BLANK".equalsIgnoreCase(aFormat)) {
             throw new BadRequestException("Fill-in-the-blank format is not supported");
+        }
+        if ("IMAGE".equalsIgnoreCase(qFormat)) {
+            String mRef = (String) payload.get("mediaRef");
+            if (mRef == null || mRef.trim().isEmpty()) {
+                throw new BadRequestException("Image question requires an uploaded image");
+            }
         }
 
         AssessmentQuestion q = isNew ? new AssessmentQuestion() : questionRepository.findById(qId).orElse(new AssessmentQuestion());
@@ -2936,6 +2985,8 @@ public class CompetitionService {
             qMap.put("guidanceText", q.getGuidanceText());
             qMap.put("marks", q.getMarks());
             qMap.put("explanation", q.getExplanation());
+            qMap.put("mediaRef", q.getMediaRef());
+            qMap.put("fileId", q.getMediaRef());
 
             List<QuestionOption> options = questionOptionRepository.findByQuestionIdOrderBySortOrderAsc(q.getId());
             qMap.put("options", options);
@@ -3193,6 +3244,8 @@ public class CompetitionService {
             qMap.put("guidanceText", q.getGuidanceText());
             qMap.put("marks", q.getMarks());
             qMap.put("explanation", q.getExplanation());
+            qMap.put("mediaRef", q.getMediaRef());
+            qMap.put("fileId", q.getMediaRef());
 
             List<QuestionOption> options = questionOptionRepository.findByQuestionIdOrderBySortOrderAsc(q.getId());
             qMap.put("options", options);
@@ -3337,6 +3390,13 @@ public class CompetitionService {
         AssessmentQuestion question = questionRepository.findById(answer.getQuestionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Question not found with id: " + answer.getQuestionId()));
 
+        boolean isManualQuestion = ("VOICE".equalsIgnoreCase(question.getAnswerFormat()) || "TEXT".equalsIgnoreCase(question.getAnswerFormat()))
+                || (answer.getVoiceFileId() != null && !answer.getVoiceFileId().isBlank())
+                || (answer.getTextAnswer() != null && !answer.getTextAnswer().trim().isEmpty());
+        if (!isManualQuestion) {
+            throw new BadRequestException("MCQ questions are automatically evaluated by the system and cannot be manually scored.");
+        }
+
         Object marksObj = payload.get("marksAwarded");
         if (marksObj == null) {
             throw new BadRequestException("marksAwarded is required");
@@ -3396,7 +3456,7 @@ public class CompetitionService {
                 if (ans.getMarksAwarded() != null) {
                     totalVoiceMarks = totalVoiceMarks.add(ans.getMarksAwarded());
                 }
-                if ("PENDING_TRAINER".equalsIgnoreCase(ans.getEvaluationStatus())) {
+                if (!"EVALUATED".equalsIgnoreCase(ans.getEvaluationStatus())) {
                     anyVoicePending = true;
                 }
             }
@@ -4210,10 +4270,14 @@ public class CompetitionService {
             leaderboardEntryRepository.saveAll(entryList);
         }
 
-        return getLeaderboard(competitionId, currentUser);
+        return getLeaderboard(competitionId, currentUser, false);
     }
 
     public Map<String, Object> getLeaderboard(String competitionId, User currentUser) {
+        return getLeaderboard(competitionId, currentUser, true);
+    }
+
+    public Map<String, Object> getLeaderboard(String competitionId, User currentUser, boolean allowRecalculate) {
         Competition comp = competitionRepository.findById(competitionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Competition not found: " + competitionId));
 
@@ -4221,7 +4285,7 @@ public class CompetitionService {
                 ? leaderboardCacheRepository.findByCompetitionIdOrderByRankAsc(competitionId)
                 : Collections.emptyList();
 
-        if (cached == null || cached.isEmpty()) {
+        if ((cached == null || cached.isEmpty()) && allowRecalculate) {
             return recalculateLeaderboard(competitionId, currentUser);
         }
 

@@ -179,11 +179,13 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
       // 2. Paid competition -> Launch Razorpay Checkout
       const rzpOptions = {
         key: orderData.keyId,
+        keyId: orderData.keyId,
         amount: orderData.amount,
         currency: orderData.currency || 'INR',
         name: 'Zoro English Academy',
         description: `Competition Registration: ${competition.name || competition.title}`,
         order_id: orderData.orderId,
+        orderId: orderData.orderId,
         prefill: {
           name: cleanName,
           email: cleanEmail,
@@ -199,9 +201,9 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
         async (paymentResponse) => {
           try {
             const verifyPayload = {
-              razorpayOrderId: paymentResponse.razorpay_order_id,
-              razorpayPaymentId: paymentResponse.razorpay_payment_id,
-              razorpaySignature: paymentResponse.razorpay_signature,
+              razorpayOrderId: paymentResponse.razorpayOrderId || paymentResponse.razorpay_order_id,
+              razorpayPaymentId: paymentResponse.razorpayPaymentId || paymentResponse.razorpay_payment_id,
+              razorpaySignature: paymentResponse.razorpaySignature || paymentResponse.razorpay_signature,
               competitionId: competition.id,
               studentEmail: cleanEmail,
               registrationId: orderData.registrationId
@@ -214,7 +216,7 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
                 await createNotification({
                   trainerName: '',
                   title: `Payment & Registration Confirmed: ${competition.name || competition.title}`,
-                  desc: `Your registration for ${competition.name || competition.title} has been confirmed. Payment ID: ${paymentResponse.razorpay_payment_id}.`,
+                  desc: `Your registration for ${competition.name || competition.title} has been confirmed. Payment ID: ${paymentResponse.razorpayPaymentId || paymentResponse.razorpay_payment_id}.`,
                   studentEmail: cleanEmail,
                   type: 'competition_reg'
                 }).catch(err => console.warn('Notification error:', err));
@@ -227,23 +229,41 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
               });
             } else {
               setLoading(false);
-              setFailureDialog(verifyRes.message || 'Payment verification failed on the server.');
+              setFailureDialog('Payment could not be verified. If money was deducted it will be refunded or confirmed shortly.');
             }
           } catch (verErr) {
             setLoading(false);
-            setFailureDialog(verErr?.response?.data?.message || verErr.message || 'Error occurred while verifying payment.');
+            console.error('Payment verification failed:', verErr);
+            setFailureDialog('Payment could not be verified. If money was deducted it will be refunded or confirmed shortly.');
           }
         },
         (errorDismissal) => {
           setLoading(false);
-          const reasonMsg = errorDismissal?.description || errorDismissal?.reason || 'Payment was cancelled or dismissed.';
+          console.warn('Payment dismissed/failed:', errorDismissal);
+          let reasonMsg = 'Payment could not be started. Please try again.';
+          if (errorDismissal?.message?.includes('cancelled')) {
+            reasonMsg = 'Payment was cancelled.';
+          }
           setFailureDialog(reasonMsg);
         }
       );
     } catch (err) {
       setLoading(false);
-      const serverMsg = err?.response?.data?.message || err?.message || 'Failed to process competition registration.';
-      setFailureDialog(serverMsg);
+      console.error('Registration/Payment error:', err);
+      let userMsg = 'Payment could not be started. Please try again.';
+      const status = err?.response?.status;
+      const serverMsg = err?.response?.data?.message || err?.message || '';
+
+      if (status === 503 || serverMsg.includes('not configured')) {
+        userMsg = 'Payment is temporarily unavailable. Please try again later.';
+      } else if (status === 409 || serverMsg.includes('closed')) {
+        userMsg = 'Registration for this competition is closed.';
+      } else if (serverMsg.includes('cancelled')) {
+        userMsg = 'Payment was cancelled.';
+      } else if (serverMsg.includes('verified') || serverMsg.includes('deducted')) {
+        userMsg = 'Payment could not be verified. If money was deducted it will be refunded or confirmed shortly.';
+      }
+      setFailureDialog(userMsg);
     }
   };
 

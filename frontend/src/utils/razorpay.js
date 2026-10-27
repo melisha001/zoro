@@ -18,54 +18,77 @@ const loadRazorpayScript = () => {
   });
 };
 
-export const initiateRazorpayPayment = async ({
-  keyId,
-  orderId,
-  amount,
-  currency = 'INR',
-  competitionName,
-  participantName,
-  participantEmail,
-  participantPhone,
-  description
-}) => {
+export const initiateRazorpayPayment = async (inputOptions = {}, callbackSuccess, callbackError) => {
   const isLoaded = await loadRazorpayScript();
   if (!isLoaded) {
-    throw new Error('Razorpay SDK failed to load. Please check your internet connection.');
+    const loadErr = new Error('Payment could not be started. Please try again.');
+    if (typeof callbackError === 'function') callbackError(loadErr);
+    throw loadErr;
+  }
+
+  // Handle both camelCase and snake_case parameter names
+  const key = inputOptions?.keyId || inputOptions?.key;
+  const orderId = inputOptions?.orderId || inputOptions?.order_id;
+  const amount = inputOptions?.amount;
+  const currency = inputOptions?.currency || 'INR';
+  const name = inputOptions?.name || 'Zoro English Academy';
+  const description = inputOptions?.description || `Registration for ${inputOptions?.competitionName || 'Competition'}`;
+  const prefill = inputOptions?.prefill || {
+    name: inputOptions?.participantName || '',
+    email: inputOptions?.participantEmail || '',
+    contact: inputOptions?.participantPhone || ''
+  };
+
+  if (!key || String(key).trim() === '') {
+    console.error('Razorpay initiation error: No public key provided to initiateRazorpayPayment');
+    const keyErr = new Error('Payment could not be started. Please try again.');
+    if (typeof callbackError === 'function') callbackError(keyErr);
+    throw keyErr;
   }
 
   return new Promise((resolve, reject) => {
     const options = {
-      key: keyId,
+      key: String(key).trim(),
       order_id: orderId,
       amount: Number(amount), // Amount in paise as returned by backend
       currency: currency || 'INR',
-      name: 'Zoro English Academy',
-      description: description || `Registration for ${competitionName || 'Competition'}`,
+      name: name,
+      description: description,
       image: '/assets/logo.png',
       handler: function (response) {
         if (response && response.razorpay_payment_id) {
-          resolve({
+          const result = {
             success: true,
             razorpayPaymentId: response.razorpay_payment_id,
+            razorpay_payment_id: response.razorpay_payment_id,
             razorpayOrderId: response.razorpay_order_id || orderId,
-            razorpaySignature: response.razorpay_signature || ''
-          });
+            razorpay_order_id: response.razorpay_order_id || orderId,
+            razorpaySignature: response.razorpay_signature || '',
+            razorpay_signature: response.razorpay_signature || ''
+          };
+          if (typeof callbackSuccess === 'function') {
+            try {
+              callbackSuccess(result);
+            } catch (cbErr) {
+              console.error('Error in payment success callback:', cbErr);
+            }
+          }
+          resolve(result);
         } else {
-          reject(new Error('Payment failed or returned invalid response from gateway.'));
+          const err = new Error('Payment could not be verified. If money was deducted it will be refunded or confirmed shortly.');
+          if (typeof callbackError === 'function') callbackError(err);
+          reject(err);
         }
       },
-      prefill: {
-        name: participantName || '',
-        email: participantEmail || '',
-        contact: participantPhone || ''
-      },
-      theme: {
+      prefill: prefill,
+      theme: inputOptions?.theme || {
         color: '#0F52BA'
       },
       modal: {
         ondismiss: function () {
-          reject(new Error('Payment cancelled by user.'));
+          const cancelErr = new Error('Payment was cancelled.');
+          if (typeof callbackError === 'function') callbackError(cancelErr);
+          reject(cancelErr);
         }
       }
     };
@@ -73,12 +96,17 @@ export const initiateRazorpayPayment = async ({
     try {
       const rzp = new window.Razorpay(options);
       rzp.on('payment.failed', function (response) {
-        reject(new Error(response?.error?.description || 'Payment failed at gateway.'));
+        console.error('Razorpay gateway payment.failed event:', response?.error);
+        const failErr = new Error('Payment could not be started. Please try again.');
+        if (typeof callbackError === 'function') callbackError(failErr);
+        reject(failErr);
       });
       rzp.open();
     } catch (err) {
       console.error('Razorpay Modal error:', err);
-      reject(new Error(err?.message || 'Failed to initialize payment gateway.'));
+      const friendlyErr = new Error('Payment could not be started. Please try again.');
+      if (typeof callbackError === 'function') callbackError(friendlyErr);
+      reject(friendlyErr);
     }
   });
 };

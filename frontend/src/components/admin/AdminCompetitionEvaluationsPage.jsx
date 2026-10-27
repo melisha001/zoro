@@ -21,7 +21,8 @@ import {
   RefreshCw,
   AlertCircle,
   ShieldAlert,
-  ShieldCheck
+  ShieldCheck,
+  FileText
 } from 'lucide-react';
 import {
   getCompetitions,
@@ -31,6 +32,7 @@ import {
 } from '../../api/competitionApi';
 import { resolveFileUrl } from '../../api/fileApi';
 import AudioPromptPlayer from '../common/AudioPromptPlayer';
+import QuestionMedia from '../common/QuestionMedia';
 import InlineSpinner from '../common/InlineSpinner';
 import ButtonSpinner from '../common/ButtonSpinner';
 import { useDialog } from '../../context/DialogContext';
@@ -668,7 +670,9 @@ export default function AdminCompetitionEvaluationsPage() {
 
                     {attemptDetail.questions?.map((q, idx) => {
                       const ans = q.studentAnswer;
-                      const isVoice = q.answerFormat === 'VOICE';
+                      const isVoice = q.answerFormat === 'VOICE' || (ans && ans.voiceFileId);
+                      const isText = q.answerFormat === 'TEXT';
+                      const isManual = isVoice || isText;
                       const formState = (ans && evaluatingMap[ans.id]) || {};
 
                       return (
@@ -687,10 +691,12 @@ export default function AdminCompetitionEvaluationsPage() {
                                   className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                                     isVoice
                                       ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                      : isText
+                                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                                       : 'bg-blue-50 text-blue-700 border border-blue-200'
                                   }`}
                                 >
-                                  {isVoice ? 'Voice Answer' : 'MCQ Option'}
+                                  {isVoice ? 'Voice Answer' : isText ? 'Written Answer' : 'MCQ Option'}
                                 </span>
                                 <span className="text-[10px] font-bold text-slate-400">
                                   Max Marks: {q.marks || 1}
@@ -702,22 +708,23 @@ export default function AdminCompetitionEvaluationsPage() {
                             {ans && (
                               <span
                                 className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                                  ans.evaluationStatus === 'EVALUATED'
+                                  (!isManual || ans.evaluationStatus === 'EVALUATED')
                                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                     : 'bg-amber-50 text-amber-700 border border-amber-200'
                                 }`}
                               >
-                                {ans.evaluationStatus === 'EVALUATED' ? 'Graded' : 'Pending'}
+                                {(!isManual || ans.evaluationStatus === 'EVALUATED') ? 'Graded' : 'Pending'}
                               </span>
                             )}
                           </div>
 
                           {/* Media prompt if present */}
-                          {q.mediaRef && (
-                            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] text-slate-600">
-                              <span className="font-bold text-slate-800">Media Prompt:</span>{' '}
-                              <code className="text-[10px] font-mono text-indigo-700">{q.mediaRef}</code>
-                            </div>
+                          {(q.questionFormat === 'IMAGE' || q.questionFormat === 'VIDEO' || q.questionFormat === 'AUDIO' || q.mediaRef || q.fileId) && (
+                            <QuestionMedia
+                              questionFormat={q.questionFormat}
+                              mediaRef={q.mediaRef || q.fileId}
+                              title={`Question ${idx + 1} Prompt`}
+                            />
                           )}
 
                           {/* Student Answer Section */}
@@ -754,22 +761,52 @@ export default function AdminCompetitionEvaluationsPage() {
                                 </div>
                               )}
 
-                              {/* MCQ Answer Info */}
-                              {!isVoice && (
-                                <div className="text-xs">
-                                  <span className="font-bold text-slate-600">Selected Option: </span>
-                                  <span className="font-black text-slate-900">
-                                    {ans.selectedOptionId || 'No option selected'}
-                                  </span>
-                                  {ans.isCorrect != null && (
-                                    <span
-                                      className={`ml-2 font-bold ${
-                                        ans.isCorrect ? 'text-emerald-600' : 'text-rose-600'
-                                      }`}
-                                    >
-                                      ({ans.isCorrect ? 'Correct' : 'Incorrect'})
+                              {/* Written Text Answer */}
+                              {isText && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                      <span>Candidate's Text Answer</span>
                                     </span>
+                                    <span className="text-[10px] text-slate-400 font-bold">
+                                      {(ans.textAnswer || '').length} characters
+                                    </span>
+                                  </div>
+                                  {ans.textAnswer ? (
+                                    <div className="p-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed">
+                                      {ans.textAnswer}
+                                    </div>
+                                  ) : (
+                                    <div className="p-3 bg-rose-50 text-rose-700 text-[11px] rounded-xl border border-rose-100">
+                                      Written answer not submitted or student skipped this question.
+                                    </div>
                                   )}
+                                </div>
+                              )}
+
+                              {/* MCQ Answer Info */}
+                              {!isManual && (
+                                <div className="text-xs space-y-1">
+                                  <div>
+                                    <span className="font-bold text-slate-600">Candidate Choice: </span>
+                                    <span className="font-black text-slate-900">
+                                      {(() => {
+                                        if (!ans.selectedOptionId) return 'No option selected';
+                                        const sel = q.options?.find(o => o.id === ans.selectedOptionId);
+                                        return sel ? (sel.optionText || sel.text) : ans.selectedOptionId;
+                                      })()}
+                                    </span>
+                                    {ans.isCorrect != null && (
+                                      <span
+                                        className={`ml-2 font-bold ${
+                                          ans.isCorrect ? 'text-emerald-600' : 'text-rose-600'
+                                        }`}
+                                      >
+                                        ({ans.isCorrect ? 'Correct' : 'Incorrect'})
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               )}
 
@@ -786,8 +823,8 @@ export default function AdminCompetitionEvaluationsPage() {
                                 </div>
                               )}
 
-                              {/* Grading Form for Voice Question */}
-                              {isVoice && (
+                              {/* Grading Form for Manual (Voice/Text) Question */}
+                              {isManual && (
                                 <div className="border-t border-slate-200 pt-3 space-y-3">
                                   {/* Evaluation Criteria Rubric if present */}
                                   {q.criteria && q.criteria.length > 0 && (

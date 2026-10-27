@@ -48,7 +48,14 @@ public class CompetitionController {
 
     @GetMapping
     public ApiResponse<List<Competition>> getCompetitions() {
-        return ApiResponse.ok(competitionService.getAllCompetitions());
+        User user = null;
+        try {
+            user = getCurrentUser();
+        } catch (Exception ignored) {}
+        if (user != null && ("ADMIN".equals(user.getRole()) || "SUPER_ADMIN".equals(user.getRole()))) {
+            return ApiResponse.ok(competitionService.getAllCompetitions());
+        }
+        return ApiResponse.ok(competitionService.getPublicActiveCompetitions());
     }
 
     @GetMapping("/registrations")

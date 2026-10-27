@@ -158,7 +158,7 @@ class RazorpayPaymentServiceTest {
                 paymentService.createCompetitionOrder(request, "127.0.0.1")
         );
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Online payments are not configured"));
+        assertTrue(ex.getReason().contains("Payments are not configured"));
     }
 
     @Test

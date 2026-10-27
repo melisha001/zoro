@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, Video, FileText, Layers, Trash2, Edit, X, 
   ExternalLink, Image as ImageIcon, AlertCircle,
-  Music, Download, GripVertical, ChevronUp, ChevronDown
+  Music, Download, GripVertical, ChevronUp, ChevronDown, Eye
 } from 'lucide-react';
 import * as tus from 'tus-js-client';
 import {
@@ -28,6 +28,7 @@ import { uploadFile, resolveFileUrl, openFileWithSignedLink } from '../../api/fi
 import { createVideoUploadSession, getVideoDetails } from '../../api/videoApi';
 import { useDialog } from '../../context/DialogContext';
 import ConfirmModal from '../common/ConfirmModal';
+import UniversalFileViewerModal from '../common/UniversalFileViewerModal';
 
 const ALLOWED_EXTENSIONS = [
   'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt',
@@ -46,6 +47,7 @@ function SortableModuleCard({
   onMoveUp,
   onMoveDown,
   renderFileIcon,
+  onPreviewFile,
 }) {
   const {
     attributes,
@@ -218,10 +220,10 @@ function SortableModuleCard({
                 {notes.fileUrl && (
                   <button
                     type="button"
-                    onClick={() => openFileWithSignedLink(notes.fileUrl, notes.name)}
+                    onClick={() => onPreviewFile && onPreviewFile({ url: notes.fileUrl, name: notes.name, type: notes.type, size: notes.size })}
                     className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
                   >
-                    <Download className="w-3 h-3" /> Download / View
+                    <Eye className="w-3 h-3" /> Preview
                   </button>
                 )}
               </div>
@@ -245,10 +247,10 @@ function SortableModuleCard({
                 {worksheet.fileUrl && (
                   <button
                     type="button"
-                    onClick={() => openFileWithSignedLink(worksheet.fileUrl, worksheet.name)}
+                    onClick={() => onPreviewFile && onPreviewFile({ url: worksheet.fileUrl, name: worksheet.name, type: worksheet.type, size: worksheet.size })}
                     className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
                   >
-                    <Download className="w-3 h-3" /> Download / View
+                    <Eye className="w-3 h-3" /> Preview
                   </button>
                 )}
               </div>
@@ -272,10 +274,10 @@ function SortableModuleCard({
                 {assignment.fileUrl && (
                   <button
                     type="button"
-                    onClick={() => openFileWithSignedLink(assignment.fileUrl, assignment.name)}
+                    onClick={() => onPreviewFile && onPreviewFile({ url: assignment.fileUrl, name: assignment.name, type: assignment.type, size: assignment.size })}
                     className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[10px] font-bold cursor-pointer"
                   >
-                    <Download className="w-3 h-3" /> Download / View
+                    <Eye className="w-3 h-3" /> Preview
                   </button>
                 )}
               </div>
@@ -300,6 +302,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
   const [deleteModalData, setDeleteModalData] = useState(null);
   const [fileErrors, setFileErrors] = useState({});
   const [uploadingFiles, setUploadingFiles] = useState({});
+  const [previewFile, setPreviewFile] = useState(null);
 
   const [videoUploadState, setVideoUploadState] = useState({
     isUploading: false,
@@ -828,6 +831,7 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                       onMoveUp={() => handleMoveModule(index, 'up')}
                       onMoveDown={() => handleMoveModule(index, 'down')}
                       renderFileIcon={renderFileIcon}
+                      onPreviewFile={setPreviewFile}
                     />
                   ))}
                 </div>
@@ -989,13 +993,24 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                 {formData.notesFile ? (
                   <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 text-xs font-bold">
                     <span>📄 {formData.notesFile.name} ({formData.notesFile.size})</span>
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, notesFile: null })}
-                      className="text-rose-600 font-bold hover:underline"
-                    >
-                      Remove
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {formData.notesFile.fileUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFile({ url: formData.notesFile.fileUrl, name: formData.notesFile.name, type: formData.notesFile.type, size: formData.notesFile.size })}
+                          className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Preview
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, notesFile: null })}
+                        className="text-rose-600 font-bold hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <input
@@ -1020,13 +1035,24 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                 {formData.worksheetFile ? (
                   <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 text-xs font-bold">
                     <span>📑 {formData.worksheetFile.name} ({formData.worksheetFile.size})</span>
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, worksheetFile: null })}
-                      className="text-rose-600 font-bold hover:underline"
-                    >
-                      Remove
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {formData.worksheetFile.fileUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFile({ url: formData.worksheetFile.fileUrl, name: formData.worksheetFile.name, type: formData.worksheetFile.type, size: formData.worksheetFile.size })}
+                          className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Preview
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, worksheetFile: null })}
+                        className="text-rose-600 font-bold hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <input
@@ -1051,13 +1077,24 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
                 {formData.assignmentFile ? (
                   <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 text-xs font-bold">
                     <span>📝 {formData.assignmentFile.name} ({formData.assignmentFile.size})</span>
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, assignmentFile: null })}
-                      className="text-rose-600 font-bold hover:underline"
-                    >
-                      Remove
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {formData.assignmentFile.fileUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFile({ url: formData.assignmentFile.fileUrl, name: formData.assignmentFile.name, type: formData.assignmentFile.type, size: formData.assignmentFile.size })}
+                          className="text-blue-600 hover:underline inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Preview
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, assignmentFile: null })}
+                        className="text-rose-600 font-bold hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <input
@@ -1093,6 +1130,14 @@ export default function CourseContentPage({ courseId: propCourseId, setActiveScr
         confirmText="Delete Module"
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteModalData(null)}
+      />
+
+      {/* Universal File Viewer Modal */}
+      <UniversalFileViewerModal
+        isOpen={Boolean(previewFile)}
+        onClose={() => setPreviewFile(null)}
+        file={previewFile}
+        hideDownload={false}
       />
 
     </div>

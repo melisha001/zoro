@@ -75,6 +75,9 @@ public class FileAccessServiceIntegrationTest {
     @Autowired
     private TrainerCourseRequestRepository trainerCourseRequestRepository;
 
+    @Autowired
+    private CompetitionStudyMaterialRepository competitionStudyMaterialRepository;
+
     private String testCourseId;
     private String testBatchId;
 
@@ -274,5 +277,70 @@ public class FileAccessServiceIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.message").value("Access denied: Private file is not referenced by any course, schedule, or assignment"));
+    }
+
+    @Test
+    @WithMockUser(username = "trainer_bob@zoro.com", roles = {"TRAINER"})
+    public void testTrainerCanViewStudyMaterialAndViewOnlyForbiddenDownload() throws Exception {
+        StoredFile file = createPrivateStoredFile("study_guide.pdf", "competition-study-material", "admin");
+
+        CompetitionStudyMaterial csm = new CompetitionStudyMaterial();
+        csm.setId("csm_" + UUID.randomUUID());
+        csm.setCompetitionId("comp_" + UUID.randomUUID());
+        csm.setStoredFileId(file.getId());
+        csm.setTitle("Official Guide");
+        competitionStudyMaterialRepository.save(csm);
+
+        // Viewing is allowed
+        mockMvc.perform(get("/api/files/" + file.getId() + "/link"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        // Downloading is forbidden for non-admin
+        mockMvc.perform(get("/api/files/" + file.getId() + "/link?download=true"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("DOWNLOAD_FORBIDDEN"));
+    }
+
+    @Test
+    @WithMockUser(username = "student_alice@zoro.com", roles = {"STUDENT"})
+    public void testStudentCanViewStudyMaterialAndViewOnlyForbiddenDownload() throws Exception {
+        StoredFile file = createPrivateStoredFile("notes.pdf", "competition-study-material", "admin");
+
+        CompetitionStudyMaterial csm = new CompetitionStudyMaterial();
+        csm.setId("csm_" + UUID.randomUUID());
+        csm.setCompetitionId("comp_" + UUID.randomUUID());
+        csm.setStoredFileId(file.getId());
+        csm.setTitle("Public Study Notes");
+        competitionStudyMaterialRepository.save(csm);
+
+        // Viewing is allowed for enrolled or un-enrolled students
+        mockMvc.perform(get("/api/files/" + file.getId() + "/link"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        // Downloading is forbidden for students
+        mockMvc.perform(get("/api/files/" + file.getId() + "/link?download=true"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("DOWNLOAD_FORBIDDEN"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin@zoro.com", roles = {"ADMIN"})
+    public void testAdminCanDownloadFile() throws Exception {
+        StoredFile file = createPrivateStoredFile("admin_rules.pdf", "competition-study-material", "admin");
+
+        CompetitionStudyMaterial csm = new CompetitionStudyMaterial();
+        csm.setId("csm_" + UUID.randomUUID());
+        csm.setCompetitionId("comp_" + UUID.randomUUID());
+        csm.setStoredFileId(file.getId());
+        csm.setTitle("Admin Downloadable Rules");
+        competitionStudyMaterialRepository.save(csm);
+
+        // Admin download is allowed
+        mockMvc.perform(get("/api/files/" + file.getId() + "/link?download=true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.url").value(org.hamcrest.Matchers.containsString("download=true")));
     }
 }
