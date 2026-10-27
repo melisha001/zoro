@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { 
   Award, Layers, CheckCircle2, Clock, Play, AlertCircle, 
   HelpCircle, ChevronRight, ChevronLeft, Flag, Eye, 
-  Volume2, Mic, ArrowLeft, Send, Sparkles, Check, X, Lock, Flame, ShieldAlert, UserCheck
+  Volume2, Mic, ArrowLeft, Send, Sparkles, Check, X, Lock, Flame, ShieldAlert, UserCheck, FileText
 } from 'lucide-react';
 import { 
   getStudentFinalAssessment, 
@@ -17,6 +17,7 @@ import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import SkeletonCard from '../common/SkeletonCard';
 import SafeVideo from '../common/SafeVideo';
+import SafeImage from '../common/SafeImage';
 import AudioPromptPlayer from '../common/AudioPromptPlayer';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 import SecureExamConsentModal from './SecureExamConsentModal';
@@ -80,6 +81,7 @@ export default function CompetitionFinalAssessmentPage() {
   // Remaining Seconds countdown during test
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const timerRef = useRef(null);
+  const textSaveTimeoutRef = useRef(null);
 
   // Results View state
   const [resultsData, setResultsData] = useState(null);
@@ -291,6 +293,24 @@ export default function CompetitionFinalAssessmentPage() {
     });
   };
 
+  // Text answer change with autosave
+  const handleTextAnswerChange = (questionId, textVal) => {
+    const updated = {
+      ...studentAnswers,
+      [questionId]: {
+        ...(studentAnswers[questionId] || {}),
+        textAnswer: textVal
+      }
+    };
+    setStudentAnswers(updated);
+    if (textSaveTimeoutRef.current) {
+      clearTimeout(textSaveTimeoutRef.current);
+    }
+    textSaveTimeoutRef.current = setTimeout(() => {
+      triggerAutoSave(questionId, { textAnswer: textVal });
+    }, 500);
+  };
+
   // Trigger autosave to server
   const triggerAutoSave = async (questionId, payload) => {
     if (!assessmentData?.id) return;
@@ -402,15 +422,12 @@ export default function CompetitionFinalAssessmentPage() {
             Back to Final Assessment Dashboard
           </button>
           <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase ${setStyle.badge}`}>
-              Set {assignedSetCode} Paper
-            </span>
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
               isPendingVoice 
                 ? 'bg-amber-100 text-amber-800 border border-amber-200' 
                 : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
             }`}>
-              {isPendingVoice ? 'Voice Evaluation Pending' : 'Evaluation Completed'}
+              {isPendingVoice ? 'Evaluation Pending' : 'Evaluation Completed'}
             </span>
           </div>
         </div>
@@ -461,9 +478,9 @@ export default function CompetitionFinalAssessmentPage() {
             <div className="mt-6 bg-amber-400/20 border border-amber-300/30 rounded-xl p-4 flex items-start gap-3">
               <Mic className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-white font-bold text-sm">Voice Responses Submitted — Awaiting Trainer Review</h4>
+                <h4 className="text-white font-bold text-sm">Responses Submitted — Awaiting Manual Evaluation</h4>
                 <p className="text-indigo-100 text-xs mt-1">
-                  Your MCQ responses have been automatically scored ({score} marks). Your audio recording(s) have been securely saved and dispatched to your assigned Set Trainer ({assignedSet?.trainerName || 'Assigned Trainer'}) for manual assessment. Final marks will update upon evaluation completion.
+                  Your objective responses have been automatically scored ({score} marks). Your subjective submissions have been securely saved and dispatched to our evaluation team for manual assessment. Final marks will update upon evaluation completion.
                 </p>
               </div>
             </div>
@@ -555,7 +572,25 @@ export default function CompetitionFinalAssessmentPage() {
                       />
                       {studentAnswer.feedback && (
                         <div className="mt-3 text-xs bg-white p-3 rounded-lg border border-purple-200 text-slate-700">
-                          <span className="font-bold text-purple-700">Trainer Feedback: </span>
+                          <span className="font-bold text-purple-700">Evaluation Feedback: </span>
+                          {studentAnswer.feedback}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Text answer submission review */}
+                  {q.answerFormat === 'TEXT' && studentAnswer.textAnswer && (
+                    <div className="mt-4 bg-blue-50/70 border border-blue-200 rounded-xl p-4">
+                      <div className="flex items-center gap-2 text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">
+                        <FileText className="w-4 h-4 text-blue-700" /> Your Written Submission
+                      </div>
+                      <div className="p-3 bg-white rounded-lg border border-blue-100 text-xs text-slate-800 whitespace-pre-wrap font-sans">
+                        {studentAnswer.textAnswer}
+                      </div>
+                      {studentAnswer.feedback && (
+                        <div className="mt-3 text-xs bg-white p-3 rounded-lg border border-blue-200 text-slate-700">
+                          <span className="font-bold text-blue-700">Evaluation Feedback: </span>
                           {studentAnswer.feedback}
                         </div>
                       )}
@@ -640,7 +675,7 @@ export default function CompetitionFinalAssessmentPage() {
     const assignedSetCode = assignedSet?.code || attemptData.assignedSet?.code || 'A';
     const setStyle = SET_STYLES[assignedSetCode] || SET_STYLES.A;
 
-    const answeredCount = Object.values(studentAnswers).filter(a => a?.selectedOptionId || a?.voiceFileId).length;
+    const answeredCount = Object.values(studentAnswers).filter(a => a?.selectedOptionId || a?.voiceFileId || (a?.textAnswer && a.textAnswer.trim())).length;
 
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col -m-6 md:-m-8">
@@ -656,9 +691,6 @@ export default function CompetitionFinalAssessmentPage() {
         <header className="sticky top-0 z-30 bg-slate-900/95 border-b border-slate-800 backdrop-blur-md px-4 md:px-8 py-3.5">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className={`px-2.5 py-1 rounded-md text-xs font-black tracking-wide uppercase ${setStyle.badge}`}>
-                SET {assignedSetCode}
-              </span>
               <div>
                 <h2 className="text-sm md:text-base font-bold text-white truncate max-w-xs md:max-w-md">
                   {assessmentData?.title || 'Championship Final Assessment'}
@@ -779,6 +811,18 @@ export default function CompetitionFinalAssessmentPage() {
                       />
                     </div>
                   )}
+
+                  {/* Image question media player */}
+                  {(currentQuestion.questionFormat === 'IMAGE' && (currentQuestion.mediaRef || currentQuestion.imageUrl)) && (
+                    <div className="mt-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                      <p className="text-xs text-slate-400 mb-2 font-semibold">Image Attachment:</p>
+                      <SafeImage
+                        src={resolveFileUrl(currentQuestion.imageUrl || currentQuestion.mediaRef)}
+                        alt="Question Image"
+                        className="max-h-96 w-auto rounded-lg object-contain mx-auto"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Question Response Mode */}
@@ -799,6 +843,29 @@ export default function CompetitionFinalAssessmentPage() {
                         savedDurationSec={currentAnswer?.voiceDurationSec}
                         onUploadComplete={(data) => handleVoiceAnswerComplete(currentQuestion.id, data?.voiceFileId || data?.id, data?.durationSec || data?.duration)}
                         onRecordingComplete={(fileId, dur) => handleVoiceAnswerComplete(currentQuestion.id, fileId, dur)}
+                      />
+                    </div>
+                  ) : currentQuestion.answerFormat === 'TEXT' ? (
+                    <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs font-bold text-indigo-300 uppercase tracking-wider">
+                          <FileText className="w-4 h-4 text-indigo-400" />
+                          Written Response Required
+                        </div>
+                        <span className="text-xs text-slate-400 font-mono">
+                          {(currentAnswer?.textAnswer || '').length} / 5000 characters
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Type your complete answer in the text area below. Your progress is saved automatically.
+                      </p>
+                      <textarea
+                        value={currentAnswer?.textAnswer || ''}
+                        onChange={(e) => handleTextAnswerChange(currentQuestion.id, e.target.value)}
+                        maxLength={5000}
+                        rows={8}
+                        placeholder="Type your answer here (up to 5,000 characters)..."
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-slate-500 resize-y font-sans leading-relaxed"
                       />
                     </div>
                   ) : (
@@ -1136,49 +1203,10 @@ export default function CompetitionFinalAssessmentPage() {
         </div>
       </div>
 
-      {/* Two Column Grid: Assigned Set Card + Examination Policies */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Card 1: Student's Assigned Set & Trainer */}
-        <div className={`rounded-2xl p-6 ${setStyle.cardBg} flex flex-col justify-between`}>
-          <div>
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${setStyle.badge}`}>
-                  Set {assignedSetCode}
-                </span>
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  Assigned Examination Paper
-                </span>
-              </div>
-              <Award className="w-6 h-6 text-indigo-600" />
-            </div>
-
-            <h3 className={`text-xl font-bold mt-4 ${setStyle.title}`}>
-              Championship Paper — Set {assignedSetCode}
-            </h3>
-            <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Your registration is permanently mapped to Set {assignedSetCode}. You will receive randomized questions and options configured specifically for this set paper.
-            </p>
-          </div>
-
-          <div className={`mt-6 pt-4 border-t border-slate-100 rounded-xl p-3.5 flex items-center gap-3.5 ${setStyle.trainerBox}`}>
-            <div className="w-10 h-10 rounded-full bg-white border border-slate-200 shadow-xs flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
-              <UserCheck className="w-5 h-5 text-indigo-600" />
-            </div>
-            <div className="truncate">
-              <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">Assigned Evaluator / Trainer</div>
-              <div className="text-sm font-bold text-slate-900 truncate">
-                {assignedSet?.trainerName || 'Dedicated Academy Trainer'}
-              </div>
-              <div className="text-xs text-slate-500 truncate">
-                {assignedSet?.trainerEmail || 'Assigned for Set ' + assignedSetCode + ' voice evaluations'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 2: Exam Policies & Strict Single-Attempt Rule */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+      {/* Examination Policies */}
+      <div className="w-full">
+        {/* Card: Exam Policies & Strict Single-Attempt Rule */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 text-rose-600 text-xs font-bold uppercase tracking-wider mb-2">
               <ShieldAlert className="w-4 h-4" /> Examination Rules & Instructions

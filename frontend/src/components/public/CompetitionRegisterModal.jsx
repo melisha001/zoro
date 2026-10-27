@@ -13,6 +13,7 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [successDialog, setSuccessDialog] = useState(null); // { competitionTitle, data }
   const [failureDialog, setFailureDialog] = useState(null); // string reason
 
@@ -58,7 +59,20 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
 
   const regFee = Number(competition.registrationFee || competition.fee || 0);
 
-  const handleSubmit = async (e) => {
+  const resetForm = () => {
+    setFormData({
+      studentName: currentUser?.name || currentUser?.studentName || '',
+      studentEmail: currentUser?.email || '',
+      studentPhone: currentUser?.phone || currentUser?.mobile || '',
+      studentId: currentUser?.studentId || currentUser?.id || null,
+      age: '',
+      school: '',
+      city: ''
+    });
+    setErrorMsg('');
+  };
+
+  const handleSubmit = (e) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -105,7 +119,20 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
       return;
     }
 
+    // Open Pre-Payment Confirmation Modal without creating order yet
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmAndProceed = async () => {
+    setShowConfirmModal(false);
     setLoading(true);
+
+    const cleanName = formData.studentName.trim();
+    const cleanEmail = formData.studentEmail.trim();
+    const cleanPhone = formData.studentPhone.trim();
+    const ageNum = Number(formData.age);
+    const cleanSchool = formData.school.trim();
+    const cleanCity = formData.city.trim();
 
     try {
       // 1. Server-driven order creation / registration check
@@ -219,6 +246,112 @@ export default function CompetitionRegisterModal({ competition, isOpen, onClose,
       setFailureDialog(serverMsg);
     }
   };
+
+  // Render Pre-Payment Confirmation Modal
+  if (showConfirmModal) {
+    const cleanName = formData.studentName.trim();
+    const cleanEmail = formData.studentEmail.trim();
+    const cleanPhone = formData.studentPhone.trim();
+    const cleanSchool = formData.school.trim();
+    const cleanCity = formData.city.trim();
+
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative space-y-5 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-center space-x-3 text-blue-600">
+            <div className="w-10 h-10 bg-blue-50 rounded-2xl flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900">Confirm Your Details</h3>
+              <p className="text-slate-500 text-xs font-semibold">Please review your registration details before proceeding</p>
+            </div>
+          </div>
+
+          {/* Important Warning Notice */}
+          <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 text-xs flex items-start space-x-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="font-semibold leading-relaxed">
+              Please verify your details carefully, especially your email address. Credentials will be delivered to this email.
+            </p>
+          </div>
+
+          {/* Details Summary Table/Grid */}
+          <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-2.5 text-xs">
+            <div className="flex justify-between py-1 border-b border-slate-200/60">
+              <span className="text-slate-500 font-medium">Competition</span>
+              <span className="text-slate-900 font-bold text-right">{competition.name || competition.title}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-slate-200/60">
+              <span className="text-slate-500 font-medium">Participant Name</span>
+              <span className="text-slate-900 font-bold">{cleanName}</span>
+            </div>
+            <div className="flex flex-col py-1 border-b border-slate-200/60 space-y-0.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Registered Email</span>
+                <span className="text-blue-700 font-bold">{cleanEmail}</span>
+              </div>
+              <span className="text-[11px] text-emerald-700 font-semibold text-right">
+                Your exam credentials and updates will be sent here
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-slate-200/60">
+              <span className="text-slate-500 font-medium">Mobile Number</span>
+              <span className="text-slate-900 font-bold">{cleanPhone}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-slate-200/60">
+              <span className="text-slate-500 font-medium">Age</span>
+              <span className="text-slate-900 font-bold">{formData.age} years</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-slate-200/60">
+              <span className="text-slate-500 font-medium">School / Institution</span>
+              <span className="text-slate-900 font-bold text-right">{cleanSchool}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-slate-200/60">
+              <span className="text-slate-500 font-medium">City</span>
+              <span className="text-slate-900 font-bold">{cleanCity}</span>
+            </div>
+            <div className="flex justify-between pt-1 font-bold text-sm">
+              <span className="text-slate-700">Registration Fee</span>
+              <span className={regFee > 0 ? 'text-blue-700 font-black' : 'text-emerald-700 font-black'}>
+                {regFee > 0 ? `₹${regFee.toLocaleString('en-IN')}` : 'FREE'}
+              </span>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowConfirmModal(false)}
+              className="py-3 px-4 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 transition cursor-pointer text-xs flex-1 text-center"
+            >
+              Edit Details
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowConfirmModal(false);
+                resetForm();
+                onClose();
+              }}
+              className="py-3 px-4 rounded-xl border border-rose-200 text-rose-700 font-bold hover:bg-rose-50 transition cursor-pointer text-xs flex-1 text-center"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmAndProceed}
+              className="py-3 px-5 rounded-xl bg-[#0F52BA] hover:bg-blue-700 text-white font-black shadow-md transition cursor-pointer text-xs flex-2 flex items-center justify-center space-x-1.5"
+            >
+              <span>{regFee > 0 ? `Confirm & Proceed to Payment (₹${regFee})` : 'Confirm Registration'}</span>
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Render Success App Dialog
   if (successDialog) {

@@ -3,7 +3,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom';
 import { 
   CheckSquare, Mic, Volume2, Award, Clock, CheckCircle2, 
   AlertCircle, Search, User, Filter, ArrowLeft, RefreshCw, 
-  Sparkles, ChevronRight, Save, Headphones, Layers, ShieldCheck, ShieldAlert
+  Sparkles, ChevronRight, Save, Headphones, Layers, ShieldCheck, ShieldAlert, FileText
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { 
@@ -517,13 +517,15 @@ export default function TrainerCompetitionEvaluationPage() {
                 attemptDetail.questions.map((q, idx) => {
                   const ans = q.studentAnswer;
                   const isVoice = q.answerFormat === 'VOICE' || (ans && ans.voiceFileId);
+                  const isText = q.answerFormat === 'TEXT';
+                  const isManual = isVoice || isText;
                   const form = (ans && evaluatingMap[ans.id]) || { marks: '', feedback: '', saving: false, error: '', success: false };
 
                   return (
                     <div 
                       key={q.id} 
                       className={`rounded-2xl border p-5 space-y-4 ${
-                        isVoice 
+                        isManual 
                           ? 'border-indigo-200 bg-white shadow-xs' 
                           : 'border-slate-200 bg-slate-50/50'
                       }`}
@@ -538,6 +540,11 @@ export default function TrainerCompetitionEvaluationPage() {
                             <span className="inline-flex items-center space-x-1 text-xs font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200">
                               <Mic className="w-3 h-3 text-purple-600" />
                               <span>Voice Response Task</span>
+                            </span>
+                          ) : isText ? (
+                            <span className="inline-flex items-center space-x-1 text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200">
+                              <FileText className="w-3 h-3 text-indigo-600" />
+                              <span>Written Response Task</span>
                             </span>
                           ) : (
                             <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200 text-slate-700">
@@ -564,11 +571,38 @@ export default function TrainerCompetitionEvaluationPage() {
                         </div>
                       )}
 
-                      {/* Non-Voice MCQ Display */}
-                      {!isVoice && (
+                      {/* Non-Voice/Non-Text MCQ Display */}
+                      {!isManual && (
                         <div className="text-xs text-slate-600 space-y-1 pt-2">
                           <div>Student Choice: {ans?.selectedOptionId ? 'Selected Option' : 'Not Answered'}</div>
                           <div>Evaluation: <strong className={ans?.isCorrect ? 'text-emerald-600' : 'text-rose-600'}>{ans?.isCorrect ? 'Correct (+10 marks)' : 'Incorrect (0 marks)'}</strong></div>
+                        </div>
+                      )}
+
+                      {/* WRITTEN TEXT RESPONSE SECTION */}
+                      {isText && (
+                        <div className="space-y-4 pt-2 border-t border-slate-100">
+                          <div className="bg-slate-900 text-white p-4 rounded-2xl space-y-2.5">
+                            <div className="flex items-center justify-between text-xs">
+                              <div className="flex items-center space-x-2 text-indigo-300 font-bold">
+                                <FileText className="w-4 h-4 text-indigo-400" />
+                                <span>Student Written Answer</span>
+                              </div>
+                              <span className="text-slate-400 text-[11px] font-mono">
+                                {(ans?.textAnswer || '').length} characters
+                              </span>
+                            </div>
+
+                            {ans?.textAnswer ? (
+                              <div className="p-3 bg-slate-800/90 rounded-xl border border-slate-700 text-xs text-slate-100 whitespace-pre-wrap font-sans leading-relaxed">
+                                {ans.textAnswer}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-rose-400 font-medium py-2">
+                                Written answer not submitted or student skipped this question.
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
 

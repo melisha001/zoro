@@ -196,22 +196,6 @@ export default function ContactPage({ onOpenEnquire }) {
                 </div>
               </div>
             </div>
-
-            {/* Quick Demo CTA Card */}
-            <div className="bg-gradient-to-br from-blue-900 to-slate-900 text-white rounded-3xl p-8 shadow-xl space-y-4">
-              <span className="text-xs font-black tracking-wider uppercase text-blue-300">Free Assessment</span>
-              <h3 className="text-xl font-black text-white">Book a Free Live Demo Session</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Experience our interactive virtual classroom and curriculum before enrolling. No obligation.
-              </p>
-              <button
-                type="button"
-                onClick={onOpenEnquire}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black py-3 rounded-xl transition shadow-md cursor-pointer text-sm"
-              >
-                Schedule Free Demo
-              </button>
-            </div>
           </div>
 
           {/* Contact Inquiry Form */}

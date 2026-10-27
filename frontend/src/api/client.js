@@ -4,7 +4,34 @@ export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.e
   ? import.meta.env.VITE_API_BASE_URL
   : (typeof window !== 'undefined' && window.__VITE_API_BASE_URL__)
     ? window.__VITE_API_BASE_URL__
-    : 'http://localhost:8080/api';
+    : '/api';
+
+/**
+ * Normalises an error message for user display ensuring no raw HTTP status codes,
+ * class names, SQL, internal error codes, or technical stack traces are shown.
+ */
+export function formatUserErrorMessage(err) {
+  if (!err) return 'An unexpected error occurred. Please try again.';
+  const rawMsg = typeof err === 'string' ? err : (err.message || err.error || '');
+  const code = typeof err === 'object' ? (err.code || err.errorCode || '') : '';
+  const status = typeof err === 'object' ? Number(err.status) : 0;
+
+  // Filter out technical leaks
+  const isTechnical = /Exception|SQLException|HibernateException|NullPointer|stacktrace|java\.lang|com\.zoroacademy|HTTP\s*\d{3}/i.test(rawMsg);
+
+  if (isTechnical || !rawMsg) {
+    if (status === 400 || code === 'INVALID_ARGUMENT') return 'The request could not be processed. Please check your entries and try again.';
+    if (status === 401 || code === 'UNAUTHORIZED' || code === 'AUTH_REQUIRED') return 'Please log in to continue.';
+    if (status === 403 || code === 'FORBIDDEN') return 'You do not have permission to perform this action.';
+    if (status === 404 || code === 'NOT_FOUND') return 'The requested item could not be found.';
+    if (status === 409 || code === 'CONFLICT') return 'This action could not be completed because of a conflict with current records.';
+    if (status >= 500 || code === 'INTERNAL_SERVER_ERROR') return 'An unexpected error occurred. Please try again later or contact our team if the issue persists.';
+    return 'An unexpected error occurred. Please try again later.';
+  }
+
+  // Clean any trailing or leading technical code prefixes like "INVALID_ARGUMENT: "
+  return rawMsg.replace(/^[A-Z0-9_]+:\s*/, '').trim();
+}
 
 export const getItem = (key, defaultVal = null) => {
   try {
@@ -326,11 +353,12 @@ export const apiFetch = async (endpoint, options = {}, isRetry = false) => {
     }
 
     if (!res.ok) {
+      const rawMessage = json?.message || (res.status === 404 ? 'Resource not found' : `Unable to complete request`);
       const errorPayload = {
         success: false,
         status: res.status,
         code: json?.errorCode || json?.code || `HTTP_${res.status}`,
-        message: json?.message || `HTTP ${res.status}: ${res.statusText}`,
+        message: formatUserErrorMessage({ message: rawMessage, status: res.status, code: json?.errorCode || json?.code }),
         correlationId: json?.correlationId || null,
         data: json?.data || null
       };

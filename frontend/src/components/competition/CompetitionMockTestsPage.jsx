@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { 
   Layers, CheckCircle2, Clock, Play, AlertCircle, 
   HelpCircle, ChevronRight, ChevronLeft, Flag, Award, Eye, 
-  Volume2, Mic, ArrowLeft, Send, Sparkles, Check, X, Lock, Flame
+  Volume2, Mic, ArrowLeft, Send, Sparkles, Check, X, Lock, Flame, FileText
 } from 'lucide-react';
 import { 
   getStudentMockTests, 
@@ -17,6 +17,7 @@ import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import SkeletonCard from '../common/SkeletonCard';
 import SafeVideo from '../common/SafeVideo';
+import SafeImage from '../common/SafeImage';
 import AudioPromptPlayer from '../common/AudioPromptPlayer';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 import SecureExamConsentModal from './SecureExamConsentModal';
@@ -49,6 +50,7 @@ export default function CompetitionMockTestsPage() {
   // Remaining Seconds countdown during test
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const timerRef = useRef(null);
+  const textSaveTimeoutRef = useRef(null);
 
   // Results View state
   const [resultsData, setResultsData] = useState(null);
@@ -268,6 +270,37 @@ export default function CompetitionMockTestsPage() {
     }
   };
 
+  // Autosave text answer
+  const handleTextAnswerChange = (questionId, textVal) => {
+    if (!activeTest) return;
+    setStudentAnswers(prev => ({
+      ...prev,
+      [questionId]: {
+        ...(prev[questionId] || {}),
+        textAnswer: textVal
+      }
+    }));
+    if (textSaveTimeoutRef.current) {
+      clearTimeout(textSaveTimeoutRef.current);
+    }
+    setSaveStatus('saving');
+    textSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await saveMockAssessmentAnswer(activeTest.id, {
+          questionId,
+          textAnswer: textVal
+        });
+        if (res && res.success) {
+          setSaveStatus('saved');
+        } else {
+          setSaveStatus('error');
+        }
+      } catch (err) {
+        setSaveStatus('error');
+      }
+    }, 500);
+  };
+
   // Autosave voice recording
   const handleVoiceUploadComplete = async (questionId, fileIdOrObj, durationSec) => {
     if (!activeTest) return;
@@ -408,7 +441,7 @@ export default function CompetitionMockTestsPage() {
             </div>
 
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 leading-relaxed max-w-md mx-auto">
-              Your answers have been securely recorded. The result will be published after the trainer evaluates the voice answers.
+              Your answers have been securely recorded. The result will be published after our evaluation team reviews your responses.
             </div>
 
             <div className="pt-2">
@@ -475,7 +508,7 @@ export default function CompetitionMockTestsPage() {
               </h1>
               <p className="text-sm text-indigo-100 max-w-xl">
                 {isPendingEvaluation
-                  ? 'Your MCQ section has been automatically evaluated. Your voice recordings have been queued for trainer evaluation.'
+                  ? 'Your objective section has been automatically evaluated. Your subjective responses have been queued for evaluation review.'
                   : 'Congratulations on completing this mock test simulation! Review detailed solutions and rationales below.'}
               </p>
             </div>
@@ -493,7 +526,7 @@ export default function CompetitionMockTestsPage() {
               </div>
               {isPendingEvaluation && (
                 <div className="mt-2 text-[11px] bg-amber-400/20 text-amber-200 border border-amber-300/30 rounded px-2 py-0.5">
-                  Trainer Review Pending
+                  Evaluation Review Pending
                 </div>
               )}
             </div>
@@ -589,7 +622,7 @@ export default function CompetitionMockTestsPage() {
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
-                          <Mic className="w-3.5 h-3.5" /> Pending Trainer
+                          <Mic className="w-3.5 h-3.5" /> Pending Evaluation
                         </span>
                       )
                     )}
@@ -680,8 +713,9 @@ export default function CompetitionMockTestsPage() {
   if (activeTest && attemptData) {
     const questions = attemptData.questions || [];
     const currentQ = questions[currentQuestionIndex];
-    const isMcq = currentQ?.answerFormat === 'MCQ_OPTIONS';
     const isVoice = currentQ?.answerFormat === 'VOICE';
+    const isText = currentQ?.answerFormat === 'TEXT';
+    const isMcq = currentQ?.answerFormat === 'MCQ_OPTIONS' || (!isVoice && !isText);
     const currentAns = currentQ ? studentAnswers[currentQ.id] : null;
 
     return (
@@ -805,7 +839,7 @@ export default function CompetitionMockTestsPage() {
                   Question {currentQuestionIndex + 1}
                 </span>
                 <span className="text-xs text-slate-500 font-medium">
-                  {isMcq ? 'Multiple Choice (Select One)' : 'Voice Speaking Task'}
+                  {isMcq ? 'Multiple Choice (Select One)' : isText ? 'Written Response Required' : 'Voice Speaking Task'}
                 </span>
               </div>
               <button
@@ -821,18 +855,27 @@ export default function CompetitionMockTestsPage() {
               </button>
             </div>
 
-            {/* Question Media Prompt (Audio or Video) */}
+            {/* Question Media Prompt (Audio, Video, or Image) */}
             {(currentQ.questionFormat === 'AUDIO' || currentQ.audioUrl) && (currentQ.mediaRef || currentQ.audioUrl) && (
               <div className="mb-4">
                 <AudioPromptPlayer src={currentQ.mediaRef || currentQ.audioUrl} title="Question Audio Prompt" />
               </div>
             )}
             {currentQ.questionFormat === 'VIDEO' && currentQ.mediaRef && (
-              <div className="overflow-hidden rounded-2xl border border-slate-200">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 mb-4">
                 <SafeVideo
                   bunnyVideoId={currentQ.mediaRef}
                   src={resolveFileUrl(currentQ.mediaRef)}
                   className="w-full aspect-video"
+                />
+              </div>
+            )}
+            {currentQ.questionFormat === 'IMAGE' && (currentQ.mediaRef || currentQ.imageUrl) && (
+              <div className="overflow-hidden rounded-2xl border border-slate-200 p-2 bg-slate-50 mb-4">
+                <SafeImage
+                  src={resolveFileUrl(currentQ.imageUrl || currentQ.mediaRef)}
+                  alt="Question Image"
+                  className="max-h-96 w-auto rounded-xl object-contain mx-auto"
                 />
               </div>
             )}
@@ -841,6 +884,26 @@ export default function CompetitionMockTestsPage() {
             <div className="text-base sm:text-lg font-medium text-slate-900 leading-relaxed">
               {currentQ.questionText}
             </div>
+
+            {/* Text Answer Area */}
+            {isText && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
+                  <span className="flex items-center gap-1.5 text-indigo-700">
+                    <FileText className="w-4 h-4" /> Written Answer
+                  </span>
+                  <span>{(currentAns?.textAnswer || '').length} / 5000 characters</span>
+                </div>
+                <textarea
+                  value={currentAns?.textAnswer || ''}
+                  onChange={(e) => handleTextAnswerChange(currentQ.id, e.target.value)}
+                  maxLength={5000}
+                  rows={7}
+                  placeholder="Type your response here (up to 5,000 characters)..."
+                  className="w-full p-4 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-y font-sans leading-relaxed"
+                />
+              </div>
+            )}
 
             {/* MCQ Options */}
             {isMcq && (

@@ -1302,7 +1302,7 @@ export default function AdminCompetitionManagementPage() {
               </span>
             </h3>
             <p className="text-xs text-slate-500 font-medium mt-1">
-              {activeTab === 'test-series' && 'Tests 1-30 require MCQ Format questions & MCQ answers. Tests 31-35 support all combinations.'}
+              {activeTab === 'test-series' && 'Tests 1-35 support multi-format questions (MCQ, Audio, Video, Image, Text) and multi-format answers (MCQ, Voice, Text).'}
               {activeTab === 'mock-tests' && 'Each mock test has independent start and end times scheduled within the competition window.'}
               {activeTab === 'final-assessment' && 'Requires duration, final unlock time, and all 4 set trainers assigned before publish.'}
             </p>
@@ -1747,12 +1747,13 @@ export default function AdminCompetitionManagementPage() {
                     <select
                       value={questionFormData.questionFormat}
                       onChange={(e) => setQuestionFormData({ ...questionFormData, questionFormat: e.target.value })}
-                      disabled={activeAsmtForQuestions?.type === 'TEST_SERIES' && (activeAsmtForQuestions?.sequenceNo || 0) <= 30}
                       className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                     >
                       <option value="MCQ">MCQ (Text)</option>
-                      <option value="VIDEO">Video Prompt</option>
+                      <option value="TEXT">Text Only</option>
+                      <option value="IMAGE">Image Prompt</option>
                       <option value="AUDIO">Audio Prompt</option>
+                      <option value="VIDEO">Video Prompt</option>
                     </select>
                   </div>
                   <div>
@@ -1760,22 +1761,28 @@ export default function AdminCompetitionManagementPage() {
                     <select
                       value={questionFormData.answerFormat}
                       onChange={(e) => setQuestionFormData({ ...questionFormData, answerFormat: e.target.value })}
-                      disabled={activeAsmtForQuestions?.type === 'TEST_SERIES' && (activeAsmtForQuestions?.sequenceNo || 0) <= 30}
                       className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                     >
                       <option value="MCQ_OPTIONS">MCQ Options</option>
                       <option value="VOICE">Voice Recording</option>
+                      <option value="TEXT">Written Text Answer</option>
                     </select>
                   </div>
                 </div>
 
-                {questionFormData.questionFormat !== 'MCQ' && (
+                {questionFormData.questionFormat !== 'MCQ' && questionFormData.questionFormat !== 'TEXT' && (
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">
-                      Question Media Prompt ({questionFormData.questionFormat === 'AUDIO' ? 'Audio Upload' : 'Video Upload'})
+                      Question Media Prompt ({
+                        questionFormData.questionFormat === 'AUDIO' ? 'Audio Upload' : 
+                        questionFormData.questionFormat === 'IMAGE' ? 'Image Upload' : 'Video Upload'
+                      })
                     </label>
                     <UnifiedUploader
-                      accept={questionFormData.questionFormat === 'AUDIO' ? 'audio/*' : 'video/*'}
+                      accept={
+                        questionFormData.questionFormat === 'AUDIO' ? 'audio/*' : 
+                        questionFormData.questionFormat === 'IMAGE' ? 'image/*' : 'video/*'
+                      }
                       multiple={false}
                       category="question-media"
                       maxSizeMB={200}
@@ -1784,10 +1791,13 @@ export default function AdminCompetitionManagementPage() {
                           ? {
                               id: questionFormData.mediaRef,
                               isAudio: questionFormData.questionFormat === 'AUDIO',
+                              isImage: questionFormData.questionFormat === 'IMAGE',
                               bunnyVideoId: questionFormData.questionFormat === 'VIDEO' ? questionFormData.mediaRef : null,
                               url: resolveFileUrl(questionFormData.mediaRef),
                               name: questionFormData.questionFormat === 'AUDIO'
                                 ? `Audio Prompt (${questionFormData.mediaRef.substring(0, 8)}...)`
+                                : questionFormData.questionFormat === 'IMAGE'
+                                ? `Image Prompt (${questionFormData.mediaRef.substring(0, 8)}...)`
                                 : `Video Prompt (${questionFormData.mediaRef.substring(0, 8)}...)`
                             }
                           : null
@@ -1800,6 +1810,8 @@ export default function AdminCompetitionManagementPage() {
                       helperText={
                         questionFormData.questionFormat === 'AUDIO'
                           ? 'Upload audio question prompt (.mp3, .wav, .ogg, .m4a). Stored via Bunny Storage.'
+                          : questionFormData.questionFormat === 'IMAGE'
+                          ? 'Upload image question prompt (.png, .jpg, .webp). Stored via Bunny Storage.'
                           : 'Upload video question prompt (.mp4, .webm, .mov). Streamed via Bunny Stream.'
                       }
                     />

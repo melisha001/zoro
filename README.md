@@ -118,7 +118,7 @@ Online competition registration fees use a server-driven Razorpay flow. Credenti
    ```bash
    cp .env.example .env
    ```
-   Default `VITE_API_BASE_URL` is configured to `http://localhost:8080/api`.
+   By default, `API_BASE_URL` is configured to relative `/api`, which is proxied by the Vite dev server to `http://localhost:8080` in development and served directly from the same host in production (e.g. `https://zoroenglish.com`). To target a remote backend directly during development, set `VITE_API_BASE_URL` in `.env`.
 
 3. Install dependencies:
    ```bash

@@ -310,10 +310,8 @@ public class CompetitionFinalAssessmentEngineTest {
         assertNotNull(resp);
         assertTrue(resp.isSuccess());
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> assignedSet = (Map<String, Object>) resp.getData().get("assignedSet");
-        assertNotNull(assignedSet);
-        assertEquals("A", assignedSet.get("code"));
+        // Under Task X3, candidate-facing responses strictly omit assignedSet
+        assertNull(resp.getData().get("assignedSet"));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> asmt = (Map<String, Object>) resp.getData().get("finalAssessment");
@@ -340,10 +338,8 @@ public class CompetitionFinalAssessmentEngineTest {
         var startRespA = competitionController.startFinalAssessment(finalAsmt.getId());
         assertTrue(startRespA.isSuccess());
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> setInfoA = (Map<String, Object>) startRespA.getData().get("assignedSet");
-        assertNotNull(setInfoA);
-        assertEquals("A", setInfoA.get("code"));
+        // Under Task X3, candidate-facing responses strictly omit assignedSet
+        assertNull(startRespA.getData().get("assignedSet"));
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> questionsA = (List<Map<String, Object>>) startRespA.getData().get("questions");

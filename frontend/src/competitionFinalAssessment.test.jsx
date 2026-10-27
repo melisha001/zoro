@@ -51,8 +51,9 @@ describe('CompetitionFinalAssessmentPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Grand Finale Assessment/i)).toBeTruthy();
-      expect(screen.getAllByText(/Set A/i).length).toBeGreaterThan(0);
-      expect(screen.getByText(/Master Trainer Alex/i)).toBeTruthy();
+      // Under X3 and X4, candidate view strictly hides Assigned Set and Trainer details
+      expect(screen.queryByText(/Set A/i)).toBeNull();
+      expect(screen.queryByText(/Master Trainer Alex/i)).toBeNull();
       expect(screen.getByText(/Examination Window Live Now/i)).toBeTruthy();
       expect(screen.getByText(/Strict Single Attempt/i)).toBeTruthy();
       expect(screen.getByText(/Start Examination Now/i)).toBeTruthy();

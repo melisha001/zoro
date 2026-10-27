@@ -1,0 +1,11 @@
+target/
+*.class
+.mvn/
+uploads/
+logs/
+*.log
+.env*
+.git
+.gitignore
+run-local.ps1
+run-local.example.ps1

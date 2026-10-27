@@ -37,6 +37,7 @@ export default function CompetitionLeaderboardPage() {
 
   const roleUpper = (user?.role || '').toUpperCase();
   const isAdmin = roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN';
+  const isStaff = isAdmin || roleUpper === 'TRAINER';
 
   useEffect(() => {
     if (!currentCompetition?.id) return;
@@ -329,9 +330,11 @@ export default function CompetitionLeaderboardPage() {
                 <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-950 text-white">
                   Your Official Performance Card
                 </span>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-white/80 text-slate-900 border border-slate-950/20">
-                  Set {myRank.setCode}
-                </span>
+                {isStaff && myRank.setCode && (
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-white/80 text-slate-900 border border-slate-950/20">
+                    Set {myRank.setCode}
+                  </span>
+                )}
               </div>
               <h2 className="text-xl sm:text-2xl font-black tracking-tight">
                 {myRank.studentName}
@@ -342,18 +345,20 @@ export default function CompetitionLeaderboardPage() {
             </div>
 
             {/* Score & Rank Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className={`grid ${isStaff && myRank.setCode ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-3`}>
               <div className="bg-white/90 backdrop-blur-xs p-3 rounded-2xl border border-amber-600/20 text-center space-y-0.5">
                 <span className="text-[10px] font-bold text-slate-600 uppercase">Overall Rank</span>
                 <div className="text-2xl font-black text-slate-950">#{myRank.rank}</div>
                 <div className="text-[10px] text-slate-500">of {leaderboardData.totalParticipants}</div>
               </div>
 
-              <div className="bg-white/90 backdrop-blur-xs p-3 rounded-2xl border border-amber-600/20 text-center space-y-0.5">
-                <span className="text-[10px] font-bold text-slate-600 uppercase">Set {myRank.setCode} Rank</span>
-                <div className="text-2xl font-black text-blue-700">#{myRank.setRank || myRank.rank}</div>
-                <div className="text-[10px] text-blue-600">in Set {myRank.setCode}</div>
-              </div>
+              {isStaff && myRank.setCode && (
+                <div className="bg-white/90 backdrop-blur-xs p-3 rounded-2xl border border-amber-600/20 text-center space-y-0.5">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase">Set {myRank.setCode} Rank</span>
+                  <div className="text-2xl font-black text-blue-700">#{myRank.setRank || myRank.rank}</div>
+                  <div className="text-[10px] text-blue-600">in Set {myRank.setCode}</div>
+                </div>
+              )}
 
               <div className="bg-white/90 backdrop-blur-xs p-3 rounded-2xl border border-amber-600/20 text-center space-y-0.5">
                 <span className="text-[10px] font-bold text-slate-600 uppercase">Total Marks</span>
@@ -419,11 +424,13 @@ export default function CompetitionLeaderboardPage() {
                       <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-black ${badgeColor}`}>
                         #{idx + 1}
                       </span>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black border ${
-                        SET_STYLES[p.setCode]?.badge || SET_STYLES.A.badge
-                      }`}>
-                        Set {p.setCode}
-                      </span>
+                      {isStaff && p.setCode && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black border ${
+                          SET_STYLES[p.setCode]?.badge || SET_STYLES.A.badge
+                        }`}>
+                          Set {p.setCode}
+                        </span>
+                      )}
                     </div>
 
                     <div className="pt-1">
@@ -479,7 +486,7 @@ export default function CompetitionLeaderboardPage() {
             >
               Overall ({allEntries.length})
             </button>
-            {['A', 'B', 'C', 'D'].map(code => (
+            {isStaff && ['A', 'B', 'C', 'D'].map(code => (
               <button
                 key={code}
                 onClick={() => setActiveTab(code)}
@@ -537,8 +544,8 @@ export default function CompetitionLeaderboardPage() {
                   <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                     <th className="py-3.5 px-4 text-center w-16">Rank</th>
                     <th className="py-3.5 px-4">Student</th>
-                    <th className="py-3.5 px-4">Set Assigned</th>
-                    <th className="py-3.5 px-4">Set Standing</th>
+                    {isStaff && <th className="py-3.5 px-4">Set Assigned</th>}
+                    {isStaff && <th className="py-3.5 px-4">Set Standing</th>}
                     <th className="py-3.5 px-4 text-right">Total Score</th>
                     <th className="py-3.5 px-4 text-right">Percentile</th>
                     <th className="py-3.5 px-4 text-right">Merit Standing</th>
@@ -603,18 +610,22 @@ export default function CompetitionLeaderboardPage() {
                         </td>
 
                         {/* Set Code */}
-                        <td className="py-3.5 px-4">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black border ${setStyle.badge}`}>
-                            Set {row.setCode || 'A'}
-                          </span>
-                        </td>
+                        {isStaff && (
+                          <td className="py-3.5 px-4">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black border ${setStyle.badge}`}>
+                              Set {row.setCode || 'A'}
+                            </span>
+                          </td>
+                        )}
 
                         {/* Set Rank */}
-                        <td className="py-3.5 px-4">
-                          <span className="font-bold text-slate-700 text-[11px]">
-                            #{row.setRank || row.rank} <span className="text-slate-400 text-[10px] font-normal">in Set {row.setCode}</span>
-                          </span>
-                        </td>
+                        {isStaff && (
+                          <td className="py-3.5 px-4">
+                            <span className="font-bold text-slate-700 text-[11px]">
+                              #{row.setRank || row.rank} <span className="text-slate-400 text-[10px] font-normal">in Set {row.setCode}</span>
+                            </span>
+                          </td>
+                        )}
 
                         {/* Total Score */}
                         <td className="py-3.5 px-4 text-right">

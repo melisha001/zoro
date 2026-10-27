@@ -1,0 +1,122 @@
+services:
+  # ===========================================================================
+  # PostgreSQL Database Service (Internal Only - Port NOT published to host)
+  # ===========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: zoro_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-zoro_academy}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-zoro_academy}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================================================
+  # Spring Boot 3 Backend Service (Java 21)
+  # ===========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: zoro-academy-backend:latest
+    container_name: zoro_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database connection (Points to internal postgres container hostname)
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-zoro_academy}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD}
+
+      # Reverse Proxy HTTPS Header forwarding
+      - SERVER_FORWARD_HEADERS_STRATEGY=framework
+
+      # Security & JWT Authentication
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS:-3600000}
+      - REFRESH_TOKEN_EXPIRATION_DAYS=${REFRESH_TOKEN_EXPIRATION_DAYS:-7}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_PASSWORD_KEY=${ADMIN_PASSWORD_KEY}
+
+      # Production CORS (Hostinger domain + API)
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://zoroenglish.com,https://www.zoroenglish.com}
+
+      # Bunny Storage (Files, Audio, Images, Submissions)
+      - APP_STORAGE_PROVIDER=${APP_STORAGE_PROVIDER:-bunny}
+      - BUNNY_STORAGE_HOST=${BUNNY_STORAGE_HOST}
+      - BUNNY_STORAGE_ZONE=${BUNNY_STORAGE_ZONE}
+      - BUNNY_STORAGE_PASSWORD=${BUNNY_STORAGE_PASSWORD}
+      - BUNNY_STORAGE_CDN_HOST=${BUNNY_STORAGE_CDN_HOST}
+      - APP_STORAGE_DIR=/app/uploads
+
+      # Bunny Stream (Video Delivery & HLS Transcoding)
+      - BUNNY_LIBRARY_ID=${BUNNY_LIBRARY_ID}
+      - BUNNY_API_KEY=${BUNNY_API_KEY}
+      - BUNNY_CDN_HOST=${BUNNY_CDN_HOST}
+      - BUNNY_TOKEN_AUTH_KEY=${BUNNY_TOKEN_AUTH_KEY}
+      - BUNNY_WEBHOOK_SECRET=${BUNNY_WEBHOOK_SECRET}
+
+      # Payment Gateway (Razorpay Live)
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
+
+      # Email Service (AWS SES SMTP)
+      - AWS_SES_HOST=${AWS_SES_HOST}
+      - AWS_SES_PORT=${AWS_SES_PORT:-587}
+      - AWS_SES_USERNAME=${AWS_SES_USERNAME}
+      - AWS_SES_PASSWORD=${AWS_SES_PASSWORD}
+      - AWS_SES_FROM_EMAIL=${AWS_SES_FROM_EMAIL:-noreply@zoroenglish.com}
+      - AWS_SES_FROM_NAME=${AWS_SES_FROM_NAME:-Zoro Academy}
+
+      # Application Operational Configurations
+      - SCHEDULE_RESOURCES_UNLOCK_MINUTES=${SCHEDULE_RESOURCES_UNLOCK_MINUTES:-30}
+      - ATTENDANCE_CORRECTION_WINDOW_MINUTES=${ATTENDANCE_CORRECTION_WINDOW_MINUTES:-60}
+    # Port 8080 is bound strictly to host loopback interface (127.0.0.1)
+    # This prevents direct public internet access, routing requests exclusively through VPS Nginx
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f -s http://localhost:8080/api/time > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+# =============================================================================
+# Persistent Named Volumes
+# =============================================================================
+volumes:
+  # Stores PostgreSQL database clusters across container lifecycle
+  postgres_data:
+    name: zoro_postgres_data
+  # Stores local file uploads or fallback files across container lifecycle
+  backend_uploads:
+    name: zoro_backend_uploads
+
+# =============================================================================
+# Internal Application Network
+# =============================================================================
+networks:
+  app_network:
+    name: zoro_app_network
+    driver: bridge

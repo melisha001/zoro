@@ -38,6 +38,9 @@ public class AttemptAnswer {
     @Column(name = "voice_duration_sec")
     private Integer voiceDurationSec;
 
+    @Column(name = "text_answer", columnDefinition = "TEXT")
+    private String textAnswer;
+
     @Column(name = "saved_at", nullable = false)
     private OffsetDateTime savedAt;
 
@@ -106,6 +109,9 @@ public class AttemptAnswer {
         this.voiceDurationSec = voiceDurationSec;
         if (this.durationSeconds == null) this.durationSeconds = voiceDurationSec;
     }
+
+    public String getTextAnswer() { return textAnswer; }
+    public void setTextAnswer(String textAnswer) { this.textAnswer = textAnswer; }
 
     public OffsetDateTime getSavedAt() { return savedAt != null ? savedAt : createdAt; }
     public void setSavedAt(OffsetDateTime savedAt) { this.savedAt = savedAt; }

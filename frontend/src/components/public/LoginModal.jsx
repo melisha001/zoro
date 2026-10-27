@@ -5,7 +5,7 @@ import { useWebsiteSettings } from '../../context/WebsiteSettingsContext';
 import { authenticateUser } from '../../api/userApi';
 import ButtonSpinner from '../common/ButtonSpinner';
 
-export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
+export default function LoginModal({ isOpen, onClose, onLoginSuccess, onOpenEnquire }) {
   const { login, authNotice, clearAuthNotice } = useAuth();
   const { academyName } = useWebsiteSettings();
   const [email, setEmail] = useState('');
@@ -154,7 +154,19 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
         </form>
 
         <div className="mt-4 pt-4 border-t border-slate-100 text-center text-xs text-slate-500">
-          Account credentials are issued by Academy Admin.
+          If you are a new user, click{' '}
+          <button
+            type="button"
+            onClick={() => {
+              if (onOpenEnquire) {
+                onOpenEnquire();
+              }
+            }}
+            className="text-blue-600 font-bold hover:underline cursor-pointer"
+          >
+            Enquire Now
+          </button>{' '}
+          to get your login credentials.
         </div>
 
       </div>

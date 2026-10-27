@@ -80,12 +80,8 @@ describe('CompetitionLeaderboardPage (Phase 5)', () => {
     expect(screen.getAllByText('Alice Champion').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Charlie Third').length).toBeGreaterThan(0);
 
-    // Filter by Set B
-    const setBBtn = screen.getByRole('button', { name: /Set B/i });
-    fireEvent.click(setBBtn);
-
-    // In Set B, Charlie should be present
-    expect(screen.getAllByText('Charlie Third').length).toBeGreaterThan(0);
+    // Under Task X3, candidates cannot see or filter by Set
+    expect(screen.queryByRole('button', { name: /Set B/i })).toBeNull();
   });
 
   it('renders unpublished scheduled state for students when leaderboard is not published', async () => {

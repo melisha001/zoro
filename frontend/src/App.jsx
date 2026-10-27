@@ -685,6 +685,10 @@ function AppRoutes() {
           clearAuthNotice();
         }} 
         onLoginSuccess={handleLoginSuccess}
+        onOpenEnquire={() => {
+          setIsLoginOpen(false);
+          setIsEnquireOpen(true);
+        }}
       />
     </>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Volume2, Maximize2, Mic, HelpCircle, Check } from 'lucide-react';
+import { Play, Volume2, Maximize2, Mic, HelpCircle, Check, Image as ImageIcon, FileText } from 'lucide-react';
 
 /**
  * QuestionPreview
@@ -7,13 +7,15 @@ import { Play, Volume2, Maximize2, Mic, HelpCircle, Check } from 'lucide-react';
  * Shared miniature non-interactive preview component for question builder cards
  * and question editor "Student Preview" modal.
  * 
- * Strictly follows Task K4:
+ * Strictly follows Task K4 & X6:
  * - Miniature size, non-interactive
- * - ZERO network calls (no audio/video src, no fetch/axios/iframe)
+ * - ZERO network calls (no audio/video/image src, no fetch/axios/iframe)
  * - Dummy video player for VIDEO prompt
  * - Dummy audio player for AUDIO prompt
+ * - Dummy image box for IMAGE prompt
  * - MCQ options layout (with correct highlighted for admin)
  * - Dummy voice recorder for VOICE answer
+ * - Dummy disabled textarea for TEXT answer
  */
 export default function QuestionPreview({
   question,
@@ -26,12 +28,24 @@ export default function QuestionPreview({
   const answerFormat = (question.answerFormat || 'MCQ_OPTIONS').toUpperCase();
   const isVideo = questionFormat === 'VIDEO';
   const isAudio = questionFormat === 'AUDIO';
+  const isImage = questionFormat === 'IMAGE';
   const isVoice = answerFormat === 'VOICE';
+  const isText = answerFormat === 'TEXT';
   const isMcq = answerFormat === 'MCQ_OPTIONS' || answerFormat === 'MCQ';
 
   return (
     <div className={`space-y-2.5 text-xs select-none ${className}`} data-testid="question-preview">
       {/* 1. MEDIA PROMPTS (DUMMY, ZERO NETWORK CALLS) */}
+      {isImage && (
+        <div
+          data-testid="dummy-image-prompt"
+          className="w-full max-w-md h-36 bg-slate-100 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-slate-400 gap-1.5"
+        >
+          <ImageIcon className="w-8 h-8 text-slate-400" />
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Image Prompt (Preview)</span>
+        </div>
+      )}
+
       {isVideo && (
         <div
           data-testid="dummy-video-player"
@@ -183,6 +197,24 @@ export default function QuestionPreview({
             <div className="h-1 bg-slate-200 flex-1 rounded-full" />
             <span className="font-mono text-[9px]">0:00 / {question.maxDurationSeconds || 90}s</span>
           </div>
+        </div>
+      )}
+
+      {isText && (
+        <div
+          data-testid="dummy-text-answer"
+          className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5"
+        >
+          <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold">
+            <span>Written Response (Candidate Input)</span>
+            <span className="font-mono">0 / 5,000 characters</span>
+          </div>
+          <textarea
+            disabled
+            rows={3}
+            placeholder="Candidate will enter text answer here (up to 5,000 characters)..."
+            className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-400 cursor-not-allowed resize-none"
+          />
         </div>
       )}
     </div>

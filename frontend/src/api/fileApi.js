@@ -23,6 +23,12 @@ export function resolveFileUrl(urlOrPath) {
     }
   }
 
+  // Intercept hardcoded localhost/127.0.0.1 backend URLs and convert to relative /api/...
+  const localhostMatch = trimmed.match(/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(\/api\/.*)$/i);
+  if (localhostMatch) {
+    return resolveFileUrl(localhostMatch[1]);
+  }
+
   // Already fully qualified URLs or in-memory blobs
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
     return trimmed;

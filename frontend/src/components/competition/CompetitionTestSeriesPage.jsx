@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { 
   Layers, CheckCircle2, Clock, Play, RotateCcw, AlertCircle, 
   HelpCircle, ChevronRight, ChevronLeft, Flag, Award, Eye, 
-  Volume2, Video as VideoIcon, Mic, ArrowLeft, Send, Sparkles, Check, X
+  Volume2, Video as VideoIcon, Mic, ArrowLeft, Send, Sparkles, Check, X, FileText
 } from 'lucide-react';
 import { 
   getStudentTestSeries, 
@@ -17,6 +17,7 @@ import InlineSpinner from '../common/InlineSpinner';
 import PageLoader from '../common/PageLoader';
 import SkeletonCard from '../common/SkeletonCard';
 import SafeVideo from '../common/SafeVideo';
+import SafeImage from '../common/SafeImage';
 import AudioPromptPlayer from '../common/AudioPromptPlayer';
 import VoiceAnswerRecorder from './VoiceAnswerRecorder';
 
@@ -41,6 +42,7 @@ export default function CompetitionTestSeriesPage() {
   // Results View state
   const [resultsData, setResultsData] = useState(null);
   const [loadingResults, setLoadingResults] = useState(false);
+  const textSaveTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (!currentCompetition?.id) return;
@@ -145,6 +147,36 @@ export default function CompetitionTestSeriesPage() {
     }
   };
 
+  const handleTextAnswerChange = (questionId, textVal) => {
+    const updated = {
+      ...studentAnswers,
+      [questionId]: {
+        ...(studentAnswers[questionId] || {}),
+        textAnswer: textVal
+      }
+    };
+    setStudentAnswers(updated);
+    if (textSaveTimeoutRef.current) {
+      clearTimeout(textSaveTimeoutRef.current);
+    }
+    setSaveStatus('saving');
+    textSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await saveAssessmentAnswer(activeTest.id, {
+          questionId,
+          textAnswer: textVal
+        });
+        if (res && res.success) {
+          setSaveStatus('saved');
+        } else {
+          setSaveStatus('error');
+        }
+      } catch (err) {
+        setSaveStatus('error');
+      }
+    }, 500);
+  };
+
   const handleVoiceUploadComplete = async (questionId, { voiceFileId, durationSec }) => {
     const updated = {
       ...studentAnswers,
@@ -246,7 +278,7 @@ export default function CompetitionTestSeriesPage() {
             </div>
 
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 leading-relaxed max-w-md mx-auto">
-              Your answers have been securely recorded. The result will be published after the trainer evaluates the voice answers.
+              Your answers have been securely recorded. The result will be published after our evaluation team reviews your responses.
             </div>
 
             <div className="pt-2">
@@ -322,10 +354,10 @@ export default function CompetitionTestSeriesPage() {
             <div className="mt-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start space-x-3 text-amber-200 text-xs leading-relaxed">
               <Clock className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold block text-amber-300 mb-0.5">Voice Answers Under Evaluation</span>
+                <span className="font-bold block text-amber-300 mb-0.5">Subjective Answers Under Evaluation</span>
                 <span>
-                  Voice answers under evaluation ({attempt.voiceEvaluatedCount || 0} of {attempt.voiceCount || 0} evaluated). 
-                  Your MCQ score is {attempt.mcqMarks || 0} marks. Your final total score will update automatically once your assigned set trainer finishes evaluating your spoken answers.
+                  Subjective answers under evaluation ({attempt.voiceEvaluatedCount || 0} of {attempt.voiceCount || 0} evaluated). 
+                  Your objective score is {attempt.mcqMarks || 0} marks. Your final total score will update automatically once our evaluation team finishes evaluating your submitted responses.
                 </span>
               </div>
             </div>
@@ -408,7 +440,7 @@ export default function CompetitionTestSeriesPage() {
                         ) : (
                           <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-bold">
                             <Clock className="w-3.5 h-3.5" />
-                            <span>Pending Trainer</span>
+                            <span>Pending Evaluation</span>
                           </span>
                         )
                       )}
@@ -484,7 +516,7 @@ export default function CompetitionTestSeriesPage() {
                       )}
                       {studentAns?.feedback && (
                         <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
-                          <span className="font-bold block mb-1">Trainer Feedback:</span>
+                          <span className="font-bold block mb-1">Evaluation Feedback:</span>
                           <span>{studentAns.feedback}</span>
                         </div>
                       )}
@@ -517,7 +549,7 @@ export default function CompetitionTestSeriesPage() {
     const isVoice = currentQ?.answerFormat === 'VOICE';
     const totalQ = questions.length;
     const answeredCount = Object.keys(studentAnswers).filter(k => 
-      studentAnswers[k]?.selectedOptionId || studentAnswers[k]?.voiceFileId
+      studentAnswers[k]?.selectedOptionId || studentAnswers[k]?.voiceFileId || (studentAnswers[k]?.textAnswer && studentAnswers[k].textAnswer.trim())
     ).length;
 
     return (
@@ -624,6 +656,15 @@ export default function CompetitionTestSeriesPage() {
                     />
                   </div>
                 )}
+                {currentQ.questionFormat === 'IMAGE' && (currentQ.mediaRef || currentQ.imageUrl) && (
+                  <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200 p-2 bg-slate-50">
+                    <SafeImage
+                      src={resolveFileUrl(currentQ.imageUrl || currentQ.mediaRef)}
+                      alt="Question Image Prompt"
+                      className="max-h-96 w-auto rounded-xl object-contain mx-auto"
+                    />
+                  </div>
+                )}
 
                 {/* Question Statement */}
                 <div className="text-base sm:text-lg font-bold text-slate-900 mb-6 leading-relaxed">
@@ -638,8 +679,28 @@ export default function CompetitionTestSeriesPage() {
                   </div>
                 )}
 
+                {/* Written Answer Area */}
+                {currentQ.answerFormat === 'TEXT' && (
+                  <div className="space-y-3 mb-6">
+                    <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
+                      <span className="flex items-center gap-1.5 text-blue-700">
+                        <FileText className="w-4 h-4" /> Written Answer Required
+                      </span>
+                      <span>{(studentAnswers[currentQ.id]?.textAnswer || '').length} / 5000 characters</span>
+                    </div>
+                    <textarea
+                      value={studentAnswers[currentQ.id]?.textAnswer || ''}
+                      onChange={(e) => handleTextAnswerChange(currentQ.id, e.target.value)}
+                      maxLength={5000}
+                      rows={7}
+                      placeholder="Type your response here (up to 5,000 characters)..."
+                      className="w-full p-4 rounded-2xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 resize-y font-sans leading-relaxed"
+                    />
+                  </div>
+                )}
+
                 {/* MCQ Options Selector */}
-                {!isVoice && currentQ.options && (
+                {currentQ.answerFormat !== 'VOICE' && currentQ.answerFormat !== 'TEXT' && currentQ.options && (
                   <div className="space-y-3 mb-6">
                     {currentQ.options.map((opt, oIdx) => {
                       const isSelected = studentAnswers[currentQ.id]?.selectedOptionId === opt.id;

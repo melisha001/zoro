@@ -58,56 +58,36 @@ export default function StudentCompetitionPortalPage() {
     <div className="space-y-8 max-w-7xl mx-auto animate-in fade-in duration-200">
       {/* Hero Banner */}
       <div className="relative overflow-hidden rounded-3xl bg-linear-to-r from-slate-900 via-blue-950 to-slate-900 border border-slate-800 text-white p-6 sm:p-10 shadow-xl">
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div className="space-y-3 max-w-2xl">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full text-amber-300 text-xs font-bold">
-              <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              <span>{comp.category || 'National Scholastic Competition'}</span>
-            </div>
-            <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white">
-              {comp.title || comp.name}
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
-              {comp.description || 'Welcome to your official competition preparation and examination portal.'}
-            </p>
-
-            <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-300 pt-2">
-              {(comp.startDate || comp.date) && (
-                <div className="flex items-center space-x-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs">
-                  <Calendar className="w-4 h-4 text-amber-400" />
-                  <span>{formatDate(comp.startDate || comp.date)}{comp.startTime ? ` at ${comp.startTime}` : ''}</span>
-                </div>
-              )}
-              {comp.venue && (
-                <div className="flex items-center space-x-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs">
-                  <MapPin className="w-4 h-4 text-rose-400" />
-                  <span>{comp.venue}</span>
-                </div>
-              )}
-              {serverNow && (
-                <div className="flex items-center space-x-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs" title="Authoritative server clock">
-                  <Clock className="w-4 h-4 text-blue-400" />
-                  <span>Date & Time: {serverNow} IST</span>
-                </div>
-              )}
-            </div>
+        <div className="relative z-10 space-y-4 max-w-4xl">
+          <div className="inline-flex items-center space-x-2 px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full text-amber-300 text-xs font-bold">
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span>{comp.category || 'National Scholastic Competition'}</span>
           </div>
+          <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white">
+            {comp.title || comp.name}
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
+            {comp.description || 'Welcome to your official competition preparation and examination portal.'}
+          </p>
 
-          {/* Assigned Set Badge */}
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-6 flex flex-col items-center justify-center text-center space-y-3 min-w-[220px]">
-            <span className="text-[11px] font-extrabold uppercase tracking-widest text-amber-300">
-              Assigned Examination Set
-            </span>
-            <div className="w-16 h-16 rounded-2xl bg-amber-400 text-slate-950 font-black text-2xl flex items-center justify-center shadow-lg shadow-amber-400/20 ring-4 ring-amber-400/30">
-              {set?.code ? `Set ${set.code}` : 'Set A'}
-            </div>
-            {set?.trainerName ? (
-              <div className="text-center">
-                <span className="text-[10px] text-slate-300 block font-medium">Assigned Evaluator</span>
-                <span className="text-xs font-bold text-white">{set.trainerName}</span>
+          <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-300 pt-2">
+            {(comp.startDate || comp.date) && (
+              <div className="flex items-center space-x-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs">
+                <Calendar className="w-4 h-4 text-amber-400" />
+                <span>{formatDate(comp.startDate || comp.date)}{comp.startTime ? ` at ${comp.startTime}` : ''}</span>
               </div>
-            ) : (
-              <span className="text-[10px] text-slate-300 font-medium">Auto-distributed by engine</span>
+            )}
+            {comp.venue && (
+              <div className="flex items-center space-x-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs">
+                <MapPin className="w-4 h-4 text-rose-400" />
+                <span>{comp.venue}</span>
+              </div>
+            )}
+            {serverNow && (
+              <div className="flex items-center space-x-1.5 bg-white/10 px-3 py-1.5 rounded-xl backdrop-blur-xs" title="Authoritative server clock">
+                <Clock className="w-4 h-4 text-blue-400" />
+                <span>Date & Time: {serverNow} IST</span>
+              </div>
             )}
           </div>
         </div>

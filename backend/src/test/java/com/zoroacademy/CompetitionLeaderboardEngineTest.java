@@ -235,18 +235,19 @@ public class CompetitionLeaderboardEngineTest {
         assertNotNull(myRank);
         assertEquals("Bob Runnerup", myRank.get("studentName"));
         assertEquals(2, myRank.get("rank"));
-        assertEquals("A", myRank.get("setCode"));
-        assertEquals(2, myRank.get("setRank")); // Alice is 1 in Set A, Bob is 2
+        // Under Task X3, candidates do not receive setCode or setRank
+        assertNull(myRank.get("setCode"));
+        assertNull(myRank.get("setRank"));
 
-        // Fetch as Student 3 (Charlie: Set B, Rank 3 overall, but Rank 1 in Set B!)
+        // Fetch as Student 3 (Charlie: Overall Rank 3, Set details hidden)
         Map<String, Object> student3Lb = competitionService.getLeaderboard(competitionId, student3User);
         @SuppressWarnings("unchecked")
         Map<String, Object> charlieRank = (Map<String, Object>) student3Lb.get("myRank");
         assertNotNull(charlieRank);
         assertEquals("Charlie Third", charlieRank.get("studentName"));
         assertEquals(3, charlieRank.get("rank")); // Overall rank 3
-        assertEquals("B", charlieRank.get("setCode"));
-        assertEquals(1, charlieRank.get("setRank")); // Set B rank 1!
+        assertNull(charlieRank.get("setCode"));
+        assertNull(charlieRank.get("setRank"));
 
         // Verify Podium has top 3
         @SuppressWarnings("unchecked")

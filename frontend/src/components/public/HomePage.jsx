@@ -216,6 +216,7 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
       {featuredComp && (() => {
         const compTitle = featuredComp.title || featuredComp.name || 'Competition';
         const compFee = Number(featuredComp.registrationFee || 0);
+        const featuredCompBanner = featuredComp.bannerUrl || featuredComp.banner ? resolveFileUrl(featuredComp.bannerUrl || featuredComp.banner) : null;
 
         return (
           <section className="bg-slate-900 text-white py-16">
@@ -234,6 +235,24 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
                   )}
                 </div>
               )}
+
+              <div className="relative h-56 sm:h-72 w-full overflow-hidden rounded-2xl mb-8 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center border border-slate-800 shadow-md">
+                {featuredCompBanner ? (
+                  <SafeImage
+                    src={featuredCompBanner}
+                    alt={compTitle}
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                    fallbackSrc=""
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900 text-slate-500">
+                    <Trophy className="w-16 h-16 text-slate-600 mb-2" />
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{compTitle}</span>
+                  </div>
+                )}
+              </div>
+
               <div className="flex flex-col md:flex-row items-center justify-between gap-8">
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -331,30 +350,54 @@ export default function HomePage({ setActiveScreen, onOpenEnquire }) {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {activeCompetitions.map(comp => (
-                <div key={comp.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
-                  <div className="space-y-2">
-                    <span className="bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase">
-                      {comp.category || 'National Competition'}
-                    </span>
-                    <h4 className="text-base font-black text-slate-900">{comp.title || comp.name}</h4>
-                    {comp.description && (
-                      <p className="text-xs text-slate-500 line-clamp-2">{comp.description}</p>
-                    )}
-                    <div className="text-xs font-semibold text-slate-700 pt-1">
-                      Fee: <strong className="text-emerald-700">{Number(comp.registrationFee || 0) > 0 ? `₹${Number(comp.registrationFee).toLocaleString('en-IN')}` : 'FREE'}</strong>
+              {activeCompetitions.map(comp => {
+                const bannerSrc = comp.bannerUrl || comp.banner ? resolveFileUrl(comp.bannerUrl || comp.banner) : null;
+                const compName = comp.title || comp.name || 'Competition';
+
+                return (
+                  <div key={comp.id} className="bg-white rounded-2xl overflow-hidden border border-slate-200/80 shadow-md hover:shadow-xl transition-all group flex flex-col justify-between">
+                    <div>
+                      <div className="relative h-48 overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                        {bannerSrc ? (
+                          <SafeImage
+                            src={bannerSrc}
+                            alt={compName}
+                            loading="lazy"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            fallbackSrc=""
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300 text-slate-400">
+                            <Trophy className="w-12 h-12 text-slate-400/80" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-6 space-y-2">
+                        <span className="bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase">
+                          {comp.category || 'National Competition'}
+                        </span>
+                        <h4 className="text-base font-black text-slate-900">{compName}</h4>
+                        {comp.description && (
+                          <p className="text-xs text-slate-500 line-clamp-2">{comp.description}</p>
+                        )}
+                        <div className="text-xs font-semibold text-slate-700 pt-1">
+                          Fee: <strong className="text-emerald-700">{Number(comp.registrationFee || 0) > 0 ? `₹${Number(comp.registrationFee).toLocaleString('en-IN')}` : 'FREE'}</strong>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-6 pt-0">
+                      <button
+                        type="button"
+                        onClick={() => setRegisteringComp(comp)}
+                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition cursor-pointer flex items-center justify-center space-x-1.5"
+                      >
+                        <Trophy className="w-4 h-4 text-white" />
+                        <span>Register Now</span>
+                      </button>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setRegisteringComp(comp)}
-                    className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition cursor-pointer flex items-center justify-center space-x-1.5"
-                  >
-                    <Trophy className="w-4 h-4 text-white" />
-                    <span>Register Now</span>
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>

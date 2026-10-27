@@ -1527,16 +1527,9 @@ public class CompetitionService {
         String qFormat = (String) payload.getOrDefault("questionFormat", "MCQ");
         String aFormat = (String) payload.getOrDefault("answerFormat", "MCQ_OPTIONS");
 
-        // Format restrictions: Test Series 1-30 accept ONLY MCQ question + MCQ Options answers
-        if ("TEST_SERIES".equalsIgnoreCase(asmt.getType()) && asmt.getSequenceNo() != null && asmt.getSequenceNo() <= 30) {
-            if (!"MCQ".equalsIgnoreCase(qFormat) || !"MCQ_OPTIONS".equalsIgnoreCase(aFormat)) {
-                throw new BadRequestException("Test Series 1-30 accept ONLY MCQ question format and MCQ options answer format");
-            }
-        }
-
-        // Fill in the blank is rejected everywhere
-        if ("FILL_BLANK".equalsIgnoreCase(qFormat) || "FILL_BLANK".equalsIgnoreCase(aFormat) || "TEXT".equalsIgnoreCase(aFormat)) {
-            throw new BadRequestException("Fill-in-the-blank or free text format is not supported");
+        // Format validation: Fill in the blank is rejected everywhere
+        if ("FILL_BLANK".equalsIgnoreCase(qFormat) || "FILL_BLANK".equalsIgnoreCase(aFormat)) {
+            throw new BadRequestException("Fill-in-the-blank format is not supported");
         }
 
         AssessmentQuestion q = isNew ? new AssessmentQuestion() : questionRepository.findById(qId).orElse(new AssessmentQuestion());
@@ -1649,25 +1642,6 @@ public class CompetitionService {
         result.put("competition", comp);
         result.put("registration", reg);
         result.put("serverNow", OffsetDateTime.now(ZoneId.of("Asia/Kolkata")));
-
-        if (reg != null) {
-            Optional<CompetitionSetMember> memberOpt = setMemberRepository.findByRegistrationId(reg.getId());
-            if (memberOpt.isPresent()) {
-                CompetitionSetMember member = memberOpt.get();
-                setRepository.findById(member.getSetId()).ifPresent(set -> {
-                    Map<String, Object> setMap = new HashMap<>();
-                    setMap.put("id", set.getId());
-                    setMap.put("code", set.getCode());
-                    if (set.getTrainerId() != null) {
-                        userRepository.findById(set.getTrainerId()).ifPresent(t -> {
-                            setMap.put("trainerName", t.getName());
-                            setMap.put("trainerEmail", t.getEmail());
-                        });
-                    }
-                    result.put("set", setMap);
-                });
-            }
-        }
 
         return result;
     }
@@ -2061,9 +2035,9 @@ public class CompetitionService {
         response.put("competitionTitle", comp.getTitle());
         response.put("serverNow", now);
 
-        // Student's Assigned Set
+        // Assigned Set (available strictly to staff; hidden from students)
         Map<String, Object> assignedSetMap = null;
-        if (reg != null) {
+        if (!"STUDENT".equals(role) && reg != null) {
             Optional<CompetitionSetMember> memOpt = setMemberRepository.findByRegistrationId(reg.getId());
             if (memOpt.isPresent()) {
                 String assignedSetId = memOpt.get().getSetId();
@@ -2084,8 +2058,8 @@ public class CompetitionService {
                     assignedSetMap = setMap;
                 }
             }
+            response.put("assignedSet", assignedSetMap);
         }
-        response.put("assignedSet", assignedSetMap);
 
         if (finalAsmt == null) {
             response.put("hasFinalAssessment", false);
@@ -2339,6 +2313,7 @@ public class CompetitionService {
                 aMap.put("selectedOptionId", ans.getSelectedOptionId());
                 aMap.put("voiceFileId", ans.getVoiceFileId());
                 aMap.put("voiceDurationSec", ans.getVoiceDurationSec());
+                aMap.put("textAnswer", ans.getTextAnswer());
                 aMap.put("savedAt", ans.getSavedAt());
                 savedAnswersMap.put(ans.getQuestionId(), aMap);
             }
@@ -2352,7 +2327,7 @@ public class CompetitionService {
         }
 
         Map<String, Object> assignedSetMap = null;
-        if (attempt != null && attempt.getSetId() != null) {
+        if (!"STUDENT".equals(role) && attempt != null && attempt.getSetId() != null) {
             Optional<CompetitionSet> sOpt = setRepository.findById(attempt.getSetId());
             if (sOpt.isPresent()) {
                 CompetitionSet s = sOpt.get();
@@ -2372,7 +2347,9 @@ public class CompetitionService {
         result.put("proctorViolationCount", attempt != null && attempt.getProctorViolationCount() != null ? attempt.getProctorViolationCount() : 0);
         result.put("autoSubmitted", attempt != null && Boolean.TRUE.equals(attempt.getAutoSubmitted()));
         result.put("assessment", asmt);
-        result.put("assignedSet", assignedSetMap);
+        if (!"STUDENT".equals(role)) {
+            result.put("assignedSet", assignedSetMap);
+        }
         result.put("questions", sanitizedQuestions);
         result.put("answers", savedAnswersMap);
         result.put("remainingSeconds", remainingSeconds);
@@ -2561,9 +2538,22 @@ public class CompetitionService {
             }
         }
 
+        if (payload.containsKey("textAnswer")) {
+            Object tVal = payload.get("textAnswer");
+            if (tVal == null) {
+                answer.setTextAnswer(null);
+            } else {
+                String str = tVal.toString().trim();
+                if (str.length() > 5000) {
+                    throw new BadRequestException("Text answer must not exceed 5000 characters");
+                }
+                answer.setTextAnswer(str);
+            }
+        }
+
         answer.setSavedAt(now);
 
-        if ("VOICE".equalsIgnoreCase(question.getAnswerFormat())) {
+        if ("VOICE".equalsIgnoreCase(question.getAnswerFormat()) || "TEXT".equalsIgnoreCase(question.getAnswerFormat())) {
             answer.setEvaluationStatus("PENDING_TRAINER");
         } else {
             answer.setEvaluationStatus("AUTO");
@@ -2696,6 +2686,24 @@ public class CompetitionService {
                 attemptAnswerRepository.save(ans);
             } else if ("VOICE".equalsIgnoreCase(q.getAnswerFormat())) {
                 if (ans != null && ans.getVoiceFileId() != null && !ans.getVoiceFileId().isBlank()) {
+                    answeredVoiceCount++;
+                    ans.setEvaluationStatus("PENDING_TRAINER");
+                    ans.setMarksAwarded(null);
+                    attemptAnswerRepository.save(ans);
+                } else {
+                    if (ans == null) {
+                        ans = new AttemptAnswer();
+                        ans.setId("ans_" + UUID.randomUUID());
+                        ans.setAttemptId(attempt.getId());
+                        ans.setQuestionId(q.getId());
+                        ans.setSavedAt(now);
+                    }
+                    ans.setEvaluationStatus("SKIPPED");
+                    ans.setMarksAwarded(BigDecimal.ZERO);
+                    attemptAnswerRepository.save(ans);
+                }
+            } else if ("TEXT".equalsIgnoreCase(q.getAnswerFormat())) {
+                if (ans != null && ans.getTextAnswer() != null && !ans.getTextAnswer().trim().isEmpty()) {
                     answeredVoiceCount++;
                     ans.setEvaluationStatus("PENDING_TRAINER");
                     ans.setMarksAwarded(null);
@@ -2876,7 +2884,7 @@ public class CompetitionService {
 
         if (isStudent && isPendingEval) {
             Set<String> voiceQuestionIds = questions.stream()
-                    .filter(q -> "VOICE".equalsIgnoreCase(q.getAnswerFormat()))
+                    .filter(q -> "VOICE".equalsIgnoreCase(q.getAnswerFormat()) || "TEXT".equalsIgnoreCase(q.getAnswerFormat()))
                     .map(q -> q.getId() != null ? q.getId().toString() : "")
                     .collect(Collectors.toSet());
             long vCount = voiceQuestionIds.size();
@@ -2943,6 +2951,7 @@ public class CompetitionService {
                 ansMap.put("marksAwarded", ans.getMarksAwarded());
                 ansMap.put("voiceFileId", ans.getVoiceFileId());
                 ansMap.put("voiceDurationSec", ans.getVoiceDurationSec());
+                ansMap.put("textAnswer", ans.getTextAnswer());
                 ansMap.put("evaluationStatus", ans.getEvaluationStatus());
                 ansMap.put("feedback", ans.getFeedback());
                 qMap.put("studentAnswer", ansMap);
@@ -2953,7 +2962,7 @@ public class CompetitionService {
                     } else {
                         incorrectCount++;
                     }
-                } else if ("VOICE".equalsIgnoreCase(q.getAnswerFormat())) {
+                } else if ("VOICE".equalsIgnoreCase(q.getAnswerFormat()) || "TEXT".equalsIgnoreCase(q.getAnswerFormat())) {
                     voiceCount++;
                     if ("EVALUATED".equalsIgnoreCase(ans.getEvaluationStatus())) {
                         voiceEvaluatedCount++;
@@ -3203,6 +3212,7 @@ public class CompetitionService {
                 ansMap.put("isCorrect", ans.getIsCorrect());
                 ansMap.put("voiceFileId", ans.getVoiceFileId());
                 ansMap.put("voiceDurationSec", ans.getVoiceDurationSec());
+                ansMap.put("textAnswer", ans.getTextAnswer());
                 ansMap.put("marksAwarded", ans.getMarksAwarded());
                 ansMap.put("evaluationStatus", ans.getEvaluationStatus());
                 ansMap.put("feedback", ans.getFeedback());
@@ -3379,8 +3389,10 @@ public class CompetitionService {
 
         for (AttemptAnswer ans : allAnswers) {
             AssessmentQuestion q = qMap.get(ans.getQuestionId());
-            boolean isVoice = (q != null && "VOICE".equalsIgnoreCase(q.getAnswerFormat())) || (ans.getVoiceFileId() != null && !ans.getVoiceFileId().isBlank());
-            if (isVoice) {
+            boolean isManual = (q != null && ("VOICE".equalsIgnoreCase(q.getAnswerFormat()) || "TEXT".equalsIgnoreCase(q.getAnswerFormat())))
+                    || (ans.getVoiceFileId() != null && !ans.getVoiceFileId().isBlank())
+                    || (ans.getTextAnswer() != null && !ans.getTextAnswer().trim().isEmpty());
+            if (isManual) {
                 if (ans.getMarksAwarded() != null) {
                     totalVoiceMarks = totalVoiceMarks.add(ans.getMarksAwarded());
                 }
@@ -4304,7 +4316,9 @@ public class CompetitionService {
                 item.put("studentName", c.getStudentName());
             }
 
-            item.put("setCode", c.getSetCode());
+            if (isStaff) {
+                item.put("setCode", c.getSetCode());
+            }
             item.put("totalMarks", c.getTotalMarks());
             item.put("percentile", c.getPercentile());
 
@@ -4333,8 +4347,8 @@ public class CompetitionService {
             }
         }
 
-        // Attach setRank to myRankObj
-        if (myRankObj != null) {
+        // Attach setRank to myRankObj for staff
+        if (isStaff && myRankObj != null) {
             String mySet = (String) myRankObj.get("setCode");
             List<Map<String, Object>> setList = setEntriesMap.getOrDefault(mySet != null ? mySet.toUpperCase() : "A", Collections.emptyList());
             for (Map<String, Object> sItem : setList) {
@@ -4343,6 +4357,9 @@ public class CompetitionService {
                     break;
                 }
             }
+        } else if (!isStaff && myRankObj != null) {
+            myRankObj.remove("setCode");
+            myRankObj.remove("setRank");
         }
 
         result.put("entries", entriesList);
@@ -4355,17 +4372,21 @@ public class CompetitionService {
         }
         result.put("podium", podium);
 
-        // Set counts & summary stats
-        Map<String, Object> setStats = new HashMap<>();
-        for (String sCode : Arrays.asList("A", "B", "C", "D")) {
-            List<Map<String, Object>> sList = setEntriesMap.getOrDefault(sCode, Collections.emptyList());
-            Map<String, Object> st = new HashMap<>();
-            st.put("count", sList.size());
-            BigDecimal topScore = sList.isEmpty() ? BigDecimal.ZERO : (BigDecimal) sList.get(0).get("totalMarks");
-            st.put("topScore", topScore);
-            setStats.put(sCode, st);
+        // Set counts & summary stats (staff only)
+        if (isStaff) {
+            Map<String, Object> setStats = new HashMap<>();
+            for (String sCode : Arrays.asList("A", "B", "C", "D")) {
+                List<Map<String, Object>> sList = setEntriesMap.getOrDefault(sCode, Collections.emptyList());
+                Map<String, Object> st = new HashMap<>();
+                st.put("count", sList.size());
+                BigDecimal topScore = sList.isEmpty() ? BigDecimal.ZERO : (BigDecimal) sList.get(0).get("totalMarks");
+                st.put("topScore", topScore);
+                setStats.put(sCode, st);
+            }
+            result.put("setStats", setStats);
+        } else {
+            result.put("setStats", Collections.emptyMap());
         }
-        result.put("setStats", setStats);
 
         return result;
     }
